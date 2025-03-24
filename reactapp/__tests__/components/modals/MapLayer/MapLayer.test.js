@@ -189,7 +189,10 @@ test("MapLayerModal new ImageWMS layer", async () => {
 test("MapLayerModal new GeoJSON layer", async () => {
   const mockUploadJSON = jest.fn();
   appAPI.uploadJSON = mockUploadJSON;
-  mockUploadJSON.mockResolvedValue({ success: true });
+  mockUploadJSON.mockResolvedValue({
+    success: true,
+    filename: "12345678.json",
+  });
 
   const handleModalClose = jest.fn();
   const addMapLayer = jest.fn();
@@ -257,7 +260,7 @@ test("MapLayerModal new GeoJSON layer", async () => {
 
   expect(
     await screen.findByText(
-      "Invalid GeoJSON is being used. Please alter the json and try again."
+      "Invalid json is being used. Please alter the json and try again."
     )
   ).toBeInTheDocument();
 
@@ -821,7 +824,10 @@ test("MapLayerModal new GeoJSON layer api fail", async () => {
 test("MapLayerModal style", async () => {
   const mockUploadJSON = jest.fn();
   appAPI.uploadJSON = mockUploadJSON;
-  mockUploadJSON.mockResolvedValue({ success: true });
+  mockUploadJSON.mockResolvedValue({
+    success: true,
+    filename: "12345678.json",
+  });
 
   const handleModalClose = jest.fn();
   const addMapLayer = jest.fn();
@@ -901,7 +907,7 @@ test("MapLayerModal style", async () => {
 
   expect(
     await screen.findByText(
-      "Invalid style json is being used. Please alter the json and try again."
+      "Invalid json is being used. Please alter the json and try again."
     )
   ).toBeInTheDocument();
 
@@ -924,8 +930,8 @@ test("MapLayerModal style", async () => {
           },
         },
         type: "ImageLayer",
+        style: "12345678.json",
       },
-      style: "12345678.json",
     });
   });
 });

@@ -10,11 +10,15 @@ import {
 } from "components/contexts/Contexts";
 import { useAppTourContext } from "components/contexts/AppTourContext";
 import DataViewerModal from "components/modals/DataViewer/DataViewer";
-import DashboardItemDropdown from "components/buttons/DashboardItemDropdown";
+import DashboardItemDropdown from "components/dashboard/DashboardItemDropdown";
 import BaseVisualization from "components/visualizations/Base";
 import { confirm } from "components/inputs/DeleteConfirmation";
-import { getGridItem } from "components/visualizations/utilities";
+import {
+  getGridItem,
+  downloadJSONFile,
+} from "components/visualizations/utilities";
 import CustomAlert from "components/dashboard/CustomAlert";
+import { loadLayerJSONs, saveLayerJSON } from "components/map/utilities";
 
 const StyledContainer = styled(Container)`
   position: relative;
@@ -28,6 +32,130 @@ const StyledButtonDiv = styled.div`
   z-index: 1;
 `;
 
+export const minMapLayerStructure = `Map layers must have at minimum, the following structure:
+{
+    configuration: {
+        type: <Some Value>,
+        props: {
+            source: {
+                type: <Some Value>
+            }
+        }
+    }
+}`;
+
+export const requiredGridItemKeys = [
+  "i",
+  "x",
+  "y",
+  "w",
+  "h",
+  "source",
+  "args_string",
+  "metadata_string",
+];
+
+export const handleGridItemExport = async (gridItem) => {
+  const { id, ...exportedGridItem } = gridItem;
+  exportedGridItem.metadata_string = JSON.parse(
+    exportedGridItem.metadata_string
+  );
+  const gridItemArgs = JSON.parse(exportedGridItem.args_string);
+  exportedGridItem.args_string = gridItemArgs;
+
+  if (exportedGridItem.source === "Map") {
+    if (
+      "additional_layers" in gridItemArgs &&
+      gridItemArgs["additional_layers"].length > 0
+    ) {
+      for (const mapLayer of gridItemArgs["additional_layers"]) {
+        const apiResponse = await loadLayerJSONs(mapLayer);
+        if (!apiResponse.success) {
+          return apiResponse;
+        }
+      }
+    }
+  }
+
+  return exportedGridItem;
+};
+
+export const handleGridItemImport = async (gridItem, csrf) => {
+  const importedGridItem = JSON.parse(JSON.stringify(gridItem));
+  if (
+    !requiredGridItemKeys.every((key) =>
+      Object.prototype.hasOwnProperty.call(importedGridItem, key)
+    )
+  ) {
+    return {
+      success: false,
+      message: `Grid Items must include ${requiredGridItemKeys.join(", ")} keys`,
+    };
+  }
+
+  if (importedGridItem.source === "Map") {
+    if (
+      "additional_layers" in importedGridItem.args_string &&
+      importedGridItem.args_string["additional_layers"].length > 0
+    ) {
+      for (const mapLayer of importedGridItem.args_string[
+        "additional_layers"
+      ]) {
+        if (
+          !mapLayer?.configuration?.props?.source?.type ||
+          !mapLayer?.configuration?.type
+        ) {
+          return {
+            success: false,
+            message: minMapLayerStructure,
+          };
+        }
+
+        if (
+          mapLayer.configuration.props.source.type === "GeoJSON" &&
+          mapLayer.configuration.props.source.geojson
+        ) {
+          const apiResponse = await saveLayerJSON({
+            stringJSON: JSON.stringify(
+              mapLayer.configuration.props.source.geojson
+            ),
+            csrf,
+            check_crs: true,
+          });
+
+          if (apiResponse.success) {
+            mapLayer.configuration.props.source.geojson = apiResponse.filename;
+          } else {
+            return apiResponse;
+          }
+        }
+
+        if (mapLayer.configuration.style) {
+          const apiResponse = await saveLayerJSON({
+            stringJSON: JSON.stringify(mapLayer.configuration.style),
+            csrf,
+          });
+
+          if (apiResponse.success) {
+            mapLayer.configuration.style = apiResponse.filename;
+          } else {
+            return apiResponse;
+          }
+        }
+      }
+    }
+  }
+  importedGridItem.args_string = JSON.stringify(importedGridItem.args_string);
+  importedGridItem.metadata_string = JSON.stringify(
+    importedGridItem.metadata_string
+  );
+
+  return {
+    success: true,
+    importedGridItem,
+  };
+};
+
 const DashboardItem = ({
   gridItemSource,
   gridItemI,
@@ -40,6 +168,8 @@ const DashboardItem = ({
   const [showDataViewerModal, setShowDataViewerModal] = useState(false);
   const [gridItemMessage, setGridItemMessage] = useState("");
   const [showGridItemMessage, setShowGridItemMessage] = useState(false);
+  const [gridItemWarning, setGridItemWarning] = useState("");
+  const [showGridItemWarning, setShowGridItemWarning] = useState(false);
   const { updateGridItems, getDashboardMetadata } = useContext(LayoutContext);
   const { variableInputValues, setVariableInputValues } = useContext(
     VariableInputsContext
@@ -72,6 +202,20 @@ const DashboardItem = ({
     setInDataViewerMode(true);
     if (activeAppTour) {
       setAppTourStep(32);
+    }
+  }
+
+  async function exportGridItem() {
+    const { gridItems } = getDashboardMetadata();
+    const gridItem = JSON.parse(JSON.stringify(gridItems[gridItemIndex]));
+
+    const exportedGridItem = await handleGridItemExport(gridItem);
+
+    try {
+      downloadJSONFile(exportedGridItem, "TethysDashGridItem.json");
+    } catch (err) {
+      setShowGridItemWarning(true);
+      setGridItemWarning("Failed to export grid item.");
     }
   }
 
@@ -130,11 +274,18 @@ const DashboardItem = ({
           setShowAlert={setShowGridItemMessage}
           alertMessage={gridItemMessage}
         />
+        <CustomAlert
+          alertType={"warning"}
+          showAlert={showGridItemWarning}
+          setShowAlert={setGridItemWarning}
+          alertMessage={gridItemWarning}
+        />
         <StyledButtonDiv>
           <DashboardItemDropdown
             showFullscreen={gridItemSource ? onFullscreen : null}
             deleteGridItem={deleteGridItem}
             editGridItem={editGridItem}
+            exportGridItem={exportGridItem}
             editSize={isEditing ? null : editSize}
             copyGridItem={copyGridItem}
           />

@@ -5,6 +5,7 @@ import { spaceAndCapitalize } from "components/modals/utilities";
 import {
   nonDropDownVariableInputTypes,
   baseMapLayers,
+  downloadJSONFile,
 } from "components/visualizations/utilities";
 import tethysAPI from "services/api/tethys";
 import appAPI from "services/api/app";
@@ -20,6 +21,10 @@ import LandingPage from "views/LandingPage";
 import AppTourContextProvider from "components/contexts/AppTourContext";
 import { Confirmation } from "components/inputs/DeleteConfirmation";
 import { getTethysPortalHost } from "services/utilities";
+import {
+  handleGridItemExport,
+  handleGridItemImport,
+} from "components/dashboard/DashboardItem";
 
 const APP_ID = process.env.TETHYS_APP_ID;
 const LOADER_DELAY = process.env.TETHYS_LOADER_DELAY;
@@ -360,9 +365,12 @@ function Loader({ children }) {
 
   function getUniqueDashboardName(name) {
     const existingNames = availableDashboards.user.map((obj) => obj.name);
+    if (!existingNames.includes(name)) {
+      return name;
+    }
+
     let newName = `${name} - Copy`;
     let count = 2;
-
     while (existingNames.includes(newName)) {
       newName = `${name} - Copy (${count})`;
       count++;
@@ -430,6 +438,58 @@ function Loader({ children }) {
     return apiResponse;
   }
 
+  async function importDashboard(dashboardContext) {
+    if (!("name" in dashboardContext)) {
+      return { success: false, message: "Dashboards must include a name" };
+    }
+    const newName = getUniqueDashboardName(dashboardContext.name);
+    dashboardContext.name = newName;
+
+    if (dashboardContext.gridItems && dashboardContext.gridItems.length > 0) {
+      const updatedGridItems = [];
+      for (let gridItem of dashboardContext.gridItems) {
+        const { success, message, importedGridItem } =
+          await handleGridItemImport(gridItem, appContext.csrf);
+        if (success) {
+          updatedGridItems.push(importedGridItem);
+        } else {
+          return { success, message };
+        }
+      }
+      dashboardContext.gridItems = updatedGridItems;
+    }
+
+    const apiResponse = await addDashboard(dashboardContext);
+    return apiResponse;
+  }
+
+  async function exportDashboard(id) {
+    const apiResponse = await appAPI.getDashboard({ id });
+    if (apiResponse.success) {
+      const { id, gridItems, uuid, ...dashboardProperties } =
+        apiResponse.dashboard;
+
+      const updatedGridItems = [];
+      for (const gridItem of gridItems) {
+        const exportedGridItem = await handleGridItemExport(gridItem);
+        updatedGridItems.push(exportedGridItem);
+      }
+
+      const exportedDashboard = {
+        ...dashboardProperties,
+        gridItems: updatedGridItems,
+      };
+
+      try {
+        downloadJSONFile(exportedDashboard, `${exportedDashboard.name}.json`);
+      } catch (err) {
+        return { success: false, message: "Failed to export dashboard" };
+      }
+    }
+
+    return apiResponse;
+  }
+
   async function updateDashboard({ id, newProperties }) {
     const apiResponse = await appAPI.updateDashboard(
       { ...newProperties, id },
@@ -494,6 +554,8 @@ function Loader({ children }) {
               deleteDashboard,
               copyDashboard,
               updateDashboard,
+              exportDashboard,
+              importDashboard,
             }}
           >
             <AppTourContextProvider>{children}</AppTourContextProvider>

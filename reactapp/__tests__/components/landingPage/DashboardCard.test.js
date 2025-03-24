@@ -9,6 +9,8 @@ import { useNavigate } from "react-router-dom";
 import appAPI from "services/api/app";
 import { confirm } from "components/inputs/DeleteConfirmation";
 import AppTour from "components/appTour/AppTour";
+import { mockedDashboards } from "__tests__/utilities/constants";
+import * as utils from "components/visualizations/utilities";
 
 jest.mock("react-router-dom", () => ({
   ...jest.requireActual("react-router-dom"),
@@ -983,7 +985,7 @@ it("DashboardCard editable, copy", async () => {
         <MemoryRouter initialEntries={["/"]}>
           <DashboardCard
             id={1}
-            name="some dashboard"
+            name={mockedDashboards.user[0].name}
             editable={true}
             description="some description"
             accessGroups={["public"]}
@@ -1008,7 +1010,7 @@ it("DashboardCard editable, copy", async () => {
     expect(mockCopyDashboard).toHaveBeenCalledWith(
       {
         id: 1,
-        newName: "some dashboard - Copy",
+        newName: `${mockedDashboards.user[0].name} - Copy`,
       },
       "SxICmOkFldX4o4YVaySdZq9sgn0eRd3Ih6uFtY8BgU5tMyZc7n90oJ4M2My5i7cy"
     );
@@ -1028,7 +1030,7 @@ it("DashboardCard editable, copy fail", async () => {
         <MemoryRouter initialEntries={["/"]}>
           <DashboardCard
             id={1}
-            name="some dashboard"
+            name={mockedDashboards.user[0].name}
             editable={true}
             description="some description"
             accessGroups={["public"]}
@@ -1053,7 +1055,7 @@ it("DashboardCard editable, copy fail", async () => {
     expect(mockCopyDashboard).toHaveBeenCalledWith(
       {
         id: 1,
-        newName: "some dashboard - Copy",
+        newName: `${mockedDashboards.user[0].name} - Copy`,
       },
       "SxICmOkFldX4o4YVaySdZq9sgn0eRd3Ih6uFtY8BgU5tMyZc7n90oJ4M2My5i7cy"
     );
@@ -1061,6 +1063,128 @@ it("DashboardCard editable, copy fail", async () => {
 
   expect(
     await screen.findByText("Failed to copy dashboard")
+  ).toBeInTheDocument();
+});
+
+it("DashboardCard editable, export", async () => {
+  const spyDownloadJSONFile = jest
+    .spyOn(utils, "downloadJSONFile")
+    .mockImplementation(jest.fn());
+
+  render(
+    createLoadedComponent({
+      children: (
+        <MemoryRouter initialEntries={["/"]}>
+          <DashboardCard
+            id={1}
+            name={mockedDashboards.user[0].name}
+            editable={true}
+            description="some description"
+            accessGroups={["public"]}
+            image="some_image.png"
+          />
+        </MemoryRouter>
+      ),
+    })
+  );
+
+  const contextMenuButton = await screen.findByLabelText(
+    "dashboard-item-dropdown-toggle"
+  );
+  await userEvent.click(contextMenuButton);
+
+  const exportOption = await screen.findByText("Export");
+  expect(exportOption).toBeInTheDocument();
+
+  await userEvent.click(exportOption);
+
+  expect(spyDownloadJSONFile).toHaveBeenCalledWith(
+    {
+      accessGroups: [],
+      description: "test_description",
+      gridItems: [
+        {
+          args_string: {},
+          h: 20,
+          i: "1",
+          metadata_string: {
+            refreshRate: 0,
+          },
+          source: "",
+          w: 20,
+          x: 0,
+          y: 0,
+        },
+      ],
+      image: "my_image.png",
+      name: "editable",
+      notes: "test_notes",
+    },
+    "editable.json"
+  );
+});
+
+it("DashboardCard editable, export fail", async () => {
+  const spyDownloadJSONFile = jest
+    .spyOn(utils, "downloadJSONFile")
+    .mockImplementation(() => {
+      throw new Error();
+    });
+
+  render(
+    createLoadedComponent({
+      children: (
+        <MemoryRouter initialEntries={["/"]}>
+          <DashboardCard
+            id={1}
+            name={mockedDashboards.user[0].name}
+            editable={true}
+            description="some description"
+            accessGroups={["public"]}
+            image="some_image.png"
+          />
+        </MemoryRouter>
+      ),
+    })
+  );
+
+  const contextMenuButton = await screen.findByLabelText(
+    "dashboard-item-dropdown-toggle"
+  );
+  await userEvent.click(contextMenuButton);
+
+  const exportOption = await screen.findByText("Export");
+  expect(exportOption).toBeInTheDocument();
+
+  await userEvent.click(exportOption);
+
+  expect(spyDownloadJSONFile).toHaveBeenCalledWith(
+    {
+      accessGroups: [],
+      description: "test_description",
+      gridItems: [
+        {
+          args_string: {},
+          h: 20,
+          i: "1",
+          metadata_string: {
+            refreshRate: 0,
+          },
+          source: "",
+          w: 20,
+          x: 0,
+          y: 0,
+        },
+      ],
+      image: "my_image.png",
+      name: "editable",
+      notes: "test_notes",
+    },
+    "editable.json"
+  );
+
+  expect(
+    await screen.findByText("Failed to export dashboard")
   ).toBeInTheDocument();
 });
 

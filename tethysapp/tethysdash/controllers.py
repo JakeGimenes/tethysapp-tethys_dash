@@ -95,13 +95,18 @@ def add_dashboard(request, app_media):
     """API controller for the dashboards page."""
     dashboard_metadata = json.loads(request.body)
     name = dashboard_metadata["name"]
-    description = dashboard_metadata["description"]
+    description = dashboard_metadata.get("description", "")
+    notes = dashboard_metadata.get("notes", "")
+    access_groups = dashboard_metadata.get("accessGroups", [])
+    grid_items = dashboard_metadata.get("gridItems", [])
     owner = str(request.user)
     dashboard_uuid = str(uuid.uuid4())
     print(f"Creating a dashboard named {name}")
 
     try:
-        new_dashboard_id = add_new_dashboard(owner, dashboard_uuid, name, description)
+        new_dashboard_id = add_new_dashboard(
+            owner, dashboard_uuid, name, description, notes, access_groups, grid_items
+        )
 
         dashboard_image = os.path.join(
             os.path.dirname(__file__), "default_dashboard.png"
@@ -224,6 +229,7 @@ def upload_json(request, app_workspace):
     filename = json_data["filename"]
     clean_data = nh3.clean(data)
     json_folder = os.path.join(app_workspace.path, "json")
+    print(f"Uploading {filename}")
 
     try:
         if not os.path.exists(json_folder):
@@ -240,8 +246,7 @@ def upload_json(request, app_workspace):
 
         json_user_file = os.path.join(json_user_folder, filename)
         Path(json_user_file).touch()
-
-        return JsonResponse({"success": True})
+        return JsonResponse({"success": True, "filename": filename})
     except Exception as e:
         print(e)
         try:
@@ -258,6 +263,7 @@ def download_json(request, app_workspace):
     """API controller for the dashboards page."""
     filename = request.GET["filename"]
     json_folder = os.path.join(app_workspace.path, "json")
+    print(f"Getting data from {filename}")
 
     try:
         json_user_file = os.path.join(json_folder, filename)

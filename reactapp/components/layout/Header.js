@@ -16,6 +16,7 @@ import {
 import TooltipButton from "components/buttons/TooltipButton";
 import DashboardEditorCanvas from "components/modals/DashboardEditor";
 import AppInfoModal from "components/modals/AppInfo";
+import DashboardImportModal from "components/modals/DashboardImport";
 import { useAppTourContext } from "components/contexts/AppTourContext";
 import {
   useLayoutSuccessAlertContext,
@@ -31,6 +32,7 @@ import {
   BsFloppy,
   BsPencilSquare,
   BsFillPersonFill,
+  BsUpload,
 } from "react-icons/bs";
 import { CiUndo } from "react-icons/ci";
 import { FaPlus } from "react-icons/fa6";
@@ -94,6 +96,7 @@ export const LandingPageHeader = () => {
   const [showInfoModal, setShowInfoModal] = useState(
     dontShowLandingPageInfoOnStart !== "true"
   );
+  const [showImportModal, setShowImportModal] = useState(false);
 
   return (
     <>
@@ -103,16 +106,6 @@ export const LandingPageHeader = () => {
             <WhiteTitle>Available Dashboards</WhiteTitle>
           </TitleDiv>
           <div>
-            {user.isStaff && (
-              <TooltipButton
-                href={tethysApp.settingsUrl}
-                tooltipPlacement="bottom"
-                tooltipText="App Settings"
-                aria-label={"appSettingButton"}
-              >
-                <BsGear size="1.5rem" />
-              </TooltipButton>
-            )}
             {user?.username === "public" ? (
               <TooltipButton
                 onClick={() => {
@@ -127,13 +120,33 @@ export const LandingPageHeader = () => {
                 <BsFillPersonFill size="1.5rem" />
               </TooltipButton>
             ) : (
+              <>
+                <TooltipButton
+                  onClick={() => setShowImportModal(true)}
+                  tooltipPlacement="bottom"
+                  tooltipText="Import Dashboard"
+                  aria-label="importDashboardButton"
+                >
+                  <BsUpload size="1.5rem" />
+                </TooltipButton>
+                <TooltipButton
+                  onClick={() => setShowInfoModal(true)}
+                  tooltipPlacement="bottom"
+                  tooltipText="App Info"
+                  aria-label="appInfoButton"
+                >
+                  <BsInfo size="1.5rem" />
+                </TooltipButton>
+              </>
+            )}
+            {user.isStaff && (
               <TooltipButton
-                onClick={() => setShowInfoModal(true)}
+                href={tethysApp.settingsUrl}
                 tooltipPlacement="bottom"
-                tooltipText="App Info"
-                aria-label="appInfoButton"
+                tooltipText="App Settings"
+                aria-label={"appSettingButton"}
               >
-                <BsInfo size="1.5rem" />
+                <BsGear size="1.5rem" />
               </TooltipButton>
             )}
             <TooltipButton
@@ -151,6 +164,12 @@ export const LandingPageHeader = () => {
         <AppInfoModal
           showModal={showInfoModal}
           setShowModal={setShowInfoModal}
+        />
+      )}
+      {showImportModal && (
+        <DashboardImportModal
+          showModal={showImportModal}
+          setShowModal={setShowImportModal}
         />
       )}
     </>
@@ -182,6 +201,7 @@ export const DashboardHeader = () => {
   const { setSuccessMessage, setShowSuccessMessage } =
     useLayoutSuccessAlertContext();
   const { setErrorMessage, setShowErrorMessage } = useLayoutErrorAlertContext();
+  const [showImportModal, setShowImportModal] = useState(false);
   const navigate = useNavigate();
   const TETHYS_PORTAL_HOST = getTethysPortalHost();
 
@@ -201,25 +221,35 @@ export const DashboardHeader = () => {
     }, 100); // This ensures that the old overlay doesn't show after the new buttons appear
   }
 
-  function onAddGridItem() {
+  function onAddGridItem({ importedGridItem }) {
     const { gridItems } = getDashboardMetadata();
     let maxGridItemI = gridItems.reduce((acc, value) => {
       return (acc = acc > parseInt(value.i) ? acc : parseInt(value.i));
     }, 0);
-    const newGridItem = {
-      i: `${parseInt(maxGridItemI) + 1}`,
-      x: 0,
-      y: 0,
-      w: 20,
-      h: 20,
-      source: "",
-      args_string: "{}",
-      metadata_string: JSON.stringify({
-        refreshRate: 0,
-      }),
-    };
+
+    let newGridItem;
+    if (importedGridItem) {
+      newGridItem = importedGridItem;
+    } else {
+      newGridItem = {
+        x: 0,
+        y: 0,
+        w: 20,
+        h: 20,
+        source: "",
+        args_string: "{}",
+        metadata_string: JSON.stringify({
+          refreshRate: 0,
+        }),
+      };
+    }
+    newGridItem.i = `${parseInt(maxGridItemI) + 1}`;
     const updatedGridItems = [...gridItems, newGridItem];
     updateGridItems(updatedGridItems);
+  }
+
+  function onImportGridItem(importedGridItem) {
+    onAddGridItem({ importedGridItem });
   }
 
   function onEdit() {
@@ -252,6 +282,7 @@ export const DashboardHeader = () => {
   }
 
   async function onSave() {
+    // delete item then save bring back old item
     setShowSuccessMessage(false);
     setShowErrorMessage(false);
     setIsSaving(true);
@@ -349,6 +380,14 @@ export const DashboardHeader = () => {
                     >
                       <LockedIcon locked={disabledEditingMovement} />
                     </TooltipButton>
+                    <TooltipButton
+                      onClick={() => setShowImportModal(true)}
+                      tooltipPlacement="bottom"
+                      tooltipText="Import Dashboard Item"
+                      aria-label="importDashboardItemButton"
+                    >
+                      <BsUpload size="1.5rem" />
+                    </TooltipButton>
                   </>
                 ) : (
                   <TooltipButton
@@ -410,6 +449,13 @@ export const DashboardHeader = () => {
           showModal={showInfoModal}
           setShowModal={setShowInfoModal}
           view="dashboard"
+        />
+      )}
+      {showImportModal && (
+        <DashboardImportModal
+          showModal={showImportModal}
+          setShowModal={setShowImportModal}
+          onImportGridItem={onImportGridItem}
         />
       )}
     </>

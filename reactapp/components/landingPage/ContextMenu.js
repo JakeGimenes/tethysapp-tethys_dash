@@ -4,7 +4,7 @@ import Dropdown from "react-bootstrap/Dropdown";
 import { BsThreeDotsVertical, BsFillCaretRightFill } from "react-icons/bs";
 import { useAppTourContext } from "components/contexts/AppTourContext";
 import { useState, useRef, useEffect } from "react";
-import "components/buttons/itemDropdown.css";
+import "components/dashboard/itemDropdown.css";
 
 const StyledDropdownToggle = styled(Dropdown.Toggle)`
   background: transparent !important;
@@ -41,6 +41,7 @@ const ContextMenu = ({
   setIsEditingDescription,
   onDelete,
   onCopy,
+  onExport,
   viewDashboard,
   onShare,
   onCopyPublicLink,
@@ -153,6 +154,9 @@ const ContextMenu = ({
         <Dropdown.Item onClick={onCopy} className="card-copy-option">
           Copy
         </Dropdown.Item>
+        <Dropdown.Item onClick={onExport} className="card-export-option">
+          Export
+        </Dropdown.Item>
         {editable && (
           <>
             <Dropdown.Item onClick={onDelete} className="card-delete-option">
@@ -172,6 +176,7 @@ ContextMenu.propTypes = {
   setShowThumbnailModal: PropTypes.func,
   onDelete: PropTypes.func,
   onCopy: PropTypes.func,
+  onExport: PropTypes.func,
   onShare: PropTypes.func,
   onCopyPublicLink: PropTypes.func,
   shared: PropTypes.bool,
