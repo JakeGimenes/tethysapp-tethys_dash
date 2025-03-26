@@ -53,7 +53,6 @@ test("LandingPageHeader, staff user", async () => {
   expect(screen.getByText("Available Dashboards")).toBeInTheDocument();
   expect(screen.getByLabelText("appSettingButton")).toBeInTheDocument();
   expect(screen.getByLabelText("appInfoButton")).toBeInTheDocument();
-  expect(screen.getByLabelText("appExitButton")).toBeInTheDocument();
 });
 
 test("LandingPageHeader, non staff user", async () => {
@@ -64,7 +63,9 @@ test("LandingPageHeader, non staff user", async () => {
           <LandingPageHeader />
         </MemoryRouter>
       ),
-      options: { user: { isAuthenticated: true, isStaff: false } },
+      options: {
+        user: { username: "jsmith", isAuthenticated: true, isStaff: false },
+      },
     })
   );
 
@@ -73,7 +74,29 @@ test("LandingPageHeader, non staff user", async () => {
   expect(screen.queryByLabelText("appSettingButton")).not.toBeInTheDocument();
   expect(screen.getByLabelText("appInfoButton")).toBeInTheDocument();
   expect(screen.getByLabelText("importDashboardButton")).toBeInTheDocument();
-  expect(screen.getByLabelText("appExitButton")).toBeInTheDocument();
+});
+
+test("LandingPageHeader, no user", async () => {
+  render(
+    createLoadedComponent({
+      children: (
+        <MemoryRouter initialEntries={["/"]}>
+          <LandingPageHeader />
+        </MemoryRouter>
+      ),
+      options: {
+        user: { username: null, isAuthenticated: true, isStaff: false },
+      },
+    })
+  );
+
+  expect(await screen.findByLabelText("appExitButton")).toBeInTheDocument();
+  expect(screen.getByText("Available Dashboards")).toBeInTheDocument();
+  expect(screen.queryByLabelText("appSettingButton")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("appInfoButton")).not.toBeInTheDocument();
+  expect(
+    screen.queryByLabelText("importDashboardButton")
+  ).not.toBeInTheDocument();
 });
 
 test("LandingPageHeader, signin", async () => {
@@ -90,7 +113,7 @@ test("LandingPageHeader, signin", async () => {
         </MemoryRouter>
       ),
       options: {
-        user: { username: "public", isAuthenticated: true, isStaff: false },
+        user: { username: null, isAuthenticated: true, isStaff: false },
       },
     })
   );
@@ -105,6 +128,25 @@ test("LandingPageHeader, signin", async () => {
 });
 
 test("LandingPageHeader, import dashboard", async () => {
+  const importedDashboard = {
+    name: "Test",
+    description: "this is a new description",
+  };
+  const mockAddDashboard = jest.fn();
+  appAPI.addDashboard = mockAddDashboard;
+  mockAddDashboard.mockResolvedValue({
+    success: true,
+    new_dashboard: {
+      id: 1,
+      name: "Test",
+      description: "this is a new description",
+      notes: "",
+      editable: true,
+      accessGroups: [],
+      gridItems: [],
+    },
+  });
+
   render(
     createLoadedComponent({
       children: (
@@ -114,7 +156,9 @@ test("LandingPageHeader, import dashboard", async () => {
           </LayoutAlertContextProvider>
         </MemoryRouter>
       ),
-      options: { user: { isAuthenticated: true, isStaff: true } },
+      options: {
+        user: { username: "jsmith", isAuthenticated: true, isStaff: true },
+      },
     })
   );
 
@@ -125,6 +169,21 @@ test("LandingPageHeader, import dashboard", async () => {
   expect(
     await screen.findByLabelText("Dashboard Import Modal")
   ).toBeInTheDocument();
+
+  const file = new File([JSON.stringify(importedDashboard)], "test-file.json", {
+    type: "text/plain",
+  });
+  const fileInput = screen.getByTestId("file-input");
+  fireEvent.change(fileInput, { target: { files: [file] } });
+
+  const importButton = screen.getByLabelText("Import Button");
+  await waitFor(() => expect(importButton).not.toBeDisabled());
+  await userEvent.click(importButton);
+
+  expect(mockAddDashboard).toHaveBeenCalledWith(
+    importedDashboard,
+    "SxICmOkFldX4o4YVaySdZq9sgn0eRd3Ih6uFtY8BgU5tMyZc7n90oJ4M2My5i7cy"
+  );
 });
 
 test("LandingPageHeader, show info", async () => {
@@ -137,7 +196,9 @@ test("LandingPageHeader, show info", async () => {
           </LayoutAlertContextProvider>
         </MemoryRouter>
       ),
-      options: { user: { isAuthenticated: true, isStaff: true } },
+      options: {
+        user: { username: "jsmith", isAuthenticated: true, isStaff: true },
+      },
     })
   );
 
@@ -155,7 +216,7 @@ test("LandingPageHeader, public user and not show info", async () => {
         </MemoryRouter>
       ),
       options: {
-        user: { username: "public", isAuthenticated: true, isStaff: false },
+        user: { username: null, isAuthenticated: true, isStaff: false },
       },
     })
   );
@@ -171,6 +232,85 @@ test("LandingPageHeader, public user and not show info", async () => {
     screen.getByRole("button", { name: "dashboardLoginButton" })
   ).toBeInTheDocument();
   expect(screen.getByLabelText("appExitButton")).toBeInTheDocument();
+});
+
+test("DashboardHeader, user and editable", async () => {
+  render(
+    createLoadedComponent({
+      children: (
+        <MemoryRouter initialEntries={["/dashboard/user/editable"]}>
+          <LayoutAlertContextProvider>
+            <DashboardHeader />
+          </LayoutAlertContextProvider>
+        </MemoryRouter>
+      ),
+      options: {
+        editableDashboard: true,
+      },
+    })
+  );
+
+  expect(
+    await screen.findByLabelText("dashboardExitButton")
+  ).toBeInTheDocument();
+  expect(screen.getByLabelText("editButton")).toBeInTheDocument();
+  expect(screen.getByLabelText("appInfoButton")).toBeInTheDocument();
+  expect(
+    screen.queryByLabelText("dashboardLoginButton")
+  ).not.toBeInTheDocument();
+  expect(screen.getByLabelText("dashboardSettingButton")).toBeInTheDocument();
+});
+
+test("DashboardHeader, user and not editable", async () => {
+  render(
+    createLoadedComponent({
+      children: (
+        <MemoryRouter initialEntries={["/dashboard/user/editable"]}>
+          <LayoutAlertContextProvider>
+            <DashboardHeader />
+          </LayoutAlertContextProvider>
+        </MemoryRouter>
+      ),
+      options: {
+        editableDashboard: false,
+      },
+    })
+  );
+
+  expect(
+    await screen.findByLabelText("dashboardExitButton")
+  ).toBeInTheDocument();
+  expect(screen.queryByLabelText("editButton")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("appInfoButton")).not.toBeInTheDocument();
+  expect(
+    screen.queryByLabelText("dashboardLoginButton")
+  ).not.toBeInTheDocument();
+  expect(screen.getByLabelText("dashboardSettingButton")).toBeInTheDocument();
+});
+
+test("DashboardHeader, no user", async () => {
+  render(
+    createLoadedComponent({
+      children: (
+        <MemoryRouter initialEntries={["/dashboard/user/editable"]}>
+          <LayoutAlertContextProvider>
+            <DashboardHeader />
+          </LayoutAlertContextProvider>
+        </MemoryRouter>
+      ),
+      options: {
+        user: { username: null, isAuthenticated: true, isStaff: false },
+      },
+    })
+  );
+
+  expect(
+    await screen.findByLabelText("dashboardExitButton")
+  ).toBeInTheDocument();
+  expect(screen.queryByLabelText("editButton")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("appInfoButton")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("dashboardLoginButton")).toBeInTheDocument();
+  expect(screen.getByLabelText("dashboardSettingButton")).toBeInTheDocument();
 });
 
 test("DashboardHeader, show info", async () => {
@@ -372,7 +512,7 @@ test("DashboardHeader, signin", async () => {
         </MemoryRouter>
       ),
       options: {
-        user: { username: "public", isAuthenticated: true, isStaff: false },
+        user: { username: null, isAuthenticated: true, isStaff: false },
         editableDashboard: true,
       },
     })
