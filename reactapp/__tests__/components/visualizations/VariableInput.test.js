@@ -223,6 +223,56 @@ it("Creates a Dropdown Input for a Variable Input", async () => {
   );
 });
 
+it("Creates a Dropdown Input for a Variable Input, not signed in", async () => {
+  const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  dashboard.gridItems = [mockedDropdownVariable];
+  const handleChange = jest.fn();
+
+  render(
+    createLoadedComponent({
+      children: (
+        <>
+          <VariableInput
+            args={JSON.parse(mockedDropdownVariable.args_string)}
+            onChange={handleChange}
+          />
+          <InputVariablePComponent />
+        </>
+      ),
+      options: {
+        dashboards: { user: [dashboard], public: [] },
+        visualizations: mockedDropdownVisualization,
+        user: { username: null, isAuthenticated: true, isStaff: false },
+      },
+    })
+  );
+
+  const proceedWithoutSigningInButton = await screen.findByText(
+    "Proceed Without Signing in"
+  );
+  await userEvent.click(proceedWithoutSigningInButton);
+
+  const variableInput = await screen.findByLabelText("Test Variable Input");
+  await select(
+    variableInput,
+    "CREC1 - SMITH RIVER - JEDEDIAH SMITH SP NEAR CRESCENT CITY"
+  );
+
+  expect(
+    screen.getByText(
+      "CREC1 - SMITH RIVER - JEDEDIAH SMITH SP NEAR CRESCENT CITY"
+    )
+  ).toBeInTheDocument();
+  expect(handleChange).toHaveBeenCalledWith({
+    label: "CREC1 - SMITH RIVER - JEDEDIAH SMITH SP NEAR CRESCENT CITY",
+    value: "CREC1",
+  });
+
+  expect(await screen.findByTestId("input-variables")).toHaveTextContent(
+    JSON.stringify({ "Test Variable": "CREC1" })
+  );
+});
+
 describe("When inDataViewerMode", () => {
   // The contextualized value won't be updated so the modal and the dashboard states can be kept separate.
   it("Creates a Text Input for a Variable Input", async () => {
