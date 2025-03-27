@@ -219,7 +219,7 @@ def update_dashboard(request):
 
 
 @api_view(["POST"])
-@controller(url="tethysdash/json/upload", login_required=False, app_workspace=True)
+@controller(url="tethysdash/json/upload", login_required=True, app_workspace=True)
 def upload_json(request, app_workspace):
     """API controller for the dashboards page."""
     json_data = json.loads(request.body)

@@ -21,12 +21,13 @@ dependencies = [
 
 # -- Get Resource File -- #
 resource_files = find_all_resource_files(app_package, TethysAppBase.package_namespace)
+resource_files.append("default_dashboard.png")
 
 django.setup()
 
 setup(
     name=release_package,
-    version="0.8.4",
+    version="0.8.5",
     description="",
     long_description="",
     keywords="",
