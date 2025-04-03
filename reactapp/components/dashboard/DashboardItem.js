@@ -1,7 +1,7 @@
 import PropTypes from "prop-types";
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 import Container from "react-bootstrap/Container";
-import { memo, useState, useContext } from "react";
+import { memo, useState, useContext, useEffect } from "react";
 import {
   LayoutContext,
   EditingContext,
@@ -30,6 +30,27 @@ const StyledButtonDiv = styled.div`
   margin: 0.5rem;
   right: 0;
   z-index: 1;
+`;
+
+const StyledDiv = styled.div`
+  height: 100%;
+  width: 100%;
+  ${(props) =>
+    props.$borderProps
+      ? css(props.$borderProps)
+      : props.$isEditing && "border: 1px solid #dcdcdc"};
+  background-color: ${(props) =>
+    props.$backgroundColorProps
+      ? props.$backgroundColorProps
+      : props.$isEditing
+        ? "whitesmoke"
+        : "transparent"};
+  box-shadow: ${(props) =>
+    props.$boxShadowProps
+      ? props.$boxShadowProps
+      : props.$isEditing
+        ? "0 4px 8px rgba(0, 0, 0, 0.1)"
+        : "none"};
 `;
 
 export const minMapLayerStructure = `Map layers must have at minimum, the following structure:
@@ -170,12 +191,20 @@ const DashboardItem = ({
   const [showGridItemMessage, setShowGridItemMessage] = useState(false);
   const [gridItemWarning, setGridItemWarning] = useState("");
   const [showGridItemWarning, setShowGridItemWarning] = useState(false);
+  const [gridItemStyling, setGridItemStyling] = useState(
+    JSON.parse(gridItemMetadataString)
+  );
   const { updateGridItems, getDashboardMetadata } = useContext(LayoutContext);
   const { variableInputValues, setVariableInputValues } = useContext(
     VariableInputsContext
   );
   const { setInDataViewerMode } = useContext(DataViewerModeContext);
   const { setAppTourStep, activeAppTour } = useAppTourContext();
+
+  useEffect(() => {
+    setGridItemStyling(JSON.parse(gridItemMetadataString));
+    // eslint-disable-next-line
+  }, [gridItemMetadataString]);
 
   async function deleteGridItem(e) {
     const { gridItems } = getDashboardMetadata();
@@ -186,10 +215,6 @@ const DashboardItem = ({
       updateGridItems(updated_grid_items);
       setIsEditing(true);
     }
-  }
-
-  function onFullscreen() {
-    setShowFullscreen(true);
   }
 
   function hideFullscreen() {
@@ -252,21 +277,26 @@ const DashboardItem = ({
     setIsEditing(true);
   }
 
-  function editSize() {
-    setIsEditing(true);
-  }
-
   function hideDataViewerModal() {
     setShowDataViewerModal(false);
     setInDataViewerMode(false);
   }
 
   return (
-    <>
+    <StyledDiv
+      $isEditing={isEditing}
+      $borderProps={gridItemStyling?.border}
+      $backgroundColorProps={gridItemStyling?.backgroundColor}
+      $boxShadowProps={gridItemStyling?.boxShadow}
+      aria-label="gridItemDiv"
+    >
       <StyledContainer
         fluid
         className="h-100 gridVisualization"
         aria-label="gridItem"
+        onDoubleClick={() => {
+          setShowFullscreen(true);
+        }}
       >
         <CustomAlert
           alertType={"success"}
@@ -280,16 +310,16 @@ const DashboardItem = ({
           setShowAlert={setGridItemWarning}
           alertMessage={gridItemWarning}
         />
-        <StyledButtonDiv>
-          <DashboardItemDropdown
-            showFullscreen={gridItemSource ? onFullscreen : null}
-            deleteGridItem={deleteGridItem}
-            editGridItem={editGridItem}
-            exportGridItem={exportGridItem}
-            editSize={isEditing ? null : editSize}
-            copyGridItem={copyGridItem}
-          />
-        </StyledButtonDiv>
+        {isEditing && (
+          <StyledButtonDiv>
+            <DashboardItemDropdown
+              deleteGridItem={deleteGridItem}
+              editGridItem={editGridItem}
+              exportGridItem={exportGridItem}
+              copyGridItem={copyGridItem}
+            />
+          </StyledButtonDiv>
+        )}
         <BaseVisualization
           key={gridItemI}
           source={gridItemSource}
@@ -311,7 +341,7 @@ const DashboardItem = ({
           setShowGridItemMessage={setShowGridItemMessage}
         />
       )}
-    </>
+    </StyledDiv>
   );
 };
 

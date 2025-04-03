@@ -1,7 +1,6 @@
 import { useContext } from "react";
 import PropTypes from "prop-types";
 import styled from "styled-components";
-import Form from "react-bootstrap/Form";
 import DataSelect from "components/inputs/DataSelect";
 import {
   VariableInputsContext,
@@ -11,19 +10,12 @@ import DataRadioSelect from "components/inputs/DataRadioSelect";
 import MultiInput from "components/inputs/MultiInput";
 import InputTable from "components/inputs/InputTable";
 import NormalInput from "components/inputs/NormalInput";
+import CheckboxInput from "components/inputs/CheckboxInput";
 import * as customInputs from "components/inputs/Custom";
 
 const StyledDiv = styled.div`
   padding-bottom: 1rem;
   margin-right: 1rem;
-`;
-
-const InlineLabel = styled.label`
-  display: inline;
-`;
-
-const InlineFormCheck = styled(Form.Check)`
-  display: inline;
 `;
 
 const Input = ({
@@ -82,19 +74,13 @@ const Input = ({
     );
   } else if (type === "checkbox") {
     return (
-      <div>
-        <InlineLabel>
-          <b>{label}: </b>
-        </InlineLabel>
-        <InlineFormCheck
-          aria-label={label + " Input"}
-          type={type}
-          id={label.replace(" ", "_")}
-          checked={value}
-          onChange={(e) => onChange(e.target.checked, index)}
-          {...inputProps}
-        />
-      </div>
+      <CheckboxInput
+        label={label}
+        onChange={(e) => onChange(e.target.checked, index)}
+        value={value}
+        type={type}
+        inputProps={inputProps}
+      />
     );
   } else if (type === "radio") {
     return (

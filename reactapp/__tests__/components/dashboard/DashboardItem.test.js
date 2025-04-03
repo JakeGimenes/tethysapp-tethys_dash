@@ -95,6 +95,155 @@ const exampleStyle = {
   ],
 };
 
+test("Dashboard Item not editing", async () => {
+  const mockedDashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const gridItem = mockedDashboard.gridItems[0];
+  mockedConfirm.mockResolvedValue(true);
+
+  render(
+    createLoadedComponent({
+      children: (
+        <>
+          <DashboardItem
+            gridItemSource={gridItem.source}
+            gridItemI={gridItem.i}
+            gridItemArgsString={gridItem.args_string}
+            gridItemMetadataString={gridItem.metadata_string}
+            gridItemIndex={0}
+          />
+          <EditingPComponent />
+        </>
+      ),
+      options: {
+        editableDashboard: true,
+        initialDashboard: mockedDashboards.user[0],
+      },
+    })
+  );
+
+  const dashboardGridItem = await screen.findByLabelText("gridItemDiv");
+  expect(dashboardGridItem).toBeInTheDocument();
+  const styles = window.getComputedStyle(dashboardGridItem);
+
+  expect(styles.getPropertyValue("border")).toBe("");
+  expect(styles.getPropertyValue("background-color")).toBe("transparent");
+  expect(styles.getPropertyValue("box-shadow")).toBe("none");
+
+  expect(
+    screen.queryByLabelText("dashboard-item-dropdown-toggle")
+  ).not.toBeInTheDocument();
+});
+
+test("Dashboard Item editing, no custom borders/css", async () => {
+  const mockedDashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const gridItem = mockedDashboard.gridItems[0];
+  mockedConfirm.mockResolvedValue(true);
+
+  render(
+    createLoadedComponent({
+      children: (
+        <>
+          <DashboardItem
+            gridItemSource={gridItem.source}
+            gridItemI={gridItem.i}
+            gridItemArgsString={gridItem.args_string}
+            gridItemMetadataString={gridItem.metadata_string}
+            gridItemIndex={0}
+          />
+          <EditingPComponent />
+        </>
+      ),
+      options: {
+        editableDashboard: true,
+        initialDashboard: mockedDashboards.user[0],
+        inEditing: true,
+      },
+    })
+  );
+
+  const dashboardGridItem = await screen.findByLabelText("gridItemDiv");
+  expect(await screen.findByTestId("editing")).toHaveTextContent("editing");
+  expect(dashboardGridItem).toBeInTheDocument();
+
+  await waitFor(() => {
+    expect(
+      window.getComputedStyle(dashboardGridItem).getPropertyValue("border")
+    ).toBe("1px solid #dcdcdc");
+  });
+  const styles = window.getComputedStyle(dashboardGridItem);
+  expect(styles.getPropertyValue("background-color")).toBe("whitesmoke");
+  expect(styles.getPropertyValue("box-shadow")).toBe(
+    "0 4px 8px rgba(0,0,0,0.1)"
+  );
+
+  expect(
+    screen.getByLabelText("dashboard-item-dropdown-toggle")
+  ).toBeInTheDocument();
+});
+
+test("Dashboard Item editing, custom borders/css", async () => {
+  const mockedDashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const gridItem = mockedDashboard.gridItems[0];
+  gridItem.metadata_string = JSON.stringify({
+    border: {
+      "border-left": "1px dashed #f03939",
+      "border-right": "3px solid rgb(57, 84, 240)",
+    },
+    backgroundColor: "#a1ff8dfe",
+    boxShadow: "4px 0 8px #f03939,-4px 0 8px rgb(57, 84, 240)",
+  });
+  mockedConfirm.mockResolvedValue(true);
+
+  render(
+    createLoadedComponent({
+      children: (
+        <>
+          <DashboardItem
+            gridItemSource={gridItem.source}
+            gridItemI={gridItem.i}
+            gridItemArgsString={gridItem.args_string}
+            gridItemMetadataString={gridItem.metadata_string}
+            gridItemIndex={0}
+          />
+          <EditingPComponent />
+        </>
+      ),
+      options: {
+        editableDashboard: true,
+        initialDashboard: mockedDashboards.user[0],
+        inEditing: true,
+      },
+    })
+  );
+
+  const dashboardGridItem = await screen.findByLabelText("gridItemDiv");
+  expect(await screen.findByTestId("editing")).toHaveTextContent("editing");
+  expect(dashboardGridItem).toBeInTheDocument();
+
+  await waitFor(() => {
+    expect(
+      window.getComputedStyle(dashboardGridItem).getPropertyValue("border-left")
+    ).toBe("1px dashed #f03939");
+  });
+  const styles = window.getComputedStyle(dashboardGridItem);
+  expect(styles.getPropertyValue("border-right")).toBe(
+    "3px solid rgb(57,84,240)"
+  );
+  expect(styles.getPropertyValue("border-top")).toBe("");
+  expect(styles.getPropertyValue("border-bottom")).toBe("");
+  expect(styles.getPropertyValue("border")).toBe("");
+  expect(styles.getPropertyValue("background-color")).toBe(
+    "rgba(161, 255, 141, 0.996)"
+  );
+  expect(styles.getPropertyValue("box-shadow")).toBe(
+    "4px 0 8px #f03939,-4px 0 8px rgb(57,84,240)"
+  );
+
+  expect(
+    await screen.findByLabelText("dashboard-item-dropdown-toggle")
+  ).toBeInTheDocument();
+});
+
 test("Dashboard Item delete grid item", async () => {
   const mockedDashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
   const gridItem = mockedDashboard.gridItems[0];
@@ -118,6 +267,7 @@ test("Dashboard Item delete grid item", async () => {
       options: {
         editableDashboard: true,
         initialDashboard: mockedDashboards.user[0],
+        inEditing: true,
       },
     })
   );
@@ -167,6 +317,7 @@ test("Dashboard Item delete grid item cancel", async () => {
       options: {
         editableDashboard: true,
         initialDashboard: mockedDashboards.user[0],
+        inEditing: true,
       },
     })
   );
@@ -224,6 +375,7 @@ test("Dashboard Item fullscreen but no source", async () => {
       options: {
         editableDashboard: true,
         initialDashboard: mockedDashboards.user[0],
+        inEditing: true,
       },
     })
   );
@@ -260,17 +412,14 @@ test("Dashboard Item fullscreen", async () => {
         editableDashboard: true,
         dashboards: updatedMockedDashboards,
         initialDashboard: mockedDashboard,
+        inEditing: true,
       },
     })
   );
 
-  const dashboardItemDropdownToggle = await screen.findByLabelText(
-    "dashboard-item-dropdown-toggle"
-  );
-  await userEvent.click(dashboardItemDropdownToggle);
+  const dashboardGridItem = await screen.findByLabelText("gridItem");
+  await userEvent.dblClick(dashboardGridItem);
 
-  const fullScreenButton = await screen.findByText("Fullscreen");
-  await userEvent.click(fullScreenButton);
   const fullscreenModal = await screen.findByRole("dialog");
   expect(fullscreenModal).toBeInTheDocument();
   expect(fullscreenModal).toHaveClass("fullscreen");
@@ -307,6 +456,7 @@ test("Dashboard Item edit item", async () => {
       options: {
         editableDashboard: true,
         initialDashboard: mockedDashboard,
+        inEditing: true,
       },
     })
   );
@@ -397,6 +547,7 @@ test("Dashboard Item copy item", async () => {
         editableDashboard: true,
         dashboards: updatedMockedDashboards,
         initialDashboard: mockedDashboard,
+        inEditing: true,
       },
     })
   );
@@ -515,6 +666,7 @@ test("Dashboard Item copy item variable input", async () => {
         editableDashboard: true,
         dashboards: updatedMockedDashboards,
         initialDashboard: mockedDashboard,
+        inEditing: true,
       },
     })
   );
@@ -639,6 +791,7 @@ test("Dashboard Item copy item variable input already exists", async () => {
         editableDashboard: true,
         dashboards: updatedMockedDashboards,
         initialDashboard: mockedDashboard,
+        inEditing: true,
       },
     })
   );
@@ -721,47 +874,6 @@ test("Dashboard Item copy item variable input already exists", async () => {
   );
 });
 
-test("Dashboard Item edit size", async () => {
-  const updatedMockedDashboards = JSON.parse(JSON.stringify(mockedDashboards));
-  const mockedDashboard = updatedMockedDashboards.user[0];
-  const gridItem = mockedDashboard.gridItems[0];
-  gridItem.source = "Custom Image";
-  gridItem.args_string = JSON.stringify({
-    image_source: "https://www.aquaveo.com/images/aquaveo_logo.svg",
-  });
-
-  render(
-    createLoadedComponent({
-      children: (
-        <>
-          <DashboardItem
-            gridItemSource={gridItem.source}
-            gridItemI={gridItem.i}
-            gridItemArgsString={gridItem.args_string}
-            gridItemMetadataString={gridItem.metadata_string}
-            gridItemIndex={0}
-          />
-          <EditingPComponent />
-        </>
-      ),
-      options: {
-        editableDashboard: true,
-        dashboards: updatedMockedDashboards,
-        initialDashboard: mockedDashboard,
-      },
-    })
-  );
-
-  const dashboardItemDropdownToggle = await screen.findByLabelText(
-    "dashboard-item-dropdown-toggle"
-  );
-  await userEvent.click(dashboardItemDropdownToggle);
-
-  const editSizeButton = await screen.findByText("Edit Size/Location");
-  await userEvent.click(editSizeButton);
-  expect(await screen.findByTestId("editing")).toHaveTextContent("editing");
-});
-
 test("Dashboard Item export", async () => {
   const updatedMockedDashboards = JSON.parse(JSON.stringify(mockedDashboards));
   const mockedDashboard = updatedMockedDashboards.user[0];
@@ -789,6 +901,7 @@ test("Dashboard Item export", async () => {
         editableDashboard: true,
         dashboards: updatedMockedDashboards,
         initialDashboard: mockedDashboard,
+        inEditing: true,
       },
     })
   );
@@ -849,6 +962,7 @@ test("Dashboard Item export fail", async () => {
         editableDashboard: true,
         dashboards: updatedMockedDashboards,
         initialDashboard: mockedDashboard,
+        inEditing: true,
       },
     })
   );

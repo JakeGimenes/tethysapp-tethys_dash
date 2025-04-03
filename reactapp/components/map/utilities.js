@@ -562,7 +562,10 @@ export function getMapAttributeVariables(mapLayers) {
 }
 
 export async function loadLayerJSONs(mapLayer) {
-  if (mapLayer?.configuration?.style) {
+  if (
+    mapLayer?.configuration?.style &&
+    typeof mapLayer.configuration.style !== "object"
+  ) {
     const styleJSONResponse = await appAPI.downloadJSON({
       filename: mapLayer.configuration.style,
     });
@@ -576,7 +579,11 @@ export async function loadLayerJSONs(mapLayer) {
     }
   }
 
-  if (mapLayer?.configuration?.props?.source?.type === "GeoJSON") {
+  if (
+    mapLayer?.configuration?.props?.source?.type === "GeoJSON" &&
+    mapLayer?.configuration?.props?.source?.geojson &&
+    typeof mapLayer.configuration.props.source.geojson !== "object"
+  ) {
     const geoJSONResponse = await appAPI.downloadJSON({
       filename: mapLayer.configuration.props.source.geojson,
     });
