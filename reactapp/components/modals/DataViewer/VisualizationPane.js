@@ -7,6 +7,7 @@ import DataInput from "components/inputs/DataInput";
 import TextEditor from "components/inputs/TextEditor";
 import MapVisualization from "components/visualizations/Map";
 import { setVisualization } from "components/visualizations/utilities";
+import { parseVizInputValues } from "components/modals/DataViewer/DataViewer";
 import {
   AppContext,
   VariableInputsContext,
@@ -295,7 +296,18 @@ function VisualizationPane({
         );
       } else {
         itemData.args = updatedGridItemArgs;
-        setVisualization(setViz, itemData, visualizationRef);
+        setVisualization({
+          setViz,
+          itemData,
+          visualizationRef,
+          metadataString: JSON.stringify(settingsRef.current),
+          argsString: parseVizInputValues({
+            vizInputsValues,
+            visualizationRef,
+            selectedVizTypeOption,
+          }),
+          variableInputValues,
+        });
       }
     }
   }

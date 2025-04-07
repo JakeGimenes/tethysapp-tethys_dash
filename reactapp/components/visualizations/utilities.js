@@ -7,12 +7,106 @@ import Card from "components/visualizations/Card";
 import MapVisualization from "components/visualizations/Map";
 import ModuleLoader from "components/visualizations/ModuleLoader";
 import { spaceAndCapitalize } from "components/modals/utilities";
+import { Fragment } from "react";
+import Spinner from "react-bootstrap/Spinner";
 
-const StyledH2 = styled.h2`
-  text-align: center;
+const StyledSpinner = styled(Spinner)`
+  margin: auto;
+  display: block;
 `;
 
-export async function setVisualization(setViz, itemData, visualizationRef) {
+const SpinnerContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  width: 100%;
+`;
+
+const StyledH2 = styled.h2`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+`;
+
+function checkForEmptyVariableInputs({
+  setViz,
+  metadata,
+  argsString,
+  variableInputValues,
+}) {
+  const dependentVariableInputs = getDependentVariableInputs(argsString);
+
+  if (!dependentVariableInputs.every((key) => key in variableInputValues)) {
+    const warnings = [];
+    for (const dependentVariableInput of dependentVariableInputs) {
+      if (!variableInputValues[dependentVariableInput]) {
+        warnings.push(
+          metadata.customMessaging?.[dependentVariableInput] ??
+            `${dependentVariableInput} variable is empty`
+        );
+      }
+    }
+
+    setViz(
+      <StyledH2>
+        {warnings.map((warning, index) => (
+          <Fragment key={index}>
+            {warning}
+            <br />
+          </Fragment>
+        ))}
+      </StyledH2>
+    );
+    return true;
+  }
+
+  return false;
+}
+
+function getDependentVariableInputs(args) {
+  const regex = /\${(.*?)}/g; // Matches ${...}
+  const uniqueValues = new Set();
+
+  let match;
+  while ((match = regex.exec(args)) !== null) {
+    uniqueValues.add(match[1]); // Extract the variable name
+  }
+
+  return [...uniqueValues];
+}
+
+export async function setVisualization({
+  setViz,
+  itemData,
+  visualizationRef,
+  metadataString,
+  argsString,
+  variableInputValues,
+}) {
+  const metadata = JSON.parse(metadataString);
+  setViz(
+    <SpinnerContainer>
+      <StyledSpinner
+        data-testid="Loading..."
+        animation="border"
+        variant="info"
+      />
+    </SpinnerContainer>
+  );
+
+  if (
+    checkForEmptyVariableInputs({
+      setViz,
+      metadata,
+      argsString,
+      variableInputValues,
+    })
+  ) {
+    return;
+  }
+
   appAPI.getPlotData(itemData).then((response) => {
     if (response.success === true) {
       if (response["viz_type"] === "plotly") {
@@ -29,6 +123,7 @@ export async function setVisualization(setViz, itemData, visualizationRef) {
             source={response.data}
             alt={itemData.source}
             visualizationRef={visualizationRef}
+            imageError={metadata.customMessaging?.error}
           />
         );
       } else if (response["viz_type"] === "table") {
@@ -74,7 +169,11 @@ export async function setVisualization(setViz, itemData, visualizationRef) {
         setViz(<StyledH2>{message}</StyledH2>);
       }
     } else {
-      setViz(<StyledH2>Failed to retrieve data</StyledH2>);
+      setViz(
+        <StyledH2>
+          {metadata.customMessaging?.error ?? "Failed to retrieve data"}
+        </StyledH2>
+      );
     }
   });
 }

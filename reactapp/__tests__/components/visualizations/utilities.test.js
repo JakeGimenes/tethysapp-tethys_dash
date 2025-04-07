@@ -31,15 +31,61 @@ test("setVisualization bad response", async () => {
 
   const setViz = jest.fn();
   const visualizationRef = jest.fn();
-  await setVisualization(setViz, {}, visualizationRef);
+  await setVisualization({
+    setViz,
+    itemData: {},
+    visualizationRef,
+    metadataString: "{}",
+    argsString: "{}",
+    variableInputValues: [],
+  });
+
+  // eslint-disable-next-line
+  expect(setViz.mock.calls[0][0].props.children.props["data-testid"]).toBe(
+    "Loading..."
+  );
 
   // Render the element passed to setViz to check the text content
-  render(setViz.mock.calls[0][0]);
+  render(setViz.mock.calls[1][0]);
 
   // Check if the rendered content contains the error message
   expect(
     await screen.findByText("Failed to retrieve data")
   ).toBeInTheDocument();
+});
+
+test("setVisualization bad response with custom messaging", async () => {
+  appAPI.getPlotData = () => {
+    return Promise.resolve({
+      success: false,
+    });
+  };
+
+  const setViz = jest.fn();
+  const visualizationRef = jest.fn();
+  await setVisualization({
+    setViz,
+    itemData: {},
+    visualizationRef,
+    metadataString: JSON.stringify({
+      customMessaging: {
+        error: "custom error message",
+      },
+    }),
+    argsString: "{}",
+    variableInputValues: [],
+  });
+
+  // eslint-disable-next-line
+  expect(setViz.mock.calls[0][0].props.children.props["data-testid"]).toBe(
+    "Loading..."
+  );
+
+  // Render the element passed to setViz to check the text content
+  render(setViz.mock.calls[1][0]);
+
+  // Check if the rendered content contains the error message
+  expect(await screen.findByText("custom error message")).toBeInTheDocument();
 });
 
 test("setVisualization bad type", async () => {
@@ -52,10 +98,22 @@ test("setVisualization bad type", async () => {
 
   const setViz = jest.fn();
   const visualizationRef = jest.fn();
-  await setVisualization(setViz, {}, visualizationRef);
+  await setVisualization({
+    setViz,
+    itemData: {},
+    visualizationRef,
+    metadataString: "{}",
+    argsString: "{}",
+    variableInputValues: [],
+  });
+
+  // eslint-disable-next-line
+  expect(setViz.mock.calls[0][0].props.children.props["data-testid"]).toBe(
+    "Loading..."
+  );
 
   // Render the element passed to setViz to check the text content
-  render(setViz.mock.calls[0][0]);
+  render(setViz.mock.calls[1][0]);
 
   // Check if the rendered content contains the error message
   expect(
@@ -77,10 +135,22 @@ test("setVisualization plotly", async () => {
 
   const setViz = jest.fn();
   const visualizationRef = { current: null };
-  await setVisualization(setViz, {}, visualizationRef);
+  await setVisualization({
+    setViz,
+    itemData: {},
+    visualizationRef,
+    metadataString: "{}",
+    argsString: "{}",
+    variableInputValues: [],
+  });
 
-  expect(setViz.mock.calls[0][0].type.type.name).toBe("BasePlot");
-  expect(setViz.mock.calls[0][0].props).toStrictEqual({
+  // eslint-disable-next-line
+  expect(setViz.mock.calls[0][0].props.children.props["data-testid"]).toBe(
+    "Loading..."
+  );
+
+  expect(setViz.mock.calls[1][0].type.type.name).toBe("BasePlot");
+  expect(setViz.mock.calls[1][0].props).toStrictEqual({
     plotData: {
       data: {},
       layout: {},
@@ -102,16 +172,106 @@ test("setVisualization image", async () => {
 
   const setViz = jest.fn();
   const visualizationRef = { current: null };
-  await setVisualization(setViz, { source: "some_source" }, visualizationRef);
+  await setVisualization({
+    setViz,
+    itemData: { source: "some_source" },
+    visualizationRef,
+    metadataString: "{}",
+    argsString: "{}",
+    variableInputValues: [],
+  });
 
-  expect(setViz.mock.calls[0][0].type.type.name).toBe("Image");
-  expect(setViz.mock.calls[0][0].props).toStrictEqual({
+  // eslint-disable-next-line
+  expect(setViz.mock.calls[0][0].props.children.props["data-testid"]).toBe(
+    "Loading..."
+  );
+
+  expect(setViz.mock.calls[1][0].type.type.name).toBe("Image");
+  expect(setViz.mock.calls[1][0].props).toStrictEqual({
     source: "some_path",
     alt: "some_source",
+    imageError: undefined,
     visualizationRef: {
       current: null,
     },
   });
+});
+
+test("setVisualization, empty variable and no custom messaging", async () => {
+  appAPI.getPlotData = () => {
+    return Promise.resolve({
+      success: true,
+      viz_type: "image",
+      data: "some_path",
+    });
+  };
+
+  const setViz = jest.fn();
+  const visualizationRef = { current: null };
+  await setVisualization({
+    setViz,
+    itemData: { source: "some_source" },
+    visualizationRef,
+    metadataString: JSON.stringify({}),
+    // eslint-disable-next-line
+    argsString: JSON.stringify({ gauge_location: "${Location} ${Time}" }),
+    variableInputValues: {},
+  });
+
+  // eslint-disable-next-line
+  expect(setViz.mock.calls[0][0].props.children.props["data-testid"]).toBe(
+    "Loading..."
+  );
+
+  // Render the element passed to setViz to check the text content
+  render(setViz.mock.calls[1][0]);
+
+  // Check if the rendered content contains the error message
+  expect(
+    await screen.findByText(/Location variable is empty/i)
+  ).toBeInTheDocument();
+  expect(
+    await screen.findByText(/Time variable is empty/i)
+  ).toBeInTheDocument();
+});
+
+test("setVisualization, empty variable and custom messaging", async () => {
+  appAPI.getPlotData = () => {
+    return Promise.resolve({
+      success: true,
+      viz_type: "image",
+      data: "some_path",
+    });
+  };
+
+  const setViz = jest.fn();
+  const visualizationRef = { current: null };
+  await setVisualization({
+    setViz,
+    itemData: { source: "some_source" },
+    visualizationRef,
+    metadataString: JSON.stringify({
+      customMessaging: {
+        Location: "custom location message",
+      },
+    }),
+    // eslint-disable-next-line
+    argsString: JSON.stringify({ gauge_location: "${Location} ${Time}" }),
+    variableInputValues: { Time: "some value" },
+  });
+
+  // eslint-disable-next-line
+  expect(setViz.mock.calls[0][0].props.children.props["data-testid"]).toBe(
+    "Loading..."
+  );
+
+  // Render the element passed to setViz to check the text content
+  render(setViz.mock.calls[1][0]);
+
+  // Check if the rendered content contains the error message
+  expect(
+    await screen.findByText("custom location message")
+  ).toBeInTheDocument();
 });
 
 test("setVisualization table", async () => {
@@ -126,10 +286,22 @@ test("setVisualization table", async () => {
 
   const setViz = jest.fn();
   const visualizationRef = { current: null };
-  await setVisualization(setViz, {}, visualizationRef);
+  await setVisualization({
+    setViz,
+    itemData: {},
+    visualizationRef,
+    metadataString: "{}",
+    argsString: "{}",
+    variableInputValues: [],
+  });
 
-  expect(setViz.mock.calls[0][0].type.type.name).toBe("DataTable");
-  expect(setViz.mock.calls[0][0].props).toStrictEqual({
+  // eslint-disable-next-line
+  expect(setViz.mock.calls[0][0].props.children.props["data-testid"]).toBe(
+    "Loading..."
+  );
+
+  expect(setViz.mock.calls[1][0].type.type.name).toBe("DataTable");
+  expect(setViz.mock.calls[1][0].props).toStrictEqual({
     data: [],
     title: "Some Title",
     visualizationRef: {
@@ -154,10 +326,22 @@ test("setVisualization card", async () => {
 
   const setViz = jest.fn();
   const visualizationRef = { current: null };
-  await setVisualization(setViz, {}, visualizationRef);
+  await setVisualization({
+    setViz,
+    itemData: {},
+    visualizationRef,
+    metadataString: "{}",
+    argsString: "{}",
+    variableInputValues: [],
+  });
 
-  expect(setViz.mock.calls[0][0].type.name).toBe("Card");
-  expect(setViz.mock.calls[0][0].props).toStrictEqual({
+  // eslint-disable-next-line
+  expect(setViz.mock.calls[0][0].props.children.props["data-testid"]).toBe(
+    "Loading..."
+  );
+
+  expect(setViz.mock.calls[1][0].type.name).toBe("Card");
+  expect(setViz.mock.calls[1][0].props).toStrictEqual({
     data: [],
     title: "Some Title",
     description: "Some Description",
@@ -184,10 +368,22 @@ test("setVisualization map", async () => {
 
   const setViz = jest.fn();
   const visualizationRef = { current: null };
-  await setVisualization(setViz, {}, visualizationRef);
+  await setVisualization({
+    setViz,
+    itemData: {},
+    visualizationRef,
+    metadataString: "{}",
+    argsString: "{}",
+    variableInputValues: [],
+  });
 
-  expect(setViz.mock.calls[0][0].type.name).toBe("MockMapVisualization");
-  expect(setViz.mock.calls[0][0].props).toStrictEqual({
+  // eslint-disable-next-line
+  expect(setViz.mock.calls[0][0].props.children.props["data-testid"]).toBe(
+    "Loading..."
+  );
+
+  expect(setViz.mock.calls[1][0].type.name).toBe("MockMapVisualization");
+  expect(setViz.mock.calls[1][0].props).toStrictEqual({
     layers: [],
     legend: [],
     mapConfig: {},
@@ -215,10 +411,22 @@ test("setVisualization custom", async () => {
 
   const setViz = jest.fn();
   const visualizationRef = { current: null };
-  await setVisualization(setViz, {}, visualizationRef);
+  await setVisualization({
+    setViz,
+    itemData: {},
+    visualizationRef,
+    metadataString: "{}",
+    argsString: "{}",
+    variableInputValues: [],
+  });
 
-  expect(setViz.mock.calls[0][0].type.name).toBe("MockModuleLoader");
-  expect(setViz.mock.calls[0][0].props).toStrictEqual({
+  // eslint-disable-next-line
+  expect(setViz.mock.calls[0][0].props.children.props["data-testid"]).toBe(
+    "Loading..."
+  );
+
+  expect(setViz.mock.calls[1][0].type.name).toBe("MockModuleLoader");
+  expect(setViz.mock.calls[1][0].props).toStrictEqual({
     url: "url",
     scope: "scope",
     module: "module",
