@@ -47,6 +47,7 @@ def get_available_visualizations():
 
 def get_visualization(viz_source, viz_args):
     plugin = getattr(intake, f"open_{viz_source}")
+
     data = plugin(**viz_args).read()
 
     return plugin.visualization_type, data

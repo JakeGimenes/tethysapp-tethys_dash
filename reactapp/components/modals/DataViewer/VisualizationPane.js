@@ -4,10 +4,11 @@ import DataSelect from "components/inputs/DataSelect";
 import styled from "styled-components";
 import Image from "components/visualizations/Image";
 import DataInput from "components/inputs/DataInput";
-import TextEditor from "components/inputs/TextEditor";
 import MapVisualization from "components/visualizations/Map";
-import { setVisualization } from "components/visualizations/utilities";
-import { parseVizInputValues } from "components/modals/DataViewer/DataViewer";
+import {
+  setVisualization,
+  findSelectOptionByValue,
+} from "components/visualizations/utilities";
 import {
   AppContext,
   VariableInputsContext,
@@ -25,10 +26,6 @@ import SelectedVisualizationTypesModal from "components/modals/SelectedVisualiza
 import { useAppTourContext } from "components/contexts/AppTourContext";
 import "components/modals/wideModal.css";
 
-const StyledDiv = styled.div`
-  padding-bottom: 1rem;
-`;
-
 const DropdownDiv = styled.div`
   flex: 1;
   margin-right: 1rem;
@@ -45,27 +42,72 @@ const FlexDiv = styled.div`
 
 const VisualizationArguments = ({
   selectedVizTypeOption,
+  vizArguments,
   vizInputsValues,
   handleInputChange,
   setShowingSubModal,
   gridItemIndex,
 }) => {
-  if (!selectedVizTypeOption || selectedVizTypeOption["value"] === "Text") {
+  if (!selectedVizTypeOption || selectedVizTypeOption.value === "Text") {
     return null;
   }
 
-  const VizArgs = [];
-  vizInputsValues.forEach((obj, index) => {
-    VizArgs.push(
+  const renderInput = (obj, key) => {
+    let vizArgType = obj.type;
+    let value = vizInputsValues?.[key] ?? getInitialInputValue(vizArgType);
+    if (vizArgType === "checkbox") {
+      vizArgType = [
+        { label: "True", value: true },
+        { label: "False", value: false },
+      ];
+      value = value
+        ? { label: "True", value: true }
+        : { label: "False", value: false };
+    }
+    return (
       <DataInput
-        key={index}
-        objValue={obj}
-        onChange={handleInputChange}
-        index={index}
+        key={key}
+        label={spaceAndCapitalize(obj.label)}
+        type={vizArgType}
+        value={value}
+        onChange={(newValue) => handleInputChange(newValue, key)}
         inputProps={{ gridItemIndex, setShowingSubModal }}
       />
     );
-  });
+  };
+
+  const renderArgs = (obj, parentKey = "") => {
+    const inputs = [];
+    const baseKey = parentKey ? `${parentKey}.${obj.name}` : obj.name;
+
+    // Main input
+    inputs.push(renderInput(obj, baseKey));
+
+    // If this input has options (i.e., dropdown), check for sub_args
+    if (Array.isArray(obj.type)) {
+      let selectedValue = vizInputsValues?.[baseKey];
+      if (typeof selectedValue !== "object") {
+        selectedValue = findSelectOptionByValue(obj.type, selectedValue);
+      }
+
+      if (selectedValue?.sub_args) {
+        for (const [subName, subOptions] of Object.entries(
+          selectedValue.sub_args
+        )) {
+          const subArgObj = {
+            name: subName,
+            label: subName,
+            type: subOptions,
+          };
+          inputs.push(...renderArgs(subArgObj, baseKey)); // recursive call
+        }
+      }
+    }
+
+    return inputs;
+  };
+
+  const VizArgs = vizArguments.flatMap((arg) => renderArgs(arg));
 
   return VizArgs;
 };
@@ -77,6 +119,7 @@ function VisualizationPane({
   setGridItemMessage,
   selectedVizTypeOption,
   setSelectVizTypeOption,
+  viz,
   setViz,
   setVizMetadata,
   vizInputsValues,
@@ -91,6 +134,7 @@ function VisualizationPane({
     localStorage.getItem("deselected_visualizations")?.split(",") || []
   );
   const [vizOptions, setVizOptions] = useState([]);
+  const [vizArguments, setVizArguments] = useState([]);
   const [selectedGroupName, setSelectedGroupName] = useState(null);
   const [
     showVisualizationTypeSettingsModal,
@@ -107,6 +151,48 @@ function VisualizationPane({
   });
 
   useEffect(() => {
+    if (source) {
+      let selectedVizOptionGroup = null;
+      let selectedVizOptionGroupOption = null;
+      for (let vizOptionGroup of visualizations) {
+        for (let vizOptionGroupOption of vizOptionGroup.options) {
+          if (vizOptionGroupOption.source === source) {
+            selectedVizOptionGroup = vizOptionGroup;
+            selectedVizOptionGroupOption = vizOptionGroupOption;
+            break;
+          }
+        }
+      }
+
+      if (selectedVizOptionGroupOption) {
+        setSelectedGroupName(selectedVizOptionGroup.label);
+        setSelectVizTypeOption(selectedVizOptionGroupOption);
+
+        let updatedVizArguments = [];
+
+        const existingArgs = JSON.parse(argsString);
+        if (source === "Variable Input") {
+          setVariableInputValue(existingArgs.initial_value);
+        }
+
+        for (let arg in selectedVizOptionGroupOption.args) {
+          let vizArgType = selectedVizOptionGroupOption.args[arg];
+          let existingArg = existingArgs[arg];
+          updatedVizArguments.push({
+            label: arg,
+            name: arg,
+            type: vizArgType,
+            value: existingArg,
+          });
+        }
+        setVizArguments(updatedVizArguments);
+        setVizInputsValues(existingArgs);
+      }
+    }
+    // eslint-disable-next-line
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem("deselected_visualizations", deselectedVisualizations);
     let vizTypeOptions = JSON.parse(JSON.stringify(visualizations));
     for (let vizOptionGroup of vizTypeOptions) {
@@ -115,46 +201,6 @@ function VisualizationPane({
       });
     }
     setVizOptions(vizTypeOptions);
-
-    if (source) {
-      for (let vizOptionGroup of visualizations) {
-        for (let vizOptionGroupOption of vizOptionGroup.options) {
-          if (vizOptionGroupOption.source === source) {
-            setSelectedGroupName(vizOptionGroup.label);
-            setSelectVizTypeOption(vizOptionGroupOption);
-            let userInputsValues = [];
-            const existingArgs = JSON.parse(argsString);
-            if (source === "Variable Input") {
-              setVariableInputValue(existingArgs.initial_value);
-            }
-
-            for (let arg in vizOptionGroupOption.args) {
-              let vizArgType = vizOptionGroupOption.args[arg];
-              let existingArg = existingArgs[arg];
-              if (vizArgType === "checkbox") {
-                vizArgType = [
-                  { label: "True", value: true },
-                  { label: "False", value: false },
-                ];
-                existingArg = existingArg
-                  ? { label: "True", value: true }
-                  : { label: "False", value: false };
-              }
-
-              const userInputsValue = {
-                label: spaceAndCapitalize(arg),
-                name: arg,
-                type: vizArgType,
-                value: existingArg,
-              };
-              userInputsValues.push(userInputsValue);
-            }
-            setVizInputsValues(userInputsValues);
-            break;
-          }
-        }
-      }
-    }
     // eslint-disable-next-line
   }, [deselectedVisualizations]);
 
@@ -163,11 +209,46 @@ function VisualizationPane({
     // eslint-disable-next-line
   }, [vizInputsValues]);
 
-  function handleInputChange(new_value, index) {
-    const values = [...vizInputsValues];
-    values[index].value = new_value;
-    setVizInputsValues(values);
-  }
+  const handleInputChange = (newValue, key) => {
+    setVizInputsValues((prev) => {
+      const updated = { ...prev, [key]: newValue.value ?? newValue };
+
+      // Helper to recursively collect valid nested keys from sub_args
+      const collectValidKeys = (subArgs, baseKey) => {
+        let validKeys = [];
+        for (const [subName] of Object.entries(subArgs)) {
+          const fullKey = `${baseKey}.${subName}`;
+          validKeys.push(fullKey);
+        }
+        return validKeys;
+      };
+
+      // Clean up all nested keys that start with this key and are no longer valid
+      const prefix = `${key}.`;
+
+      // Get all valid nested keys based on the new value
+      const validKeys = newValue?.sub_args
+        ? collectValidKeys(newValue.sub_args, key)
+        : [];
+      if (validKeys.length > 0) {
+        validKeys.forEach((key) => {
+          updated[key] = updated[key] ?? null;
+        });
+      }
+
+      // Remove invalid nested keys
+      for (const existingKey in updated) {
+        if (
+          existingKey.startsWith(prefix) &&
+          !validKeys.includes(existingKey)
+        ) {
+          delete updated[existingKey];
+        }
+      }
+
+      return updated;
+    });
+  };
 
   function onDataTypeChange(e) {
     visualizationRef.current = null;
@@ -182,66 +263,66 @@ function VisualizationPane({
     }
     setSelectVizTypeOption(e);
 
-    let userInputsValues = [];
+    let updatedVizArguments = [];
+    const updatedVizInputsValues = {};
     for (let arg in e.args) {
-      let existing = vizInputsValues.filter((obj) => {
+      let existing = vizArguments.filter((obj) => {
         if (obj.name !== arg) {
           return false;
         }
         return valuesEqual(obj.type, e.args[arg]);
       });
 
-      if (e.args[arg] === "checkbox") {
-        e.args[arg] = [
-          { label: "True", value: true },
-          { label: "False", value: false },
-        ];
-      }
       let inputValue;
       if (existing.length) {
-        inputValue = existing[0].value;
+        inputValue = vizInputsValues[arg];
       } else {
         inputValue = getInitialInputValue(e.args[arg]);
       }
 
-      userInputsValues.push({
-        label: spaceAndCapitalize(arg),
+      updatedVizArguments.push({
+        label: arg,
         name: arg,
         type: e.args[arg],
         value: inputValue,
       });
+      updatedVizInputsValues[arg] = inputValue;
     }
-    setVizInputsValues(userInputsValues);
+    setVizInputsValues(updatedVizInputsValues);
+    setVizArguments(updatedVizArguments);
     setViz(null);
     setVizMetadata(null);
   }
 
   function checkAllInputs() {
     if (selectedVizTypeOption !== null) {
-      let inputValues = vizInputsValues.map((value) => value.value);
       if (
-        inputValues.every((value) => !["", null].includes(value)) ||
-        (selectedVizTypeOption["value"] === "Text" && inputValues[0] === "")
+        Object.values(vizInputsValues).every(
+          (value) => !["", null].includes(value)
+        )
       ) {
         previewVisualization();
+      } else if (viz) {
+        setViz(null);
       }
     }
   }
 
   function previewVisualization() {
+    const initialArgs = JSON.parse(argsString);
+
+    const args =
+      selectedVizTypeOption.source === "Map" && "initial_view" in initialArgs
+        ? { ...vizInputsValues, initial_view: initialArgs.initial_view }
+        : vizInputsValues;
+
     const itemData = {
       source: selectedVizTypeOption["source"],
-      args: JSON.parse(argsString), // initialize with initial values for some vizualization like Map where additional args are used that dont have options
+      args: Object.fromEntries(
+        Object.entries(args).map(([key, val]) => [key, val.value ?? val])
+      ),
     };
 
-    // Loop through each visualization input and overwrite initial values
-    vizInputsValues.forEach((arg) => {
-      if (typeof arg.value.value !== "undefined") {
-        itemData["args"][arg.name] = arg.value.value;
-      } else {
-        itemData["args"][arg.name] = arg.value;
-      }
-    });
     setVizMetadata(itemData);
     setGridItemMessage(
       "Cell updated to show " +
@@ -249,22 +330,16 @@ function VisualizationPane({
         " " +
         selectedVizTypeOption["label"]
     );
-    if (selectedVizTypeOption["value"] === "Custom Image") {
+    if (selectedVizTypeOption.value === "Text") {
+      return;
+    } else if (selectedVizTypeOption.value === "Custom Image") {
       setViz(
         <Image
-          source={vizInputsValues[0].value}
+          source={vizInputsValues.image_source}
           visualizationRef={visualizationRef}
         />
       );
-    } else if (selectedVizTypeOption["value"] === "Text") {
-      setViz(
-        <CustomTextOptions
-          objValue={vizInputsValues[0]}
-          onChange={handleInputChange}
-          index={0}
-        />
-      );
-    } else if (selectedVizTypeOption["value"] === "Variable Input") {
+    } else if (selectedVizTypeOption.value === "Variable Input") {
       itemData.args.initial_value = variableInputValue;
       if (itemData.args.initial_value === null) {
         if (itemData.args.variable_options_source === "text") {
@@ -284,7 +359,7 @@ function VisualizationPane({
         JSON.stringify(itemData.args),
         variableInputValues
       );
-      if (selectedVizTypeOption["value"] === "Map") {
+      if (selectedVizTypeOption.value === "Map") {
         setViz(
           <MapVisualization
             visualizationRef={visualizationRef}
@@ -301,11 +376,7 @@ function VisualizationPane({
           itemData,
           visualizationRef,
           metadataString: JSON.stringify(settingsRef.current),
-          argsString: parseVizInputValues({
-            vizInputsValues,
-            visualizationRef,
-            selectedVizTypeOption,
-          }),
+          argsString: vizInputsValues,
           variableInputValues,
         });
       }
@@ -349,6 +420,7 @@ function VisualizationPane({
       </FlexDiv>
       <VisualizationArguments
         selectedVizTypeOption={selectedVizTypeOption}
+        vizArguments={vizArguments}
         vizInputsValues={vizInputsValues}
         handleInputChange={handleInputChange}
         setShowingSubModal={setShowingSubModal}
@@ -369,28 +441,10 @@ function VisualizationPane({
   );
 }
 
-export function CustomTextOptions({ objValue, onChange, index }) {
-  const textValue = objValue.value;
-
-  return (
-    <StyledDiv>
-      <TextEditor
-        textValue={textValue}
-        onChange={(e) => onChange(e.target.value, index)}
-      />
-    </StyledDiv>
-  );
-}
-
-CustomTextOptions.propTypes = {
-  objValue: PropTypes.object,
-  onChange: PropTypes.func,
-  index: PropTypes.number,
-};
-
 VisualizationArguments.propTypes = {
   selectedVizTypeOption: PropTypes.object,
-  vizInputsValues: PropTypes.array,
+  vizArguments: PropTypes.arrayOf(PropTypes.object),
+  vizInputsValues: PropTypes.object,
   handleInputChange: PropTypes.func,
   setShowingSubModal: PropTypes.func,
   gridItemIndex: PropTypes.number,
@@ -403,9 +457,16 @@ VisualizationPane.propTypes = {
   setGridItemMessage: PropTypes.func,
   selectedVizTypeOption: PropTypes.object,
   setSelectVizTypeOption: PropTypes.func,
+  viz: PropTypes.oneOfType([
+    PropTypes.arrayOf(PropTypes.node),
+    PropTypes.arrayOf(PropTypes.object),
+    PropTypes.node,
+    PropTypes.object,
+    PropTypes.instanceOf(Element),
+  ]),
   setViz: PropTypes.func,
   setVizMetadata: PropTypes.func,
-  vizInputsValues: PropTypes.array,
+  vizInputsValues: PropTypes.object,
   setVizInputsValues: PropTypes.func,
   variableInputValue: PropTypes.oneOfType([PropTypes.bool, PropTypes.string]),
   setVariableInputValue: PropTypes.func,
