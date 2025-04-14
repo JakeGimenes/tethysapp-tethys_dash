@@ -26,12 +26,6 @@ const StyledTabContainer = styled.div`
   height: 100%;
 `;
 
-const StyledTabPane = styled.div`
-  height: 100%;
-  overflow: auto;
-  padding: 1rem;
-`;
-
 const PaddedBottomDiv = styled.div`
   padding-bottom: 1rem;
 `;
@@ -235,27 +229,25 @@ function DataViewerModal({
                       aria-label="visualizationTab"
                       className="visualizationTab"
                     >
-                      <StyledTabPane>
-                        <VisualizationPane
-                          gridItemIndex={gridItemIndex}
-                          source={source}
-                          argsString={argsString}
-                          metadataString={metadataString}
-                          setGridItemMessage={setGridItemMessage}
-                          selectedVizTypeOption={selectedVizTypeOption}
-                          setSelectVizTypeOption={setSelectVizTypeOption}
-                          setViz={setViz}
-                          viz={viz}
-                          setVizMetadata={setVizMetadata}
-                          vizInputsValues={vizInputsValues}
-                          setVizInputsValues={setVizInputsValues}
-                          variableInputValue={variableInputValue}
-                          setVariableInputValue={setVariableInputValue}
-                          settingsRef={settingsRef}
-                          visualizationRef={visualizationRef}
-                          setShowingSubModal={setShowingSubModal}
-                        />
-                      </StyledTabPane>
+                      <VisualizationPane
+                        gridItemIndex={gridItemIndex}
+                        source={source}
+                        argsString={argsString}
+                        metadataString={metadataString}
+                        setGridItemMessage={setGridItemMessage}
+                        selectedVizTypeOption={selectedVizTypeOption}
+                        setSelectVizTypeOption={setSelectVizTypeOption}
+                        setViz={setViz}
+                        viz={viz}
+                        setVizMetadata={setVizMetadata}
+                        vizInputsValues={vizInputsValues}
+                        setVizInputsValues={setVizInputsValues}
+                        variableInputValue={variableInputValue}
+                        setVariableInputValue={setVariableInputValue}
+                        settingsRef={settingsRef}
+                        visualizationRef={visualizationRef}
+                        setShowingSubModal={setShowingSubModal}
+                      />
                     </Tab>
                     <Tab
                       eventKey="settings"
@@ -263,14 +255,12 @@ function DataViewerModal({
                       aria-label="settingsTab"
                       className="settingsTab"
                     >
-                      <StyledTabPane>
-                        <SettingsPane
-                          settingsRef={settingsRef}
-                          viz={viz}
-                          visualizationRef={visualizationRef}
-                          vizInputsValues={vizInputsValues}
-                        />
-                      </StyledTabPane>
+                      <SettingsPane
+                        settingsRef={settingsRef}
+                        viz={viz}
+                        visualizationRef={visualizationRef}
+                        vizInputsValues={vizInputsValues}
+                      />
                     </Tab>
                   </Tabs>
                 </StyledTabContainer>
