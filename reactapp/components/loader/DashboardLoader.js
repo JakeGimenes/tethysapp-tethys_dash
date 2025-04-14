@@ -20,6 +20,7 @@ const DashboardLoader = ({
   notes,
   editable,
   accessGroups,
+  unrestrictedPlacement,
   description,
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -88,18 +89,6 @@ const DashboardLoader = ({
     updateVariableInputValuesWithGridItems(updatedGridItems);
   }
 
-  function getDashboardMetadata() {
-    return {
-      id,
-      name,
-      notes,
-      gridItems,
-      editable,
-      accessGroups,
-      description,
-    };
-  }
-
   function resetGridItems() {
     setGridItems(originalGridItems.current);
     updateVariableInputValuesWithGridItems(originalGridItems.current);
@@ -136,9 +125,16 @@ const DashboardLoader = ({
         <LayoutContext.Provider
           value={{
             updateGridItems,
-            getDashboardMetadata,
             resetGridItems,
             saveLayoutContext,
+            id,
+            name,
+            notes,
+            gridItems,
+            editable,
+            accessGroups,
+            unrestrictedPlacement,
+            description,
           }}
         >
           <EditingContext.Provider value={{ isEditing, setIsEditing }}>
@@ -176,6 +172,7 @@ DashboardLoader.propTypes = {
   editable: PropTypes.bool,
   accessGroups: PropTypes.arrayOf(PropTypes.string),
   description: PropTypes.string,
+  unrestrictedPlacement: PropTypes.bool,
 };
 
 export default DashboardLoader;

@@ -29,6 +29,7 @@ export const mockedDashboards = {
       name: "editable",
       description: "test_description",
       accessGroups: [],
+      unrestrictedPlacement: false,
       image: "my_image.png",
       notes: "test_notes",
       gridItems: [

@@ -438,7 +438,7 @@ test("Dashboard Item edit item", async () => {
   );
   await userEvent.click(dashboardItemDropdownToggle);
 
-  const editGridItemButton = await screen.findByText("Edit Visualization");
+  const editGridItemButton = await screen.findByText("Edit");
   await userEvent.click(editGridItemButton);
   const dataViewerModal = await screen.findByRole("dialog");
   expect(dataViewerModal).toBeInTheDocument();
@@ -529,7 +529,7 @@ test("Dashboard Item copy item", async () => {
   );
   await userEvent.click(dashboardItemDropdownToggle);
 
-  const createCopyButton = await screen.findByText("Create Copy");
+  const createCopyButton = await screen.findByText("Copy");
   await userEvent.click(createCopyButton);
 
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
@@ -648,7 +648,7 @@ test("Dashboard Item copy item variable input", async () => {
   );
   await userEvent.click(dashboardItemDropdownToggle);
 
-  const createCopyButton = await screen.findByText("Create Copy");
+  const createCopyButton = await screen.findByText("Copy");
   await userEvent.click(createCopyButton);
 
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
@@ -773,7 +773,7 @@ test("Dashboard Item copy item variable input already exists", async () => {
   );
   await userEvent.click(dashboardItemDropdownToggle);
 
-  const createCopyButton = await screen.findByText("Create Copy");
+  const createCopyButton = await screen.findByText("Copy");
   await userEvent.click(createCopyButton);
 
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
@@ -842,6 +842,358 @@ test("Dashboard Item copy item variable input already exists", async () => {
       test_var: true,
       test_var_1: true,
       test_var_2: true,
+    })
+  );
+});
+
+test("Dashboard Item order options disabled for single grid item", async () => {
+  const updatedMockedDashboards = JSON.parse(JSON.stringify(mockedDashboards));
+  const mockedDashboard = updatedMockedDashboards.user[0];
+  mockedDashboard.unrestrictedPlacement = true;
+  const gridItem = mockedDashboard.gridItems[0];
+  gridItem.source = "Custom Image";
+  gridItem.args_string = JSON.stringify({
+    image_source: "https://www.aquaveo.com/images/aquaveo_logo.svg",
+  });
+
+  render(
+    createLoadedComponent({
+      children: (
+        <DashboardItem
+          gridItemSource={gridItem.source}
+          gridItemI={gridItem.i}
+          gridItemArgsString={gridItem.args_string}
+          gridItemMetadataString={gridItem.metadata_string}
+          gridItemIndex={0}
+        />
+      ),
+      options: {
+        editableDashboard: true,
+        dashboards: updatedMockedDashboards,
+        initialDashboard: mockedDashboard,
+        inEditing: true,
+      },
+    })
+  );
+
+  const dashboardItemDropdownToggle = await screen.findByLabelText(
+    "dashboard-item-dropdown-toggle"
+  );
+  await userEvent.click(dashboardItemDropdownToggle);
+
+  const orderOption = await screen.findByText("Order");
+  expect(orderOption).toBeInTheDocument();
+  fireEvent.mouseEnter(orderOption);
+
+  const bringToFrontOption = await screen.findByText("Bring to Front");
+  expect(bringToFrontOption).toBeInTheDocument();
+  expect(bringToFrontOption).toHaveClass("disabled");
+
+  const bringForwardOption = await screen.findByText("Bring Forward");
+  expect(bringForwardOption).toBeInTheDocument();
+  expect(bringForwardOption).toHaveClass("disabled");
+
+  const sendToBackOption = await screen.findByText("Send to Back");
+  expect(sendToBackOption).toBeInTheDocument();
+  expect(sendToBackOption).toHaveClass("disabled");
+
+  const sendBackwardOption = await screen.findByText("Send Backward");
+  expect(sendBackwardOption).toBeInTheDocument();
+  expect(sendBackwardOption).toHaveClass("disabled");
+});
+
+test("Dashboard Item order forward", async () => {
+  const updatedMockedDashboards = JSON.parse(JSON.stringify(mockedDashboards));
+  const mockedDashboard = updatedMockedDashboards.user[0];
+  mockedDashboard.unrestrictedPlacement = true;
+  const greenGridItem = {
+    i: "3",
+    x: 1,
+    y: 0,
+    w: 20,
+    h: 20,
+    source: "Text",
+    args_string: JSON.stringify({
+      text: "green",
+    }),
+    metadata_string: JSON.stringify({
+      border: {
+        border: "1px solid black",
+      },
+      backgroundColor: "#71d47bcb",
+    }),
+  };
+  const blueGridItem = {
+    i: "4",
+    x: 5,
+    y: 3,
+    w: 20,
+    h: 20,
+    source: "Text",
+    args_string: JSON.stringify({
+      text: "blue",
+    }),
+    metadata_string: JSON.stringify({
+      border: {
+        border: "1px solid black",
+      },
+      backgroundColor: "#424cd9",
+    }),
+  };
+  const redGridItem = {
+    i: "5",
+    x: 12,
+    y: 9,
+    w: 20,
+    h: 20,
+    source: "Text",
+    args_string: JSON.stringify({
+      text: "red",
+    }),
+    metadata_string: JSON.stringify({
+      border: {
+        border: "1px solid black",
+      },
+      backgroundColor: "#d72e56",
+    }),
+  };
+  const yellowGridItem = {
+    i: "6",
+    x: 12,
+    y: 9,
+    w: 20,
+    h: 20,
+    source: "Text",
+    args_string: JSON.stringify({
+      text: "yellow",
+    }),
+    metadata_string: JSON.stringify({
+      border: {
+        border: "1px solid black",
+      },
+      backgroundColor: "#d72e56",
+    }),
+  };
+  const gridItems = [greenGridItem, blueGridItem, redGridItem, yellowGridItem];
+  mockedDashboard.gridItems = gridItems;
+  const gridItem = gridItems[1];
+
+  render(
+    createLoadedComponent({
+      children: (
+        <>
+          <DashboardItem
+            gridItemSource={gridItem.source}
+            gridItemI={gridItem.i}
+            gridItemArgsString={gridItem.args_string}
+            gridItemMetadataString={gridItem.metadata_string}
+            gridItemIndex={1}
+          />
+
+          <ContextLayoutPComponent />
+        </>
+      ),
+      options: {
+        editableDashboard: true,
+        dashboards: updatedMockedDashboards,
+        initialDashboard: mockedDashboard,
+        inEditing: true,
+      },
+    })
+  );
+
+  const dashboardItemDropdownToggle = await screen.findByLabelText(
+    "dashboard-item-dropdown-toggle"
+  );
+  await userEvent.click(dashboardItemDropdownToggle);
+
+  let orderOption = await screen.findByText("Order");
+  expect(orderOption).toBeInTheDocument();
+  fireEvent.mouseEnter(orderOption);
+
+  const bringToFrontOption = await screen.findByText("Bring to Front");
+  expect(bringToFrontOption).toBeInTheDocument();
+  await userEvent.click(bringToFrontOption);
+
+  expect(await screen.findByTestId("layout-context")).toHaveTextContent(
+    JSON.stringify({
+      id: 1,
+      name: "editable",
+      notes: "test_notes",
+      gridItems: [greenGridItem, redGridItem, yellowGridItem, blueGridItem],
+      editable: true,
+      accessGroups: [],
+      description: "test_description",
+    })
+  );
+
+  await userEvent.click(dashboardItemDropdownToggle);
+
+  orderOption = await screen.findByText("Order");
+  expect(orderOption).toBeInTheDocument();
+  fireEvent.mouseEnter(orderOption);
+
+  const bringForwardOption = await screen.findByText("Bring Forward");
+  expect(bringForwardOption).toBeInTheDocument();
+  await userEvent.click(bringForwardOption);
+
+  expect(await screen.findByTestId("layout-context")).toHaveTextContent(
+    JSON.stringify({
+      id: 1,
+      name: "editable",
+      notes: "test_notes",
+      gridItems: [greenGridItem, yellowGridItem, redGridItem, blueGridItem],
+      editable: true,
+      accessGroups: [],
+      description: "test_description",
+    })
+  );
+});
+
+test("Dashboard Item order backward", async () => {
+  const updatedMockedDashboards = JSON.parse(JSON.stringify(mockedDashboards));
+  const mockedDashboard = updatedMockedDashboards.user[0];
+  mockedDashboard.unrestrictedPlacement = true;
+  const greenGridItem = {
+    i: "3",
+    x: 1,
+    y: 0,
+    w: 20,
+    h: 20,
+    source: "Text",
+    args_string: JSON.stringify({
+      text: "green",
+    }),
+    metadata_string: JSON.stringify({
+      border: {
+        border: "1px solid black",
+      },
+      backgroundColor: "#71d47bcb",
+    }),
+  };
+  const blueGridItem = {
+    i: "4",
+    x: 5,
+    y: 3,
+    w: 20,
+    h: 20,
+    source: "Text",
+    args_string: JSON.stringify({
+      text: "blue",
+    }),
+    metadata_string: JSON.stringify({
+      border: {
+        border: "1px solid black",
+      },
+      backgroundColor: "#424cd9",
+    }),
+  };
+  const redGridItem = {
+    i: "5",
+    x: 12,
+    y: 9,
+    w: 20,
+    h: 20,
+    source: "Text",
+    args_string: JSON.stringify({
+      text: "red",
+    }),
+    metadata_string: JSON.stringify({
+      border: {
+        border: "1px solid black",
+      },
+      backgroundColor: "#d72e56",
+    }),
+  };
+  const yellowGridItem = {
+    i: "6",
+    x: 12,
+    y: 9,
+    w: 20,
+    h: 20,
+    source: "Text",
+    args_string: JSON.stringify({
+      text: "yellow",
+    }),
+    metadata_string: JSON.stringify({
+      border: {
+        border: "1px solid black",
+      },
+      backgroundColor: "#d72e56",
+    }),
+  };
+  const gridItems = [greenGridItem, blueGridItem, redGridItem, yellowGridItem];
+  mockedDashboard.gridItems = gridItems;
+  const gridItem = gridItems[1];
+
+  render(
+    createLoadedComponent({
+      children: (
+        <>
+          <DashboardItem
+            gridItemSource={gridItem.source}
+            gridItemI={gridItem.i}
+            gridItemArgsString={gridItem.args_string}
+            gridItemMetadataString={gridItem.metadata_string}
+            gridItemIndex={2}
+          />
+
+          <ContextLayoutPComponent />
+        </>
+      ),
+      options: {
+        editableDashboard: true,
+        dashboards: updatedMockedDashboards,
+        initialDashboard: mockedDashboard,
+        inEditing: true,
+      },
+    })
+  );
+
+  const dashboardItemDropdownToggle = await screen.findByLabelText(
+    "dashboard-item-dropdown-toggle"
+  );
+  await userEvent.click(dashboardItemDropdownToggle);
+
+  let orderOption = await screen.findByText("Order");
+  expect(orderOption).toBeInTheDocument();
+  fireEvent.mouseEnter(orderOption);
+
+  const sendToBackOption = await screen.findByText("Send to Back");
+  expect(sendToBackOption).toBeInTheDocument();
+  await userEvent.click(sendToBackOption);
+
+  expect(await screen.findByTestId("layout-context")).toHaveTextContent(
+    JSON.stringify({
+      id: 1,
+      name: "editable",
+      notes: "test_notes",
+      gridItems: [redGridItem, greenGridItem, blueGridItem, yellowGridItem],
+      editable: true,
+      accessGroups: [],
+      description: "test_description",
+    })
+  );
+
+  await userEvent.click(dashboardItemDropdownToggle);
+
+  orderOption = await screen.findByText("Order");
+  expect(orderOption).toBeInTheDocument();
+  fireEvent.mouseEnter(orderOption);
+
+  const sendBackwardOption = await screen.findByText("Send Backward");
+  expect(sendBackwardOption).toBeInTheDocument();
+  await userEvent.click(sendBackwardOption);
+
+  expect(await screen.findByTestId("layout-context")).toHaveTextContent(
+    JSON.stringify({
+      id: 1,
+      name: "editable",
+      notes: "test_notes",
+      gridItems: [redGridItem, blueGridItem, greenGridItem, yellowGridItem],
+      editable: true,
+      accessGroups: [],
+      description: "test_description",
     })
   );
 });

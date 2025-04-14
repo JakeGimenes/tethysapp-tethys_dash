@@ -4,6 +4,7 @@ from sqlalchemy import (
     Integer,
     String,
     DateTime,
+    Boolean,
     ARRAY,
     ForeignKey,
     UniqueConstraint,
@@ -17,6 +18,11 @@ from datetime import datetime, timezone
 from django.conf import settings
 from tethys_sdk.paths import get_app_media, get_app_workspace
 import base64
+from alembic.config import Config
+from alembic import command, script
+from sqlalchemy.exc import ProgrammingError, OperationalError
+from pathlib import Path
+import subprocess
 
 Base = declarative_base()
 
@@ -36,7 +42,8 @@ class Dashboard(Base):
     notes = Column(String)
     owner = Column(String)
     access_groups = Column(ARRAY(String))
-    grid_items = relationship("GridItem", cascade="delete")
+    unrestricted_placement = Column(Boolean)
+    grid_items = relationship("GridItem", cascade="delete", order_by="GridItem.order")
     last_updated = Column(DateTime, default=datetime.now(timezone.utc))
 
 
@@ -58,10 +65,20 @@ class GridItem(Base):
     source = Column(String)
     args_string = Column(String)
     metadata_string = Column(String)
+    order = Column(Integer)
     __table_args__ = (UniqueConstraint("dashboard_id", "i", name="_dashboard_i"),)
 
 
-def add_new_dashboard(owner, uuid, name, description, notes, access_groups, grid_items):
+def add_new_dashboard(
+    owner,
+    uuid,
+    name,
+    description,
+    notes,
+    access_groups,
+    unrestricted_placement,
+    grid_items,
+):
     # Get connection/session to database
     Session = App.get_persistent_store_database("primary_db", as_sessionmaker=True)
     session = Session()
@@ -75,6 +92,7 @@ def add_new_dashboard(owner, uuid, name, description, notes, access_groups, grid
             notes=notes,
             owner=owner,
             access_groups=access_groups,
+            unrestricted_placement=unrestricted_placement,
         )
 
         session.add(new_dashboard)
@@ -83,7 +101,7 @@ def add_new_dashboard(owner, uuid, name, description, notes, access_groups, grid
         new_dashboard_id = new_dashboard.id
 
         if grid_items:
-            for grid_item in grid_items:
+            for index, grid_item in enumerate(grid_items):
                 grid_item_i = grid_item["i"]
                 grid_item_x = int(grid_item["x"])
                 grid_item_y = int(grid_item["y"])
@@ -107,10 +125,11 @@ def add_new_dashboard(owner, uuid, name, description, notes, access_groups, grid
                     grid_item_source,
                     grid_item_args_string,
                     grid_item_metadata_string,
+                    index,
                 )
         else:
             add_new_grid_item(
-                session, new_dashboard_id, "1", 0, 0, 20, 20, "", "{}", "{}"
+                session, new_dashboard_id, "1", 0, 0, 20, 20, "", "{}", "{}", 0
             )
 
         # Commit the session and close the connection
@@ -132,6 +151,7 @@ def add_new_grid_item(
     grid_item_source,
     grid_item_args_string,
     grid_item_metadata_string,
+    grid_item_order,
 ):
     new_grid_item = GridItem(
         dashboard_id=dashboard_id,
@@ -143,6 +163,7 @@ def add_new_grid_item(
         source=grid_item_source,
         args_string=grid_item_args_string,
         metadata_string=grid_item_metadata_string,
+        order=grid_item_order,
     )
     session.add(new_grid_item)
     session.commit()
@@ -180,6 +201,7 @@ def copy_named_dashboard(user, id, new_name, dashboard_uuid):
             notes=original_dashboard.notes,
             owner=user,
             access_groups=[],
+            unrestricted_placement=original_dashboard.unrestricted_placement,
         )
 
         # Add and flush to generate new ID
@@ -189,7 +211,7 @@ def copy_named_dashboard(user, id, new_name, dashboard_uuid):
 
         # Copy GridItems and explicitly add them to the session
         new_grid_items = []
-        for grid_item in original_dashboard.grid_items:
+        for index, grid_item in enumerate(original_dashboard.grid_items):
             new_item = GridItem(
                 i=grid_item.i,
                 x=grid_item.x,
@@ -200,6 +222,7 @@ def copy_named_dashboard(user, id, new_name, dashboard_uuid):
                 args_string=grid_item.args_string,
                 metadata_string=grid_item.metadata_string,
                 dashboard_id=new_dashboard.id,  # Explicitly link to new dashboard
+                order=index,
             )
             session.add(new_item)  # Explicitly add to session
             new_grid_items.append(new_item)
@@ -280,6 +303,11 @@ def update_named_dashboard(user, id, dashboard_updates):
                 check_existing_public_dashboards(session, db_name)
             db_dashboard.access_groups = dashboard_updates["accessGroups"]
 
+        if "unrestrictedPlacement" in dashboard_updates:
+            db_dashboard.unrestricted_placement = dashboard_updates[
+                "unrestrictedPlacement"
+            ]
+
         if "gridItems" in dashboard_updates:
             updated_grid_items = dashboard_updates["gridItems"]
             existing_db_grid_items_ids = [
@@ -298,7 +326,7 @@ def update_named_dashboard(user, id, dashboard_updates):
             for grid_item_id in grid_items_to_delete:
                 delete_grid_item(session, db_dashboard.id, grid_item_id)
 
-            for grid_item in updated_grid_items:
+            for index, grid_item in enumerate(updated_grid_items):
                 grid_item_i = grid_item["i"]
                 grid_item_x = int(grid_item["x"])
                 grid_item_y = int(grid_item["y"])
@@ -323,6 +351,7 @@ def update_named_dashboard(user, id, dashboard_updates):
                         grid_item_source,
                         grid_item_args_string,
                         grid_item_metadata_string,
+                        index,
                     )
                 else:
                     db_grid_item = (
@@ -339,6 +368,7 @@ def update_named_dashboard(user, id, dashboard_updates):
                     db_grid_item.source = grid_item_source
                     db_grid_item.args_string = grid_item_args_string
                     db_grid_item.metadata_string = grid_item_metadata_string
+                    db_grid_item.order = index
 
         db_dashboard.last_updated = datetime.now(timezone.utc)
 
@@ -352,10 +382,10 @@ def update_named_dashboard(user, id, dashboard_updates):
             with open(file_path, "wb") as file:
                 file.write(base64.b64decode(imgstr))
 
-        parsed_dashboard = parse_db_dashboard([db_dashboard], dashboard_view=True)[0]
-
         # Commit the session and close the connection
         session.commit()
+
+        parsed_dashboard = parse_db_dashboard([db_dashboard], dashboard_view=True)[0]
     finally:
         session.close()
 
@@ -379,6 +409,7 @@ def parse_db_dashboard(dashboards, dashboard_view):
             "name": dashboard.name,
             "description": dashboard.description,
             "accessGroups": (["public"] if "public" in dashboard.access_groups else []),
+            "unrestrictedPlacement": dashboard.unrestricted_placement,
             "image": dashboard_image,
         }
 
@@ -518,5 +549,38 @@ def init_primary_db(engine, first_time):
     """
     Initializer for the primary database.
     """
-    # Create all the tables
-    Base.metadata.create_all(engine)
+    # Load Alembic configuration
+    tethysdash_directory = Path(__file__).resolve().parent
+    alembic_directory = str(tethysdash_directory / "alembic")
+    alembic_cfg = Config(tethysdash_directory / "alembic.ini")
+    alembic_cfg.set_main_option("script_location", alembic_directory)
+    script_directory = script.ScriptDirectory.from_config(alembic_cfg)
+
+    command.ensure_version(alembic_cfg)
+
+    result = subprocess.run(
+        ["alembic", "current"], capture_output=True, text=True, cwd=tethysdash_directory
+    )
+    current_revision = result.stdout.split(" ")[0]
+
+    if current_revision:
+        print("Upgrading to head")
+        command.upgrade(alembic_cfg, "head")
+    else:
+        # Iterate over revisions in order
+        revisions = list(script_directory.walk_revisions(base="base", head="head"))
+        revisions.reverse()  # walk_revisions returns in reverse order (head -> base)
+
+        for rev in revisions:
+            try:
+                print(f"Attempting to upgrade to revision {rev.revision}")
+                command.upgrade(alembic_cfg, rev.revision)
+                print(f"Successfully upgraded to revision {rev.revision}")
+            except (ProgrammingError, OperationalError) as e:
+                if "already exists" in str(e):
+                    command.stamp(alembic_cfg, rev.revision)
+                    print(
+                        f"Stamped and Skipped revision {rev.revision} (column/table already exists)"  # noqa: E501
+                    )
+                else:
+                    raise  # Unknown error — don't skip

@@ -233,6 +233,9 @@ test("Dashboard Editor Canvas edit and save", async () => {
   const publicRadioButton = await screen.findByLabelText("Public");
   fireEvent.click(publicRadioButton);
 
+  const unrestrictedPlacement = await screen.findByLabelText("On");
+  fireEvent.click(unrestrictedPlacement);
+
   const descriptionInput = await screen.findByLabelText("Description Input");
   fireEvent.change(descriptionInput, { target: { value: "New Description" } });
 
@@ -255,6 +258,7 @@ test("Dashboard Editor Canvas edit and save", async () => {
       description: "New Description",
       id: 1,
       notes: "test_notes. Here are some notes",
+      unrestrictedPlacement: true,
     },
     "SxICmOkFldX4o4YVaySdZq9sgn0eRd3Ih6uFtY8BgU5tMyZc7n90oJ4M2My5i7cy"
   );
@@ -314,6 +318,7 @@ test("Dashboard Editor Canvas edit desription only and save", async () => {
       description: "New Description",
       id: 1,
       notes: "test_notes. Here are some notes",
+      unrestrictedPlacement: false,
     },
     "SxICmOkFldX4o4YVaySdZq9sgn0eRd3Ih6uFtY8BgU5tMyZc7n90oJ4M2My5i7cy"
   );
@@ -358,6 +363,7 @@ test("Dashboard Editor Canvas edit and save fail without message", async () => {
       description: "New Description",
       id: 1,
       notes: "test_notes",
+      unrestrictedPlacement: false,
     },
     "SxICmOkFldX4o4YVaySdZq9sgn0eRd3Ih6uFtY8BgU5tMyZc7n90oJ4M2My5i7cy"
   );
@@ -399,6 +405,7 @@ test("Dashboard Editor Canvas edit and save fail with message", async () => {
       description: "New Description",
       id: 1,
       notes: "test_notes",
+      unrestrictedPlacement: false,
     },
     "SxICmOkFldX4o4YVaySdZq9sgn0eRd3Ih6uFtY8BgU5tMyZc7n90oJ4M2My5i7cy"
   );
@@ -660,5 +667,5 @@ test("Dashboard Editor Canvas close in app tour", async () => {
     expect(screen.queryByText("Dashboard Settings")).not.toBeInTheDocument();
   });
 
-  expect(mockSetAppTourStep).toHaveBeenCalledWith(31);
+  expect(mockSetAppTourStep).toHaveBeenCalledWith(33);
 });
