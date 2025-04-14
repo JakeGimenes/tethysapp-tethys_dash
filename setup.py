@@ -16,18 +16,19 @@ dependencies = [
     "pytest-cov",
     "intake",
     "djangorestframework",
-    "alembic",
+    "alembic==1.14.0",
 ]
 
 # -- Get Resource File -- #
 resource_files = find_all_resource_files(app_package, TethysAppBase.package_namespace)
 resource_files.append("default_dashboard.png")
+resource_files.append("alembic.ini")
 
 django.setup()
 
 setup(
     name=release_package,
-    version="0.8.10",
+    version="0.8.11",
     description="",
     long_description="",
     keywords="",

@@ -18,6 +18,19 @@ import Tab from "react-bootstrap/Tab";
 import Tabs from "react-bootstrap/Tabs";
 import TextEditor from "components/inputs/TextEditor";
 import "components/modals/wideModal.css";
+import "components/modals/DataViewer/DataViewer.css";
+
+const StyledTabContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+`;
+
+const StyledTabPane = styled.div`
+  height: 100%;
+  overflow: auto;
+  padding: 1rem;
+`;
 
 const PaddedBottomDiv = styled.div`
   padding-bottom: 1rem;
@@ -209,52 +222,58 @@ function DataViewerModal({
                   "justify-content-center h-100 col-4 dataviewer-inputs"
                 }
               >
-                <Tabs
-                  activeKey={tabKey}
-                  onSelect={(k) => setTabKey(k)}
-                  id="visualization-tabs"
-                  className="mb-3"
-                >
-                  <Tab
-                    eventKey="visualization"
-                    title="Visualization"
-                    aria-label="visualizationTab"
-                    className="visualizationTab"
+                <StyledTabContainer>
+                  <Tabs
+                    activeKey={tabKey}
+                    onSelect={(k) => setTabKey(k)}
+                    id="visualization-tabs"
+                    className="mb-3"
                   >
-                    <VisualizationPane
-                      gridItemIndex={gridItemIndex}
-                      source={source}
-                      argsString={argsString}
-                      metadataString={metadataString}
-                      setGridItemMessage={setGridItemMessage}
-                      selectedVizTypeOption={selectedVizTypeOption}
-                      setSelectVizTypeOption={setSelectVizTypeOption}
-                      setViz={setViz}
-                      viz={viz}
-                      setVizMetadata={setVizMetadata}
-                      vizInputsValues={vizInputsValues}
-                      setVizInputsValues={setVizInputsValues}
-                      variableInputValue={variableInputValue}
-                      setVariableInputValue={setVariableInputValue}
-                      settingsRef={settingsRef}
-                      visualizationRef={visualizationRef}
-                      setShowingSubModal={setShowingSubModal}
-                    />
-                  </Tab>
-                  <Tab
-                    eventKey="settings"
-                    title="Settings"
-                    aria-label="settingsTab"
-                    className="settingsTab"
-                  >
-                    <SettingsPane
-                      settingsRef={settingsRef}
-                      viz={viz}
-                      visualizationRef={visualizationRef}
-                      vizInputsValues={vizInputsValues}
-                    />
-                  </Tab>
-                </Tabs>
+                    <Tab
+                      eventKey="visualization"
+                      title="Visualization"
+                      aria-label="visualizationTab"
+                      className="visualizationTab"
+                    >
+                      <StyledTabPane>
+                        <VisualizationPane
+                          gridItemIndex={gridItemIndex}
+                          source={source}
+                          argsString={argsString}
+                          metadataString={metadataString}
+                          setGridItemMessage={setGridItemMessage}
+                          selectedVizTypeOption={selectedVizTypeOption}
+                          setSelectVizTypeOption={setSelectVizTypeOption}
+                          setViz={setViz}
+                          viz={viz}
+                          setVizMetadata={setVizMetadata}
+                          vizInputsValues={vizInputsValues}
+                          setVizInputsValues={setVizInputsValues}
+                          variableInputValue={variableInputValue}
+                          setVariableInputValue={setVariableInputValue}
+                          settingsRef={settingsRef}
+                          visualizationRef={visualizationRef}
+                          setShowingSubModal={setShowingSubModal}
+                        />
+                      </StyledTabPane>
+                    </Tab>
+                    <Tab
+                      eventKey="settings"
+                      title="Settings"
+                      aria-label="settingsTab"
+                      className="settingsTab"
+                    >
+                      <StyledTabPane>
+                        <SettingsPane
+                          settingsRef={settingsRef}
+                          viz={viz}
+                          visualizationRef={visualizationRef}
+                          vizInputsValues={vizInputsValues}
+                        />
+                      </StyledTabPane>
+                    </Tab>
+                  </Tabs>
+                </StyledTabContainer>
               </StyledCol>
               <StyledVizCol className={"justify-content-center h-100 col-8"}>
                 {selectedVizTypeOption?.value === "Text" ? (
