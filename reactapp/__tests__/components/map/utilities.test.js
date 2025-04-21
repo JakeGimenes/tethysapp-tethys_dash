@@ -4,7 +4,6 @@ import {
   transformCoordinates,
   queryLayerFeatures,
   getLayerAttributes,
-  getMapAttributeVariables,
 } from "components/map/utilities";
 import { LineString, Point, MultiPolygon, Polygon } from "ol/geom";
 import VectorLayer from "ol/layer/Vector.js";
@@ -12,7 +11,6 @@ import {
   layerConfigGeoJSON,
   layerConfigImageArcGISRest,
   layerConfigImageWMS,
-  layerAttributeVariables,
 } from "__tests__/utilities/constants";
 
 test("createMarkerLayer", async () => {
@@ -1157,11 +1155,4 @@ test("getLayerAttributes Error", async () => {
   await expect(getLayerAttributes(sourceProps, layerName)).rejects.toThrow(
     "bad type is not currently configured to be queried"
   );
-});
-
-test("getMapAttributeVariables", async () => {
-  const mapLayers = [{ attributeVariables: layerAttributeVariables }];
-  const mapAttributeVariables = getMapAttributeVariables(mapLayers);
-
-  expect(mapAttributeVariables).toStrictEqual(["variable 1"]);
 });

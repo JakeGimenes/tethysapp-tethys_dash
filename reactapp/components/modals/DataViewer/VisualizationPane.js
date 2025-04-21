@@ -2,11 +2,9 @@ import { useState, useEffect, useContext } from "react";
 import PropTypes from "prop-types";
 import DataSelect from "components/inputs/DataSelect";
 import styled from "styled-components";
-import Image from "components/visualizations/Image";
 import DataInput from "components/inputs/DataInput";
-import MapVisualization from "components/visualizations/Map";
 import {
-  setVisualization,
+  getVisualization,
   findSelectOptionByValue,
 } from "components/visualizations/utilities";
 import {
@@ -18,8 +16,7 @@ import {
   spaceAndCapitalize,
   valuesEqual,
 } from "components/modals/utilities";
-import { updateGridItemArgsWithVariableInputs } from "components/visualizations/utilities";
-import VariableInput from "components/visualizations/VariableInput";
+import { updateObjectWithVariableInputs } from "components/visualizations/utilities";
 import TooltipButton from "components/buttons/TooltipButton";
 import { CiFilter } from "react-icons/ci";
 import SelectedVisualizationTypesModal from "components/modals/SelectedVisualizationTypes";
@@ -119,8 +116,9 @@ function VisualizationPane({
   setGridItemMessage,
   selectedVizTypeOption,
   setSelectVizTypeOption,
-  viz,
-  setViz,
+  vizType,
+  setVizType,
+  setVizData,
   setVizMetadata,
   vizInputsValues,
   setVizInputsValues,
@@ -290,7 +288,8 @@ function VisualizationPane({
     }
     setVizInputsValues(updatedVizInputsValues);
     setVizArguments(updatedVizArguments);
-    setViz(null);
+    setVizType("loader");
+    setVizData({});
     setVizMetadata(null);
   }
 
@@ -302,18 +301,16 @@ function VisualizationPane({
         )
       ) {
         previewVisualization();
-      } else if (viz) {
-        setViz(null);
       }
     }
   }
 
-  function previewVisualization() {
+  async function previewVisualization() {
     const initialArgs = JSON.parse(argsString);
 
     const args =
-      selectedVizTypeOption.source === "Map" && "initial_view" in initialArgs
-        ? { ...vizInputsValues, initial_view: initialArgs.initial_view }
+      selectedVizTypeOption.source === "Map" && "viewConfig" in initialArgs
+        ? { ...vizInputsValues, viewConfig: initialArgs.viewConfig }
         : vizInputsValues;
 
     const itemData = {
@@ -322,6 +319,7 @@ function VisualizationPane({
         Object.entries(args).map(([key, val]) => [key, val.value ?? val])
       ),
     };
+    const sourceType = selectedVizTypeOption.type;
 
     setVizMetadata(itemData);
     setGridItemMessage(
@@ -333,12 +331,10 @@ function VisualizationPane({
     if (selectedVizTypeOption.value === "Text") {
       return;
     } else if (selectedVizTypeOption.value === "Custom Image") {
-      setViz(
-        <Image
-          source={vizInputsValues.image_source}
-          visualizationRef={visualizationRef}
-        />
-      );
+      setVizType("image");
+      setVizData({
+        source: vizInputsValues.image_source,
+      });
     } else if (selectedVizTypeOption.value === "Variable Input") {
       itemData.args.initial_value = variableInputValue;
       if (itemData.args.initial_value === null) {
@@ -348,33 +344,33 @@ function VisualizationPane({
           itemData.args.initial_value = "0";
         }
       }
-      setViz(
-        <VariableInput
-          args={itemData.args}
-          onChange={(e) => setVariableInputValue(e)}
-        />
-      );
+      setVizType("variableInput");
+      setVizData({
+        variable_name: itemData.args.variable_name,
+        initial_value: itemData.args.initial_value,
+        variable_options_source: itemData.args.variable_options_source,
+        onChange: (e) => setVariableInputValue(e),
+      });
     } else {
-      const updatedGridItemArgs = updateGridItemArgsWithVariableInputs(
+      const updatedGridItemArgs = updateObjectWithVariableInputs(
         JSON.stringify(itemData.args),
         variableInputValues
       );
       if (selectedVizTypeOption.value === "Map") {
-        setViz(
-          <MapVisualization
-            visualizationRef={visualizationRef}
-            baseMap={updatedGridItemArgs["base_map"]}
-            layers={updatedGridItemArgs["additional_layers"]}
-            layerControl={updatedGridItemArgs["show_layer_controls"]}
-            viewConfig={updatedGridItemArgs["initial_view"]}
-          />
-        );
+        setVizType("map");
+        setVizData({
+          viewConfig: updatedGridItemArgs.viewConfig,
+          layers: updatedGridItemArgs.layers,
+          baseMap: updatedGridItemArgs.baseMap,
+          layerControl: updatedGridItemArgs.layerControl,
+        });
       } else {
         itemData.args = updatedGridItemArgs;
-        setVisualization({
-          setViz,
+        await getVisualization({
+          setVizType,
+          setVizData,
+          sourceType,
           itemData,
-          visualizationRef,
           metadataString: JSON.stringify(settingsRef.current),
           argsString: vizInputsValues,
           variableInputValues,
@@ -457,14 +453,9 @@ VisualizationPane.propTypes = {
   setGridItemMessage: PropTypes.func,
   selectedVizTypeOption: PropTypes.object,
   setSelectVizTypeOption: PropTypes.func,
-  viz: PropTypes.oneOfType([
-    PropTypes.arrayOf(PropTypes.node),
-    PropTypes.arrayOf(PropTypes.object),
-    PropTypes.node,
-    PropTypes.object,
-    PropTypes.instanceOf(Element),
-  ]),
-  setViz: PropTypes.func,
+  vizType: PropTypes.string,
+  setVizType: PropTypes.func,
+  setVizData: PropTypes.func,
   setVizMetadata: PropTypes.func,
   vizInputsValues: PropTypes.object,
   setVizInputsValues: PropTypes.func,

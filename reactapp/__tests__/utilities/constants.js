@@ -132,12 +132,14 @@ export const mockedVisualizationsWithDefaults = [
         source: "plugin_source",
         value: "plugin_value",
         label: "plugin_label",
+        type: "image",
         args: { plugin_arg: "text" },
       },
       {
         source: "plugin_source2",
         value: "plugin_value2",
         label: "plugin_label2",
+        type: "plotly",
         args: { plugin_arg: "text" },
       },
     ],
@@ -149,6 +151,7 @@ export const mockedVisualizationsWithDefaults = [
         source: "plugin_source3",
         value: "plugin_value3",
         label: "plugin_label3",
+        type: "plotly",
         args: { plugin_arg3: "text" },
       },
     ],
@@ -160,14 +163,16 @@ export const mockedVisualizationsWithDefaults = [
         source: "Custom Image",
         value: "Custom Image",
         label: "Custom Image",
+        type: "image",
         args: { image_source: "text" },
       },
       {
         source: "Map",
         value: "Map",
         label: "Map",
+        type: "map",
         args: {
-          base_map: [
+          baseMap: [
             {
               label: "ArcGIS Map Service Base Maps",
               options: [
@@ -179,20 +184,22 @@ export const mockedVisualizationsWithDefaults = [
               ],
             },
           ],
-          additional_layers: "custom-AddMapLayer",
-          show_layer_controls: "checkbox",
+          layers: "custom-AddMapLayer",
+          layerControl: "checkbox",
         },
       },
       {
         source: "Text",
         value: "Text",
         label: "Text",
+        type: "text",
         args: { text: "text" },
       },
       {
         source: "Variable Input",
         value: "Variable Input",
         label: "Variable Input",
+        type: "variableInput",
         args: {
           variable_name: "text",
           variable_options_source: [
@@ -288,9 +295,9 @@ export const mockedApiImageBase = {
   y: 0,
   w: 20,
   h: 20,
-  source: "cnrfc_5day_streamflow_volume_exceedance",
+  source: "plugin_source",
   args_string: JSON.stringify({
-    gauge_location: "CREC1",
+    plugin_arg: "CREC1",
   }),
   metadata_string: JSON.stringify({
     refreshRate: 0,
@@ -303,8 +310,10 @@ export const mockedPlotBase = {
   y: 0,
   w: 20,
   h: 20,
-  source: "plot_api",
-  args_string: "{}",
+  source: "plugin_source",
+  args_string: JSON.stringify({
+    plugin_arg: "CREC1",
+  }),
   metadata_string: JSON.stringify({
     refreshRate: 0,
   }),
@@ -353,11 +362,20 @@ export const mockedTableBase = {
   y: 0,
   w: 20,
   h: 20,
-  source: "table_api",
-  args_string: "{}",
+  source: "plugin_source",
+  args_string: JSON.stringify({
+    plugin_arg: "CREC1",
+  }),
   metadata_string: JSON.stringify({
     refreshRate: 0,
   }),
+};
+
+export const mockedCustomData = {
+  url: "some url",
+  scope: "some scope",
+  module: "some module",
+  props: { prop1: "some prop" },
 };
 
 export const mockedTableData = {
@@ -387,8 +405,10 @@ export const mockedCardBase = {
   y: 0,
   w: 20,
   h: 20,
-  source: "card_api",
-  args_string: "{}",
+  source: "plugin_source",
+  args_string: JSON.stringify({
+    plugin_arg: "CREC1",
+  }),
   metadata_string: JSON.stringify({
     refreshRate: 0,
   }),
@@ -426,9 +446,9 @@ export const mockedMapBase = {
   h: 20,
   source: "Map",
   args_string: JSON.stringify({
-    base_map:
+    baseMap:
       "https://server.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer",
-    additional_layers: [
+    layers: [
       {
         configuration: {
           type: "ImageLayer",
@@ -456,8 +476,8 @@ export const mockedMapBase = {
         },
       },
     ],
-    show_layer_controls: true,
-    initial_view: {
+    layerControl: true,
+    viewConfig: {
       center: [-9974138.670265444, 4049495.619645755],
       zoom: 7.253038543654934,
     },

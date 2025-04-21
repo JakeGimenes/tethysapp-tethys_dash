@@ -423,6 +423,7 @@ test("Dashboard Viewer Modal Update Existing Variable Input", async () => {
   fireEvent.click(dataviewerSaveButton);
   expect(await screen.findByTestId("input-variables")).toHaveTextContent(
     JSON.stringify({
+      "Test Variable": "some value",
       "Test Variable 2": "some value",
     })
   );
@@ -603,11 +604,11 @@ test("Dashboard Viewer Modal Map False layer control", async () => {
           h: 20,
           source: "Map",
           args_string: JSON.stringify({
-            base_map:
+            baseMap:
               "https://server.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer",
-            additional_layers: [],
-            show_layer_controls: false,
-            initial_view: {
+            layers: [],
+            layerControl: false,
+            viewConfig: {
               center: [-10686671.116154263, 4721671.572580108],
               zoom: 4.5,
             },
