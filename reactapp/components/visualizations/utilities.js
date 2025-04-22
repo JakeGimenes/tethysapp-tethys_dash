@@ -307,9 +307,10 @@ export function findSelectOptionByValue(
   searchKey = "value"
 ) {
   for (const element of data) {
-    if (element[searchKey] === searchValue) {
+    if (element[searchKey] === searchValue || element === searchValue) {
       return element; // Return the matching element
     }
+
     if (element.options && Array.isArray(element.options)) {
       const found = findSelectOptionByValue(
         element.options,

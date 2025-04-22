@@ -7,6 +7,7 @@ import createLoadedComponent from "__tests__/utilities/customRender";
 import PropTypes from "prop-types";
 import { server } from "__tests__/utilities/server";
 import { rest } from "msw";
+import { Table } from "react-bootstrap";
 
 const TestingComponent = ({
   source,
@@ -569,6 +570,11 @@ test("Visualization Pane Use Existing Args Map", async () => {
     })
   );
 
+  expect(await screen.findByText("Map")).toBeInTheDocument();
+  const layerTable = await screen.findByRole("table");
+  expect(layerTable.rows.length).toBe(1); // just header
+  expect(await screen.findByText("True")).toBeInTheDocument();
+
   await waitFor(async () => {
     expect(mockSetVizMetadata).toHaveBeenCalledWith({
       args: {
@@ -658,6 +664,10 @@ test("Visualization Pane Use Existing Args Variable Input", async () => {
       },
     });
   });
+
+  expect(await screen.findByText("Variable Input")).toBeInTheDocument();
+  expect(await screen.findByText("text")).toBeInTheDocument();
+
   expect(mockSetGridItemMessage).toHaveBeenCalledWith(
     "Cell updated to show Other Variable Input"
   );
@@ -712,6 +722,8 @@ test("Visualization Pane Use Existing Args Custom Image", async () => {
       },
     })
   );
+
+  expect(await screen.findByText("Custom Image")).toBeInTheDocument();
 
   await waitFor(async () => {
     expect(mockSetVizMetadata).toHaveBeenCalledWith({
@@ -787,6 +799,10 @@ test("Visualization Pane Use Existing Args Viz with True checkbox", async () => 
       },
     })
   );
+
+  expect(await screen.findByText("plugin_label")).toBeInTheDocument();
+  expect(await screen.findByText("Plugin Arg")).toBeInTheDocument();
+  expect(await screen.findByText("True")).toBeInTheDocument();
 
   await waitFor(async () => {
     expect(mockSetVizMetadata).toHaveBeenCalledWith({
@@ -865,6 +881,10 @@ test("Visualization Pane Use Existing Args Viz with False checkbox", async () =>
       },
     })
   );
+
+  expect(await screen.findByText("plugin_label")).toBeInTheDocument();
+  expect(await screen.findByText("Plugin Arg")).toBeInTheDocument();
+  expect(await screen.findByText("False")).toBeInTheDocument();
 
   await waitFor(async () => {
     expect(mockSetVizMetadata).toHaveBeenCalledWith({
@@ -982,6 +1002,25 @@ test("Visualization Pane Use Existing Subs Args", async () => {
       },
     })
   );
+
+  expect(await screen.findByText("plugin_label")).toBeInTheDocument();
+  // label and value
+  expect(screen.getByText("Plugin Arg")).toBeInTheDocument();
+  expect(screen.getByText("Arg 1")).toBeInTheDocument();
+  // label and value
+  expect(screen.getByText("Sub Arg1a")).toBeInTheDocument();
+  expect(screen.getByText("Sub Arg 1A")).toBeInTheDocument();
+  // label and value
+  expect(screen.getByText("Sub Arg1aa")).toBeInTheDocument();
+  expect(screen.getByText("False")).toBeInTheDocument();
+
+  // label and value
+  expect(screen.getByText("Plugin Arg2")).toBeInTheDocument();
+  expect(screen.getByText("Arg 3")).toBeInTheDocument();
+  // label and value
+  expect(screen.getByText("Sub Arg3a")).toBeInTheDocument();
+  let textbox = screen.getByRole("textbox");
+  expect(textbox.value).toBe("some value");
 
   await waitFor(async () => {
     expect(mockSetVizMetadata).toHaveBeenCalledWith({

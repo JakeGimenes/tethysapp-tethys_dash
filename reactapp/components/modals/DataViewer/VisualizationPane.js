@@ -61,6 +61,14 @@ const VisualizationArguments = ({
         ? { label: "True", value: true }
         : { label: "False", value: false };
     }
+
+    if (Array.isArray(vizArgType) && typeof value !== "object") {
+      const selectionValue = findSelectOptionByValue(vizArgType, value);
+      if (selectionValue) {
+        value = selectionValue;
+      }
+    }
+
     return (
       <DataInput
         key={key}
