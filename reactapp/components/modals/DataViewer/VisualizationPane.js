@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, useRef } from "react";
 import PropTypes from "prop-types";
 import DataSelect from "components/inputs/DataSelect";
 import styled from "styled-components";
@@ -18,8 +18,8 @@ import {
 } from "components/modals/utilities";
 import { updateObjectWithVariableInputs } from "components/visualizations/utilities";
 import TooltipButton from "components/buttons/TooltipButton";
-import { CiFilter } from "react-icons/ci";
-import SelectedVisualizationTypesModal from "components/modals/SelectedVisualizationTypes";
+import { BsSearch } from "react-icons/bs";
+import VisualizationSelector from "components/modals/DataViewer/VisualizationSelector";
 import { useAppTourContext } from "components/contexts/AppTourContext";
 import "components/modals/wideModal.css";
 
@@ -136,34 +136,27 @@ function VisualizationPane({
   visualizationRef,
   setShowingSubModal,
 }) {
-  const [deselectedVisualizations, setDeselectedVisualizations] = useState(
-    localStorage.getItem("deselected_visualizations")?.split(",") || []
-  );
-  const [vizOptions, setVizOptions] = useState([]);
   const [vizArguments, setVizArguments] = useState([]);
-  const [selectedGroupName, setSelectedGroupName] = useState(null);
-  const [
-    showVisualizationTypeSettingsModal,
-    setShowVisualizationTypeSettingsModal,
-  ] = useState(false);
+  const [showVisualizationSelectorModal, setShowVisualizationSelectorModal] =
+    useState(false);
   const { visualizations } = useContext(AppContext);
   const { variableInputValues } = useContext(VariableInputsContext);
   const { activeAppTour } = useAppTourContext();
-  const otherVisualizationOptions = visualizations.find((obj) => {
-    return obj.label === "Other";
+  const currentSelectedVizTypeOption = useRef(selectedVizTypeOption);
+
+  const defaultVisualizationOptions = visualizations.find((obj) => {
+    return obj.label === "Default";
   });
-  const customImageOption = otherVisualizationOptions.options.find((obj) => {
+  const customImageOption = defaultVisualizationOptions.options.find((obj) => {
     return obj.value === "Custom Image";
   });
 
   useEffect(() => {
     if (source) {
-      let selectedVizOptionGroup = null;
       let selectedVizOptionGroupOption = null;
       for (let vizOptionGroup of visualizations) {
         for (let vizOptionGroupOption of vizOptionGroup.options) {
           if (vizOptionGroupOption.source === source) {
-            selectedVizOptionGroup = vizOptionGroup;
             selectedVizOptionGroupOption = vizOptionGroupOption;
             break;
           }
@@ -171,7 +164,6 @@ function VisualizationPane({
       }
 
       if (selectedVizOptionGroupOption) {
-        setSelectedGroupName(selectedVizOptionGroup.label);
         setSelectVizTypeOption(selectedVizOptionGroupOption);
 
         let updatedVizArguments = [];
@@ -193,27 +185,96 @@ function VisualizationPane({
         }
         setVizArguments(updatedVizArguments);
         setVizInputsValues(existingArgs);
+        currentSelectedVizTypeOption.current = selectedVizOptionGroupOption;
       }
     }
     // eslint-disable-next-line
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("deselected_visualizations", deselectedVisualizations);
-    let vizTypeOptions = JSON.parse(JSON.stringify(visualizations));
-    for (let vizOptionGroup of vizTypeOptions) {
-      vizOptionGroup.options = vizOptionGroup.options.filter(function (item) {
-        return !deselectedVisualizations.includes(item.label);
-      });
+    if (
+      selectedVizTypeOption &&
+      !valuesEqual(currentSelectedVizTypeOption.current, selectedVizTypeOption)
+    ) {
+      visualizationRef.current = null;
+      settingsRef.current = {};
+
+      let updatedVizArguments = [];
+      const updatedVizInputsValues = {};
+      for (let arg in selectedVizTypeOption.args) {
+        let existing = vizArguments.filter((obj) => {
+          if (obj.name !== arg) {
+            return false;
+          }
+          return valuesEqual(obj.type, selectedVizTypeOption.args[arg]);
+        });
+
+        let inputValue;
+        if (existing.length) {
+          inputValue = vizInputsValues[arg];
+        } else {
+          inputValue = getInitialInputValue(selectedVizTypeOption.args[arg]);
+        }
+
+        updatedVizArguments.push({
+          label: arg,
+          name: arg,
+          type: selectedVizTypeOption.args[arg],
+          value: inputValue,
+        });
+        updatedVizInputsValues[arg] = inputValue;
+      }
+      setVizInputsValues(updatedVizInputsValues);
+      setVizArguments(updatedVizArguments);
+      setVizType("unknown");
+      setVizData({});
+      setVizMetadata(null);
+      currentSelectedVizTypeOption.current = selectedVizTypeOption;
     }
-    setVizOptions(vizTypeOptions);
     // eslint-disable-next-line
-  }, [deselectedVisualizations]);
+  }, [selectedVizTypeOption]);
 
   useEffect(() => {
     checkAllInputs();
     // eslint-disable-next-line
   }, [vizInputsValues]);
+
+  function onDataTypeChange(e) {
+    visualizationRef.current = null;
+    settingsRef.current = {};
+    setSelectVizTypeOption(e);
+
+    let updatedVizArguments = [];
+    const updatedVizInputsValues = {};
+    for (let arg in e.args) {
+      let existing = vizArguments.filter((obj) => {
+        if (obj.name !== arg) {
+          return false;
+        }
+        return valuesEqual(obj.type, e.args[arg]);
+      });
+
+      let inputValue;
+      if (existing.length) {
+        inputValue = vizInputsValues[arg];
+      } else {
+        inputValue = getInitialInputValue(e.args[arg]);
+      }
+
+      updatedVizArguments.push({
+        label: arg,
+        name: arg,
+        type: e.args[arg],
+        value: inputValue,
+      });
+      updatedVizInputsValues[arg] = inputValue;
+    }
+    setVizInputsValues(updatedVizInputsValues);
+    setVizArguments(updatedVizArguments);
+    setVizType("unknown");
+    setVizData({});
+    setVizMetadata(null);
+  }
 
   const handleInputChange = (newValue, key) => {
     setVizInputsValues((prev) => {
@@ -256,51 +317,6 @@ function VisualizationPane({
     });
   };
 
-  function onDataTypeChange(e) {
-    visualizationRef.current = null;
-    settingsRef.current = {};
-    for (let p of vizOptions) {
-      for (let i of p.options) {
-        if (i === e) {
-          setSelectedGroupName(p.label);
-          break;
-        }
-      }
-    }
-    setSelectVizTypeOption(e);
-
-    let updatedVizArguments = [];
-    const updatedVizInputsValues = {};
-    for (let arg in e.args) {
-      let existing = vizArguments.filter((obj) => {
-        if (obj.name !== arg) {
-          return false;
-        }
-        return valuesEqual(obj.type, e.args[arg]);
-      });
-
-      let inputValue;
-      if (existing.length) {
-        inputValue = vizInputsValues[arg];
-      } else {
-        inputValue = getInitialInputValue(e.args[arg]);
-      }
-
-      updatedVizArguments.push({
-        label: arg,
-        name: arg,
-        type: e.args[arg],
-        value: inputValue,
-      });
-      updatedVizInputsValues[arg] = inputValue;
-    }
-    setVizInputsValues(updatedVizInputsValues);
-    setVizArguments(updatedVizArguments);
-    setVizType("loader");
-    setVizData({});
-    setVizMetadata(null);
-  }
-
   function checkAllInputs() {
     if (selectedVizTypeOption !== null) {
       if (
@@ -314,75 +330,74 @@ function VisualizationPane({
   }
 
   async function previewVisualization() {
-    const initialArgs = JSON.parse(argsString);
+    if (selectedVizTypeOption) {
+      const initialArgs = JSON.parse(argsString);
 
-    const args =
-      selectedVizTypeOption.source === "Map" && "viewConfig" in initialArgs
-        ? { ...vizInputsValues, viewConfig: initialArgs.viewConfig }
-        : vizInputsValues;
+      const args =
+        selectedVizTypeOption.source === "Map" && "viewConfig" in initialArgs
+          ? { ...vizInputsValues, viewConfig: initialArgs.viewConfig }
+          : vizInputsValues;
 
-    const itemData = {
-      source: selectedVizTypeOption["source"],
-      args: Object.fromEntries(
-        Object.entries(args).map(([key, val]) => [key, val.value ?? val])
-      ),
-    };
-    const sourceType = selectedVizTypeOption.type;
+      const itemData = {
+        source: selectedVizTypeOption["source"],
+        args: Object.fromEntries(
+          Object.entries(args).map(([key, val]) => [key, val.value ?? val])
+        ),
+      };
+      const sourceType = selectedVizTypeOption.type;
 
-    setVizMetadata(itemData);
-    setGridItemMessage(
-      "Cell updated to show " +
-        selectedGroupName +
-        " " +
-        selectedVizTypeOption["label"]
-    );
-    if (selectedVizTypeOption.value === "Text") {
-      return;
-    } else if (selectedVizTypeOption.value === "Custom Image") {
-      setVizType("image");
-      setVizData({
-        source: vizInputsValues.image_source,
-      });
-    } else if (selectedVizTypeOption.value === "Variable Input") {
-      itemData.args.initial_value = variableInputValue;
-      if (itemData.args.initial_value === null) {
-        if (itemData.args.variable_options_source === "text") {
-          itemData.args.initial_value = "";
-        } else if (itemData.args.variable_options_source === "number") {
-          itemData.args.initial_value = "0";
-        }
-      }
-      setVizType("variableInput");
-      setVizData({
-        variable_name: itemData.args.variable_name,
-        initial_value: itemData.args.initial_value,
-        variable_options_source: itemData.args.variable_options_source,
-        onChange: (e) => setVariableInputValue(e),
-      });
-    } else {
-      const updatedGridItemArgs = updateObjectWithVariableInputs(
-        JSON.stringify(itemData.args),
-        variableInputValues
+      setVizMetadata(itemData);
+      setGridItemMessage(
+        "Cell updated to show " + selectedVizTypeOption["label"]
       );
-      if (selectedVizTypeOption.value === "Map") {
-        setVizType("map");
+      if (selectedVizTypeOption.value === "Text") {
+        return;
+      } else if (selectedVizTypeOption.value === "Custom Image") {
+        setVizType("image");
         setVizData({
-          viewConfig: updatedGridItemArgs.viewConfig,
-          layers: updatedGridItemArgs.layers,
-          baseMap: updatedGridItemArgs.baseMap,
-          layerControl: updatedGridItemArgs.layerControl,
+          source: vizInputsValues.image_source,
+        });
+      } else if (selectedVizTypeOption.value === "Variable Input") {
+        itemData.args.initial_value = variableInputValue;
+        if (itemData.args.initial_value === null) {
+          if (itemData.args.variable_options_source === "text") {
+            itemData.args.initial_value = "";
+          } else if (itemData.args.variable_options_source === "number") {
+            itemData.args.initial_value = "0";
+          }
+        }
+        setVizType("variableInput");
+        setVizData({
+          variable_name: itemData.args.variable_name,
+          initial_value: itemData.args.initial_value,
+          variable_options_source: itemData.args.variable_options_source,
+          onChange: (e) => setVariableInputValue(e),
         });
       } else {
-        itemData.args = updatedGridItemArgs;
-        await getVisualization({
-          setVizType,
-          setVizData,
-          sourceType,
-          itemData,
-          metadataString: JSON.stringify(settingsRef.current),
-          argsString: vizInputsValues,
-          variableInputValues,
-        });
+        const updatedGridItemArgs = updateObjectWithVariableInputs(
+          JSON.stringify(itemData.args),
+          variableInputValues
+        );
+        if (selectedVizTypeOption.value === "Map") {
+          setVizType("map");
+          setVizData({
+            viewConfig: updatedGridItemArgs.viewConfig,
+            layers: updatedGridItemArgs.layers,
+            baseMap: updatedGridItemArgs.baseMap,
+            layerControl: updatedGridItemArgs.layerControl,
+          });
+        } else {
+          itemData.args = updatedGridItemArgs;
+          await getVisualization({
+            setVizType,
+            setVizData,
+            sourceType,
+            itemData,
+            metadataString: JSON.stringify(settingsRef.current),
+            argsString: vizInputsValues,
+            variableInputValues,
+          });
+        }
       }
     }
   }
@@ -396,27 +411,26 @@ function VisualizationPane({
         <ButtonDiv>
           <TooltipButton
             tooltipPlacement="bottom"
-            tooltipText="Visualization Settings"
-            aria-label={"visualizationSettingButton"}
+            tooltipText="Search Visualizations"
+            aria-label={"Search Visualization Type Button"}
             onClick={
               activeAppTour
                 ? () => {}
                 : () => {
-                    setShowVisualizationTypeSettingsModal(true);
+                    setShowVisualizationSelectorModal(true);
                     setShowingSubModal(true);
                   }
             }
-            className={"filterButton"}
             style={{ height: "100%" }}
           >
-            <CiFilter size="1.5rem" />
+            <BsSearch />
           </TooltipButton>
         </ButtonDiv>
         <DropdownDiv>
           <DataSelect
             selectedOption={selectedVizTypeOption}
             onChange={onDataTypeChange}
-            options={activeAppTour ? [customImageOption] : vizOptions}
+            options={activeAppTour ? [customImageOption] : visualizations}
             aria-label={"visualizationType"}
             className={"visualizationTypeDropdown"}
           />
@@ -430,15 +444,15 @@ function VisualizationPane({
         setShowingSubModal={setShowingSubModal}
         gridItemIndex={gridItemIndex}
       />
-      {showVisualizationTypeSettingsModal && (
-        <SelectedVisualizationTypesModal
-          showModal={showVisualizationTypeSettingsModal}
+
+      {showVisualizationSelectorModal && (
+        <VisualizationSelector
+          showModal={showVisualizationSelectorModal}
           handleModalClose={() => {
-            setShowVisualizationTypeSettingsModal(false);
+            setShowVisualizationSelectorModal(false);
             setShowingSubModal(false);
           }}
-          deselectedVisualizations={deselectedVisualizations}
-          setDeselectedVisualizations={setDeselectedVisualizations}
+          setSelectVizTypeOption={setSelectVizTypeOption}
         />
       )}
     </>

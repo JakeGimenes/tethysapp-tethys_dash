@@ -22,13 +22,21 @@ dependencies = [
 # -- Get Resource File -- #
 resource_files = find_all_resource_files(app_package, TethysAppBase.package_namespace)
 resource_files.append("default_dashboard.png")
+resource_files.append("default_card.png")
+resource_files.append("default_chart.png")
+resource_files.append("default_custom.png")
+resource_files.append("default_image.png")
+resource_files.append("default_map.png")
+resource_files.append("default_table.png")
+resource_files.append("default_text.png")
+resource_files.append("default_variable_input.png")
 resource_files.append("alembic.ini")
 
 django.setup()
 
 setup(
     name=release_package,
-    version="0.9.4",
+    version="0.10.0",
     description="",
     long_description="",
     keywords="",
