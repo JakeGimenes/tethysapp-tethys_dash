@@ -231,7 +231,7 @@ const MapVisualization = ({
   useEffect(() => {
     const updateLayers = async () => {
       if (
-        !valuesEqual(layers, currentLayers.current) ||
+        (layers && !valuesEqual(layers, currentLayers.current)) ||
         !valuesEqual(baseMap, currentBaseMap.current)
       ) {
         currentBaseMap.current = baseMap;

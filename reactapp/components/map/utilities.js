@@ -141,10 +141,11 @@ export function createHighlightLayer(geometries) {
         name: "LineString",
       }),
     ];
-  } else if (geometries?.type === "MultiPolygon") {
+  } else if ("rings" in geometries || geometries?.type === "MultiPolygon") {
+    const paths = geometries.rings || geometries.coordinates;
     features = [
       new Feature({
-        geometry: new MultiPolygon(geometries.coordinates),
+        geometry: new MultiPolygon(paths),
         name: "MultiPolygon",
       }),
     ];

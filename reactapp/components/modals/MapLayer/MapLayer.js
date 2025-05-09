@@ -88,38 +88,6 @@ const MapLayerModal = ({
     }
 
     const minAttributeVariables = removeEmptyValues(attributeVariables);
-    // Check to see if the pending attribute variables are valid
-    if (Object.keys(minAttributeVariables).length > 0) {
-      // flatten attribute variables into a list
-      const pendingVariableInputs = Object.values(
-        minAttributeVariables
-      ).flatMap((value) => Object.values(value));
-
-      // check for duplicate pending variable input names
-      const duplicatePendingVariableInputs = pendingVariableInputs.filter(
-        (pendingVariableInput, index) =>
-          pendingVariableInputs.indexOf(pendingVariableInput) !== index
-      );
-      if (duplicatePendingVariableInputs.length) {
-        setErrorMessage(
-          <>
-            <p>The following variable inputs are duplicated:</p>
-            <ul>
-              {duplicatePendingVariableInputs.map(
-                (duplicatePendingVariableInput, index) => (
-                  <li key={index}>{duplicatePendingVariableInput}</li>
-                )
-              )}
-            </ul>
-            <p>
-              Change the Variable Input Names in the Attributes tab before
-              trying again.
-            </p>
-          </>
-        );
-        return;
-      }
-    }
 
     if (sourceProps.type === "Vector Tile") {
       validSourceProps.urls = validSourceProps.urls.split(",");

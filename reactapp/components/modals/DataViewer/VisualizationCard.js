@@ -120,7 +120,10 @@ const VisualizationCard = ({
         rootClose={true}
         onHide={() => setShowPopover(false)}
       >
-        <Popover className="color-picker-popover">
+        <Popover
+          onMouseEnter={() => setShowPopover(true)}
+          onMouseLeave={() => setShowPopover(false)}
+        >
           <Popover.Body>
             <div>
               <CenteredDiv>

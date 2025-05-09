@@ -407,17 +407,17 @@ export const mockedCustomData = {
 export const mockedTableData = {
   data: [
     {
-      name: "Alice Johnson",
+      " name": "Alice Johnson",
       age: 28,
       occupation: "Engineer",
     },
     {
-      name: "Bob Smith",
+      " name": "Bob Smith",
       age: 34,
       occupation: "Designer",
     },
     {
-      name: "Charlie Brown",
+      " name": "Charlie Brown",
       age: 22,
       occupation: "Teacher",
     },

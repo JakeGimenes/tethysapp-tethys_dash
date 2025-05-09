@@ -38,6 +38,7 @@ def copy_plugin_images(plugin_modules, static_plugin_images):
                     ].visualization_type
                 except AttributeError:
                     print(f"--> {source} is not a tethysdash plugin")
+                    continue
 
                 if visualization_type == "image":
                     image_path = "tethysapp/tethysdash/default_image.png"

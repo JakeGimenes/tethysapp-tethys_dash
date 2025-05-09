@@ -58,7 +58,8 @@ const DataTable = ({ data, title, subtitle, visualizationRef }) => {
 };
 
 function capitalizePhrase(phrase) {
-  const words = phrase.split(" ");
+  let words = phrase.split(" ");
+  words = words.filter((e) => e !== "");
 
   for (let i = 0; i < words.length; i++) {
     words[i] = words[i][0].toUpperCase() + words[i].substr(1);
