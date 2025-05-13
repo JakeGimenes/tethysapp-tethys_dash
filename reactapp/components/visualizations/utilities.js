@@ -174,7 +174,7 @@ export function updateObjectWithVariableInputs(argsString, variableInputs) {
     const updatedValuesWithVariableInputs = JSON.parse(
       stringifiedValue.replace(
         /\$\{([^}]+)\}/g,
-        (_, key) => variableInputs[key] || ""
+        (_, key) => variableInputs[key] ?? ""
       )
     );
     gridItemsArgs[gridItemsArg] = updatedValuesWithVariableInputs;

@@ -100,7 +100,7 @@ it("Creates a Number Input for a Variable Input", async () => {
 
   // Only update the Text Input after clicking the input refresh button
   expect(await screen.findByTestId("input-variables")).toHaveTextContent(
-    JSON.stringify({ "Test Variable": "0" })
+    JSON.stringify({ "Test Variable": 0 })
   );
 
   const refreshButton = screen.getByRole("button");
@@ -441,7 +441,7 @@ describe("When inDataViewerMode", () => {
     // Only update the Text Input after clicking the input refresh button
 
     expect(await screen.findByTestId("input-variables")).toHaveTextContent(
-      JSON.stringify({ "Test Variable": "0" })
+      JSON.stringify({ "Test Variable": 0 })
     );
 
     const refreshButton = screen.getByRole("button");
@@ -449,7 +449,7 @@ describe("When inDataViewerMode", () => {
     await user.click(refreshButton);
 
     expect(await screen.findByTestId("input-variables")).toHaveTextContent(
-      JSON.stringify({ "Test Variable": "0" })
+      JSON.stringify({ "Test Variable": 0 })
     );
   });
 

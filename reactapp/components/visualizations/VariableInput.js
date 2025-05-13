@@ -49,7 +49,7 @@ const VariableInput = ({
 
   const updateVariableInputs = useCallback(
     (new_value) => {
-      if (new_value || new_value === false) {
+      if (new_value || new_value === false || new_value === 0) {
         setVariableInputValues((prevVariableInputValues) => ({
           ...prevVariableInputValues,
           [variable_name]: new_value,
@@ -125,7 +125,7 @@ const VariableInput = ({
 
     if (Array.isArray(type) || type === "checkbox") {
       if (!inDataViewerMode) {
-        updateVariableInputs(e.value || e);
+        updateVariableInputs(e.value ?? e);
       }
     }
   }
