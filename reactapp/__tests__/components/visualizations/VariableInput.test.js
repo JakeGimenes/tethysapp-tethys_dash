@@ -238,6 +238,65 @@ it("Creates a Dropdown Input for a Variable Input", async () => {
   );
 });
 
+it("Creates a Dropdown Input for a Variable Input from array", async () => {
+  const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const gridItem = {
+    i: "1",
+    x: 0,
+    y: 0,
+    w: 20,
+    h: 20,
+    source: "Variable Input",
+    args_string: JSON.stringify({
+      initial_value: "value 1",
+      variable_name: "Test Variable",
+      variable_options_source: [
+        { label: "label 1", value: "value 1" },
+        { label: "label 2", value: "value 2" },
+      ],
+    }),
+    metadata_string: JSON.stringify({
+      refreshRate: 0,
+    }),
+  };
+  dashboard.gridItems = [gridItem];
+  const handleChange = jest.fn();
+  const varInputArgs = JSON.parse(gridItem.args_string);
+
+  render(
+    createLoadedComponent({
+      children: (
+        <>
+          <VariableInput
+            variable_name={varInputArgs.variable_name}
+            initial_value={varInputArgs.initial_value}
+            variable_options_source={varInputArgs.variable_options_source}
+            onChange={handleChange}
+          />
+          <InputVariablePComponent />
+        </>
+      ),
+      options: {
+        dashboards: { user: [dashboard], public: [] },
+      },
+    })
+  );
+
+  const variableInput = await screen.findByLabelText("Test Variable Input");
+  expect(variableInput).toBeInTheDocument();
+  await select(variableInput, "label 1");
+
+  expect(screen.getByText("label 1")).toBeInTheDocument();
+  expect(handleChange).toHaveBeenCalledWith({
+    label: "label 1",
+    value: "value 1",
+  });
+
+  expect(await screen.findByTestId("input-variables")).toHaveTextContent(
+    JSON.stringify({ "Test Variable": "value 1" })
+  );
+});
+
 it("Creates a Dropdown Input for a Variable Input, not signed in", async () => {
   const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
   dashboard.gridItems = [mockedDropdownVariable];

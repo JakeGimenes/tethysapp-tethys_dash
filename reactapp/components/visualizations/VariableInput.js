@@ -65,7 +65,10 @@ const VariableInput = ({
       let variableValue = initialVariableValue;
 
       // Sets the type to the variable_options_source if not a dropdown
-      if (nonDropDownVariableInputTypes.includes(variable_options_source)) {
+      if (
+        nonDropDownVariableInputTypes.includes(variable_options_source) ||
+        Array.isArray(variable_options_source)
+      ) {
         setType(variable_options_source);
       } else {
         var selectedArg = visualizationArgs.find((obj) => {
