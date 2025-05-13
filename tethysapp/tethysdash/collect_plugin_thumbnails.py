@@ -20,7 +20,7 @@ def copy_plugin_images(plugin_modules, static_plugin_images):
             mod = importlib.import_module(module)
             mod_path = Path(mod.__file__).resolve()
             mod_path_parts = module.split(".")
-            plugin_root = mod_path.parents[len(mod_path_parts) - 1]
+            plugin_root = mod_path.parents[len(mod_path_parts) - 2]
 
             static_dir = plugin_root / "static"
 
@@ -41,21 +41,21 @@ def copy_plugin_images(plugin_modules, static_plugin_images):
                     continue
 
                 if visualization_type == "image":
-                    image_path = "tethysapp/tethysdash/default_image.png"
+                    image_path = "default_image.png"
                 elif visualization_type == "text":
-                    image_path = "tethysapp/tethysdash/default_text.png"
+                    image_path = "default_text.png"
                 elif visualization_type == "variableInput":
-                    image_path = "tethysapp/tethysdash/default_variable_input.png"
+                    image_path = "default_variable_input.png"
                 elif visualization_type == "map":
-                    image_path = "tethysapp/tethysdash/default_map.png"
+                    image_path = "default_map.png"
                 elif visualization_type == "plotly":
-                    image_path = "tethysapp/tethysdash/default_chart.png"
+                    image_path = "default_chart.png"
                 elif visualization_type == "card":
-                    image_path = "tethysapp/tethysdash/default_card.png"
+                    image_path = "default_card.png"
                 elif visualization_type == "table":
-                    image_path = "tethysapp/tethysdash/default_table.png"
+                    image_path = "default_table.png"
                 elif visualization_type == "custom":
-                    image_path = "tethysapp/tethysdash/default_custom.png"
+                    image_path = "default_custom.png"
                 else:
                     print(f"--> PNG thumbnail not available for {source}")
 
@@ -68,7 +68,7 @@ def copy_plugin_images(plugin_modules, static_plugin_images):
 
 
 def main():
-    static_plugin_images = "./tethysapp/tethysdash/public/images/plugins"
+    static_plugin_images = "./public/images/plugins"
     if not os.path.exists(static_plugin_images):
         print("Creating static plugin folder")
         os.makedirs(static_plugin_images)
