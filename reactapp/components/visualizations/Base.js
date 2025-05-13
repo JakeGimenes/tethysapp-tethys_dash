@@ -41,6 +41,7 @@ const StyledH2 = styled.h2`
   justify-content: center;
   align-items: center;
   height: 100%;
+  text-align: center;
 `;
 
 export const Visualization = memo(({ vizRef, vizType, vizData }) => {
