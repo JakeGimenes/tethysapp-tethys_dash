@@ -1,5 +1,5 @@
 import PropTypes from "prop-types";
-import Select from "react-select";
+import CreatableSelect from "react-select/creatable";
 import styled from "styled-components";
 
 const StyledDiv = styled.div`
@@ -18,7 +18,8 @@ const DataSelect = ({ label, selectedOption, onChange, options, ...props }) => {
           <b>{label}</b>:
         </label>
       )}
-      <Select
+      <CreatableSelect
+        formatCreateLabel={(userInput) => `Use "${userInput}"`}
         options={options}
         value={selectedOption}
         onChange={onChange}
