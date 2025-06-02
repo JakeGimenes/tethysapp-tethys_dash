@@ -50,6 +50,7 @@ const StyledVizCol = styled(Col)`
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
+  overflow-y: auto;
 `;
 
 function findBySource(data, targetSource) {
@@ -288,8 +289,8 @@ function DataViewerModal({
                   <PaddedBottomDiv>
                     <TextEditor
                       textValue={vizInputsValues.text}
-                      onChange={(e) =>
-                        setVizInputsValues({ text: e.target.value })
+                      onChange={(htmlText) =>
+                        setVizInputsValues({ text: htmlText })
                       }
                     />
                   </PaddedBottomDiv>

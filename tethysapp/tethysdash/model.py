@@ -11,7 +11,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 import json
-import nh3
 import os
 from tethysapp.tethysdash.app import App
 from datetime import datetime, timezone
@@ -23,6 +22,7 @@ from alembic import command, script
 from sqlalchemy.exc import ProgrammingError, OperationalError
 from pathlib import Path
 import subprocess
+from tethysapp.tethysdash.utilities import sanitize_html
 
 Base = declarative_base()
 
@@ -111,7 +111,9 @@ def add_new_dashboard(
                 grid_item_args_string = grid_item["args_string"]
                 grid_item_metadata_string = grid_item["metadata_string"]
                 if grid_item_source == "Text":
-                    clean_text = nh3.clean(json.loads(grid_item_args_string)["text"])
+                    clean_text = sanitize_html(
+                        json.loads(grid_item_args_string)["text"]
+                    )
                     grid_item_args_string = json.dumps({"text": clean_text})
 
                 add_new_grid_item(
@@ -296,7 +298,7 @@ def update_named_dashboard(user, id, dashboard_updates):
             db_dashboard.description = dashboard_updates["description"]
 
         if "notes" in dashboard_updates:
-            db_dashboard.notes = dashboard_updates["notes"]
+            db_dashboard.notes = sanitize_html(dashboard_updates["notes"])
 
         if db_access != db_dashboard.access_groups:
             if "public" in dashboard_updates["accessGroups"]:
@@ -336,7 +338,9 @@ def update_named_dashboard(user, id, dashboard_updates):
                 grid_item_args_string = grid_item["args_string"]
                 grid_item_metadata_string = grid_item["metadata_string"]
                 if grid_item_source == "Text":
-                    clean_text = nh3.clean(json.loads(grid_item_args_string)["text"])
+                    clean_text = sanitize_html(
+                        json.loads(grid_item_args_string)["text"]
+                    )
                     grid_item_args_string = json.dumps({"text": clean_text})
 
                 if grid_item in grid_items_to_add:
