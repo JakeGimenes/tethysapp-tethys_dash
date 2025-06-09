@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import MapVisualization from "components/visualizations/Map";
 import createLoadedComponent, {
@@ -20,6 +20,9 @@ import {
   mockedDropdownVisualization,
   mockedDashboards,
 } from "__tests__/utilities/constants";
+import MapContextProvider, {
+  useMapContext,
+} from "components/contexts/MapContext";
 
 global.ResizeObserver = require("resize-observer-polyfill");
 
@@ -90,59 +93,37 @@ const exampleStyle = {
 const TestingComponent = ({
   expectedLayerCount,
   onMapClick,
+  onMapPointerMove,
+  onMapZoom,
   clickCoordinates,
   mapProps,
 }) => {
   const visualizationRef = useRef();
-  const [mapReady, setMapReady] = useState(false);
+  const { mapReady } = useMapContext();
 
   useEffect(() => {
-    let isMounted = true;
-    setMapReady(false);
+    if (!visualizationRef.current || !mapReady) return;
 
-    const fetchMapData = () => {
-      if (visualizationRef.current) {
-        const mapLayers = visualizationRef.current
-          .getLayers()
-          .getArray()
-          .map((item) => item.get("name"));
-        if (
-          !expectedLayerCount ||
-          !mapProps.layers ||
-          mapLayers.length === expectedLayerCount
-        ) {
-          if (isMounted) {
-            setMapReady(true);
-          }
-        } else {
-          // Simulate fetching data
-          setTimeout(fetchMapData, 1000);
-        }
-      } else {
-        // Simulate fetching data
-        setTimeout(fetchMapData, 1000);
-      }
-    };
-
-    fetchMapData();
-
-    return () => {
-      isMounted = false; // Prevent setting state on unmounted component
-    };
-    // eslint-disable-next-line
-  }, [mapProps]);
-
-  useEffect(() => {
-    if (onMapClick && mapReady) {
-      var evt = {};
-      evt.type = "singleclick";
-      evt.coordinate = [];
-      evt.coordinate[0] = clickCoordinates[0];
-      evt.coordinate[1] = clickCoordinates[1];
+    if (onMapClick) {
+      const evt = {
+        type: "singleclick",
+        coordinate: clickCoordinates,
+      };
       visualizationRef.current.dispatchEvent(evt);
     }
-    // eslint-disable-next-line
-  }, [mapReady, clickCoordinates]);
+
+    if (onMapPointerMove) {
+      const evt = {
+        type: "pointermove",
+        coordinate: clickCoordinates,
+      };
+      visualizationRef.current.dispatchEvent(evt);
+    }
+
+    if (onMapZoom) {
+      visualizationRef.current.getView().setZoom(8);
+    }
+  }, [mapReady, clickCoordinates, onMapClick, onMapPointerMove, onMapZoom]);
 
   return (
     <div>
@@ -160,16 +141,18 @@ test("Map default and update layers", async () => {
 
   const LoadedComponent = createLoadedComponent({
     children: (
-      <TestingComponent
-        expectedLayerCount={1}
-        mapProps={{
-          mapConfig: {},
-          viewConfig: {},
-          layers: [],
-          baseMap,
-          layerControl: true,
-        }}
-      />
+      <MapContextProvider>
+        <TestingComponent
+          expectedLayerCount={1}
+          mapProps={{
+            mapConfig: {},
+            viewConfig: {},
+            layers: [],
+            baseMap,
+            layerControl: true,
+          }}
+        />
+      </MapContextProvider>
     ),
   });
   const { rerender } = render(LoadedComponent);
@@ -208,16 +191,18 @@ test("Map default and update layers", async () => {
   ];
   const NewLoadedComponent = createLoadedComponent({
     children: (
-      <TestingComponent
-        expectedLayerCount={1}
-        mapProps={{
-          mapConfig: {},
-          viewConfig: {},
-          layers: newLayers,
-          baseMap: null,
-          layerControl: true,
-        }}
-      />
+      <MapContextProvider>
+        <TestingComponent
+          expectedLayerCount={1}
+          mapProps={{
+            mapConfig: {},
+            viewConfig: {},
+            layers: newLayers,
+            baseMap: null,
+            layerControl: true,
+          }}
+        />
+      </MapContextProvider>
     ),
   });
   rerender(NewLoadedComponent);
@@ -270,28 +255,23 @@ test("Map GeoJSON with legend and style", async () => {
   ];
   const LoadedComponent = createLoadedComponent({
     children: (
-      <TestingComponent
-        expectedLayerCount={1}
-        mapProps={{
-          mapConfig: {},
-          viewConfig: {},
-          layers,
-          baseMap: null,
-          layerControl: false,
-        }}
-      />
+      <MapContextProvider>
+        <TestingComponent
+          expectedLayerCount={1}
+          mapProps={{
+            mapConfig: {},
+            viewConfig: {},
+            layers,
+            baseMap: null,
+            layerControl: false,
+          }}
+        />
+      </MapContextProvider>
     ),
   });
   render(LoadedComponent);
 
   expect(await screen.findByLabelText("Map Div")).toBeInTheDocument();
-
-  await waitFor(
-    async () => {
-      expect(await screen.findByText("Map Ready")).toBeInTheDocument();
-    },
-    { timeout: 2000 }
-  );
 
   // should only add the layer because of no basemap
   await waitFor(() => {
@@ -310,7 +290,6 @@ test("Map GeoJSON with legend and style", async () => {
 });
 
 test("Map click", async () => {
-  const mockMapClick = jest.fn();
   mockedQueryLayerFeatures.mockResolvedValue([
     {
       attributes: { field1: "some value" },
@@ -353,30 +332,26 @@ test("Map click", async () => {
   const clickCoordinates = [10, 20];
   const LoadedComponent = createLoadedComponent({
     children: (
-      <TestingComponent
-        expectedLayerCount={1}
-        onMapClick={mockMapClick}
-        clickCoordinates={clickCoordinates}
-        mapProps={{
-          mapConfig: {},
-          viewConfig: {},
-          layers,
-          baseMap: null,
-          layerControl: false,
-        }}
-      />
+      <MapContextProvider>
+        <TestingComponent
+          expectedLayerCount={1}
+          onMapClick={true}
+          clickCoordinates={clickCoordinates}
+          mapProps={{
+            mapConfig: {},
+            viewConfig: {},
+            layers,
+            baseMap: null,
+            layerControl: false,
+          }}
+        />
+      </MapContextProvider>
     ),
   });
   const { rerender } = render(LoadedComponent);
 
   expect(await screen.findByLabelText("Map Div")).toBeInTheDocument();
-
-  await waitFor(
-    async () => {
-      expect(await screen.findByText("Map Ready")).toBeInTheDocument();
-    },
-    { timeout: 2000 }
-  );
+  expect(await screen.findByText("Map Ready")).toBeInTheDocument();
 
   // layer, marker, and highlight layer
   await waitFor(() => {
@@ -387,15 +362,15 @@ test("Map click", async () => {
   });
 
   expect(
-    addLayerSpy.mock.calls[0][0].getSource() instanceof ImageArcGISRest
+    addLayerSpy.mock.calls[2][0].getSource() instanceof ImageArcGISRest
   ).toBe(true);
 
   // marker layer
-  expect(addLayerSpy.mock.calls[1][0].getSource() instanceof VectorSource).toBe(
+  expect(addLayerSpy.mock.calls[0][0].getSource() instanceof VectorSource).toBe(
     true
   );
   expect(
-    addLayerSpy.mock.calls[1][0]
+    addLayerSpy.mock.calls[0][0]
       .getSource()
       .getFeatures()[0]
       .getGeometry()
@@ -403,11 +378,11 @@ test("Map click", async () => {
   ).toStrictEqual(clickCoordinates);
 
   // highlight layer
-  expect(addLayerSpy.mock.calls[2][0].getSource() instanceof VectorSource).toBe(
+  expect(addLayerSpy.mock.calls[1][0].getSource() instanceof VectorSource).toBe(
     true
   );
   expect(
-    addLayerSpy.mock.calls[2][0]
+    addLayerSpy.mock.calls[1][0]
       .getSource()
       .getFeatures()[0]
       .getGeometry()
@@ -430,18 +405,20 @@ test("Map click", async () => {
   const newClickCoordinates = [20, 10];
   const NewLoadedComponent = createLoadedComponent({
     children: (
-      <TestingComponent
-        expectedLayerCount={3}
-        onMapClick={mockMapClick}
-        clickCoordinates={newClickCoordinates}
-        mapProps={{
-          mapConfig: {},
-          viewConfig: {},
-          layers,
-          baseMap: null,
-          layerControl: false,
-        }}
-      />
+      <MapContextProvider>
+        <TestingComponent
+          expectedLayerCount={3}
+          onMapClick={true}
+          clickCoordinates={newClickCoordinates}
+          mapProps={{
+            mapConfig: {},
+            viewConfig: {},
+            layers,
+            baseMap: null,
+            layerControl: false,
+          }}
+        />
+      </MapContextProvider>
     ),
   });
   rerender(NewLoadedComponent);
@@ -484,7 +461,6 @@ test("Map click", async () => {
 });
 
 test("Map click no attributes found", async () => {
-  const mockMapClick = jest.fn();
   mockedQueryLayerFeatures.mockResolvedValue([]);
   jest.spyOn(Overlay.prototype, "getRect").mockReturnValue([0, 0, 10, 10]);
   const popSetPosition = jest.spyOn(Overlay.prototype, "setPosition");
@@ -508,30 +484,26 @@ test("Map click no attributes found", async () => {
   const clickCoordinates = [10, 20];
   const LoadedComponent = createLoadedComponent({
     children: (
-      <TestingComponent
-        expectedLayerCount={1}
-        onMapClick={mockMapClick}
-        clickCoordinates={clickCoordinates}
-        mapProps={{
-          mapConfig: {},
-          viewConfig: {},
-          layers,
-          baseMap: null,
-          layerControl: false,
-        }}
-      />
+      <MapContextProvider>
+        <TestingComponent
+          expectedLayerCount={1}
+          onMapClick={true}
+          clickCoordinates={clickCoordinates}
+          mapProps={{
+            mapConfig: {},
+            viewConfig: {},
+            layers,
+            baseMap: null,
+            layerControl: false,
+          }}
+        />
+      </MapContextProvider>
     ),
   });
   render(LoadedComponent);
 
   expect(await screen.findByLabelText("Map Div")).toBeInTheDocument();
-
-  await waitFor(
-    async () => {
-      expect(await screen.findByText("Map Ready")).toBeInTheDocument();
-    },
-    { timeout: 2000 }
-  );
+  expect(await screen.findByText("Map Ready")).toBeInTheDocument();
   expect(popSetPosition).toHaveBeenLastCalledWith(clickCoordinates);
   expect(await screen.findByText("No Attributes Found")).toBeInTheDocument();
 
@@ -541,7 +513,6 @@ test("Map click no attributes found", async () => {
 });
 
 test("Map click all attributes omitted", async () => {
-  const mockMapClick = jest.fn();
   mockedQueryLayerFeatures.mockResolvedValue([
     {
       attributes: { field1: "some value" },
@@ -572,35 +543,33 @@ test("Map click all attributes omitted", async () => {
   const clickCoordinates = [10, 20];
   const LoadedComponent = createLoadedComponent({
     children: (
-      <TestingComponent
-        expectedLayerCount={1}
-        onMapClick={mockMapClick}
-        clickCoordinates={clickCoordinates}
-        mapProps={{
-          mapConfig: {},
-          viewConfig: {},
-          layers,
-          baseMap: null,
-          layerControl: false,
-        }}
-      />
+      <MapContextProvider>
+        <TestingComponent
+          expectedLayerCount={1}
+          onMapClick={true}
+          clickCoordinates={clickCoordinates}
+          mapProps={{
+            mapConfig: {},
+            viewConfig: {},
+            layers,
+            baseMap: null,
+            layerControl: false,
+          }}
+        />
+      </MapContextProvider>
     ),
   });
   render(LoadedComponent);
 
   expect(await screen.findByLabelText("Map Div")).toBeInTheDocument();
 
-  await waitFor(
-    async () => {
-      expect(await screen.findByText("Map Ready")).toBeInTheDocument();
-    },
-    { timeout: 2000 }
-  );
-  expect(popSetPosition).toHaveBeenLastCalledWith(undefined);
+  expect(await screen.findByText("Map Ready")).toBeInTheDocument();
+  await waitFor(() => {
+    expect(popSetPosition).toHaveBeenLastCalledWith(undefined);
+  });
 });
 
 test("Map click attribute variables update text variable input", async () => {
-  const mockMapClick = jest.fn();
   mockedQueryLayerFeatures.mockResolvedValue([
     {
       attributes: { field1: "some value" },
@@ -635,10 +604,10 @@ test("Map click attribute variables update text variable input", async () => {
   const clickCoordinates = [10, 20];
   const LoadedComponent = createLoadedComponent({
     children: (
-      <>
+      <MapContextProvider>
         <TestingComponent
           expectedLayerCount={1}
-          onMapClick={mockMapClick}
+          onMapClick={true}
           clickCoordinates={clickCoordinates}
           mapProps={{
             mapConfig: {},
@@ -654,7 +623,7 @@ test("Map click attribute variables update text variable input", async () => {
           variable_options_source={varInputArgs.variable_options_source}
           onChange={handleChange}
         />
-      </>
+      </MapContextProvider>
     ),
     options: { dashboards: { user: [dashboard], public: [] } },
   });
@@ -666,12 +635,7 @@ test("Map click attribute variables update text variable input", async () => {
 
   expect(await screen.findByLabelText("Map Div")).toBeInTheDocument();
 
-  await waitFor(
-    async () => {
-      expect(await screen.findByText("Map Ready")).toBeInTheDocument();
-    },
-    { timeout: 2000 }
-  );
+  expect(await screen.findByText("Map Ready")).toBeInTheDocument();
   // popup
   await waitFor(() => {
     expect(popSetPosition).toHaveBeenCalledWith(clickCoordinates);
@@ -695,7 +659,6 @@ test("Map click attribute variables update text variable input", async () => {
 });
 
 test("Map click attribute variables update dropdown variable input", async () => {
-  const mockMapClick = jest.fn();
   mockedQueryLayerFeatures.mockResolvedValue([
     {
       attributes: { field1: "FTDC1" },
@@ -730,10 +693,10 @@ test("Map click attribute variables update dropdown variable input", async () =>
   const clickCoordinates = [10, 20];
   const LoadedComponent = createLoadedComponent({
     children: (
-      <>
+      <MapContextProvider>
         <TestingComponent
           expectedLayerCount={1}
-          onMapClick={mockMapClick}
+          onMapClick={true}
           clickCoordinates={clickCoordinates}
           mapProps={{
             mapConfig: {},
@@ -749,7 +712,7 @@ test("Map click attribute variables update dropdown variable input", async () =>
           variable_options_source={varInputArgs.variable_options_source}
           onChange={handleChange}
         />
-      </>
+      </MapContextProvider>
     ),
     options: {
       dashboards: { user: [dashboard], public: [] },
@@ -760,14 +723,11 @@ test("Map click attribute variables update dropdown variable input", async () =>
 
   expect(await screen.findByLabelText("Map Div")).toBeInTheDocument();
 
-  await waitFor(
-    async () => {
-      expect(await screen.findByText("Map Ready")).toBeInTheDocument();
-    },
-    { timeout: 2000 }
-  );
-  // popup
-  expect(popSetPosition).toHaveBeenCalledWith(clickCoordinates);
+  expect(await screen.findByText("Map Ready")).toBeInTheDocument();
+
+  await waitFor(() => {
+    expect(popSetPosition).toHaveBeenCalledWith(clickCoordinates);
+  });
 
   expect(await screen.findByText("Some Layer")).toBeInTheDocument();
   expect(await screen.findByText("Field")).toBeInTheDocument();
@@ -788,7 +748,6 @@ test("Map click attribute variables update dropdown variable input", async () =>
 });
 
 test("Map click attribute variables Null values", async () => {
-  const mockMapClick = jest.fn();
   mockedQueryLayerFeatures.mockResolvedValue([
     {
       attributes: { field1: "Null" },
@@ -819,18 +778,20 @@ test("Map click attribute variables Null values", async () => {
   const clickCoordinates = [10, 20];
   const LoadedComponent = createLoadedComponent({
     children: (
-      <TestingComponent
-        expectedLayerCount={1}
-        onMapClick={mockMapClick}
-        clickCoordinates={clickCoordinates}
-        mapProps={{
-          mapConfig: {},
-          viewConfig: {},
-          layers,
-          baseMap: null,
-          layerControl: false,
-        }}
-      />
+      <MapContextProvider>
+        <TestingComponent
+          expectedLayerCount={1}
+          onMapClick={true}
+          clickCoordinates={clickCoordinates}
+          mapProps={{
+            mapConfig: {},
+            viewConfig: {},
+            layers,
+            baseMap: null,
+            layerControl: false,
+          }}
+        />
+      </MapContextProvider>
     ),
   });
   render(LoadedComponent);
@@ -840,12 +801,7 @@ test("Map click attribute variables Null values", async () => {
 
   expect(await screen.findByLabelText("Map Div")).toBeInTheDocument();
 
-  await waitFor(
-    async () => {
-      expect(await screen.findByText("Map Ready")).toBeInTheDocument();
-    },
-    { timeout: 2000 }
-  );
+  expect(await screen.findByText("Map Ready")).toBeInTheDocument();
   // popup
   expect(popSetPosition).toHaveBeenCalledWith(clickCoordinates);
 
@@ -861,7 +817,6 @@ test("Map click attribute variables Null values", async () => {
 });
 
 test("Map click query error", async () => {
-  const mockMapClick = jest.fn();
   mockedQueryLayerFeatures.mockRejectedValue("some error");
   jest.spyOn(Overlay.prototype, "getRect").mockReturnValue([0, 0, 10, 10]);
   const popSetPosition = jest.spyOn(Overlay.prototype, "setPosition");
@@ -885,37 +840,98 @@ test("Map click query error", async () => {
   const clickCoordinates = [10, 20];
   const LoadedComponent = createLoadedComponent({
     children: (
-      <TestingComponent
-        expectedLayerCount={1}
-        onMapClick={mockMapClick}
-        clickCoordinates={clickCoordinates}
-        mapProps={{
-          mapConfig: {},
-          viewConfig: {},
-          layers,
-          baseMap: null,
-          layerControl: false,
-        }}
-      />
+      <MapContextProvider>
+        <TestingComponent
+          expectedLayerCount={1}
+          onMapClick={true}
+          clickCoordinates={clickCoordinates}
+          mapProps={{
+            mapConfig: {},
+            viewConfig: {},
+            layers,
+            baseMap: null,
+            layerControl: false,
+          }}
+        />
+      </MapContextProvider>
     ),
   });
   render(LoadedComponent);
 
   expect(await screen.findByLabelText("Map Div")).toBeInTheDocument();
 
-  await waitFor(
-    async () => {
-      expect(await screen.findByText("Map Ready")).toBeInTheDocument();
-    },
-    { timeout: 2000 }
-  );
+  expect(await screen.findByText("Map Ready")).toBeInTheDocument();
   expect(popSetPosition).toHaveBeenLastCalledWith(clickCoordinates);
   expect(await screen.findByText("No Attributes Found")).toBeInTheDocument();
 });
 
 test("Map click not happen in dataviewer mode", async () => {
-  const mockMapClick = jest.fn();
+  const layers = [
+    {
+      configuration: {
+        type: "ImageLayer",
+        props: {
+          name: "NWC",
+          source: {
+            type: "ESRI Image and Map Service",
+            props: {
+              url: "some_url",
+            },
+          },
+        },
+      },
+    },
+  ];
+  const popSetPosition = jest.spyOn(Overlay.prototype, "setPosition");
+  const addLayerSpy = jest.spyOn(Map.prototype, "addLayer");
+  const removeLayerSpy = jest.spyOn(Map.prototype, "removeLayer");
+  const clickCoordinates = [10, 20];
 
+  const LoadedComponent = createLoadedComponent({
+    children: (
+      <MapContextProvider>
+        <TestingComponent
+          expectedLayerCount={1}
+          onMapClick={true}
+          clickCoordinates={clickCoordinates}
+          mapProps={{
+            mapConfig: {},
+            viewConfig: {},
+            layers,
+            baseMap: null,
+            layerControl: false,
+            dataviewerViz: true,
+          }}
+        />
+      </MapContextProvider>
+    ),
+    options: {
+      inDataViewerMode: true,
+    },
+  });
+  render(LoadedComponent);
+
+  expect(await screen.findByLabelText("Map Div")).toBeInTheDocument();
+
+  expect(await screen.findByText("Map Ready")).toBeInTheDocument();
+
+  expect(await screen.findByLabelText("Info Div")).toBeInTheDocument();
+
+  // layer, marker, and highlight layer
+  await waitFor(() => {
+    expect(addLayerSpy.mock.calls.length).toBe(1);
+  });
+  await waitFor(() => {
+    expect(removeLayerSpy.mock.calls.length).toBe(0);
+  });
+
+  expect(
+    addLayerSpy.mock.calls[0][0].getSource() instanceof ImageArcGISRest
+  ).toBe(true);
+  expect(popSetPosition).toHaveBeenCalledTimes(0);
+});
+
+test("Map info div in dataviewer mode with pontermove", async () => {
   const layers = [
     {
       configuration: {
@@ -935,18 +951,21 @@ test("Map click not happen in dataviewer mode", async () => {
   const clickCoordinates = [10, 20];
   const LoadedComponent = createLoadedComponent({
     children: (
-      <TestingComponent
-        expectedLayerCount={1}
-        onMapClick={mockMapClick}
-        clickCoordinates={clickCoordinates}
-        mapProps={{
-          mapConfig: {},
-          viewConfig: {},
-          layers,
-          baseMap: null,
-          layerControl: false,
-        }}
-      />
+      <MapContextProvider>
+        <TestingComponent
+          expectedLayerCount={1}
+          clickCoordinates={clickCoordinates}
+          onMapPointerMove={true}
+          mapProps={{
+            mapConfig: {},
+            viewConfig: {},
+            layers,
+            baseMap: null,
+            layerControl: false,
+            dataviewerViz: true,
+          }}
+        />
+      </MapContextProvider>
     ),
     options: {
       inDataViewerMode: true,
@@ -956,14 +975,69 @@ test("Map click not happen in dataviewer mode", async () => {
 
   expect(await screen.findByLabelText("Map Div")).toBeInTheDocument();
 
-  await waitFor(
-    async () => {
-      expect(await screen.findByText("Map Ready")).toBeInTheDocument();
-    },
-    { timeout: 2000 }
-  );
+  expect(await screen.findByText("Map Ready")).toBeInTheDocument();
 
-  expect(mockMapClick).toHaveBeenCalledTimes(0);
+  expect(await screen.findByLabelText("Info Div")).toBeInTheDocument();
+  expect(await screen.findByText(/Zoom: 4.5/i)).toBeInTheDocument();
+  expect(
+    await screen.findByText(/Lon: 10.00, Lat: 20.00/i)
+  ).toBeInTheDocument();
+  expect(await screen.findByText(/Projection: EPSG:3857/i)).toBeInTheDocument();
+});
+
+test("Map info div in dataviewer mode with zoom", async () => {
+  const layers = [
+    {
+      configuration: {
+        type: "ImageLayer",
+        props: {
+          name: "NWC",
+          source: {
+            type: "ESRI Image and Map Service",
+            props: {
+              url: "some_url",
+            },
+          },
+        },
+      },
+    },
+  ];
+  const clickCoordinates = [10, 20];
+  const LoadedComponent = createLoadedComponent({
+    children: (
+      <MapContextProvider>
+        <TestingComponent
+          expectedLayerCount={1}
+          onMapZoom={true}
+          clickCoordinates={clickCoordinates}
+          mapProps={{
+            mapConfig: {},
+            viewConfig: {},
+            layers,
+            baseMap: null,
+            layerControl: false,
+            mapExtent: "-10686671.12, 4721671.57,4.5",
+            dataviewerViz: true,
+          }}
+        />
+      </MapContextProvider>
+    ),
+    options: {
+      inDataViewerMode: true,
+    },
+  });
+  render(LoadedComponent);
+
+  expect(await screen.findByLabelText("Map Div")).toBeInTheDocument();
+
+  expect(await screen.findByText("Map Ready")).toBeInTheDocument();
+
+  expect(await screen.findByLabelText("Info Div")).toBeInTheDocument();
+  expect(await screen.findByText(/Zoom: 8/i)).toBeInTheDocument();
+  expect(
+    await screen.findByText(/Lon: -10686671.12, Lat: 4721671.57/i)
+  ).toBeInTheDocument();
+  expect(await screen.findByText(/Projection: EPSG:3857/i)).toBeInTheDocument();
 });
 
 test("Map bad basemap", async () => {
@@ -973,28 +1047,25 @@ test("Map bad basemap", async () => {
 
   const LoadedComponent = createLoadedComponent({
     children: (
-      <TestingComponent
-        expectedLayerCount={0}
-        mapProps={{
-          mapConfig: {},
-          viewConfig: {},
-          layers: [],
-          baseMap,
-          layerControl: true,
-        }}
-      />
+      <MapContextProvider>
+        <TestingComponent
+          expectedLayerCount={0}
+          mapProps={{
+            mapConfig: {},
+            viewConfig: {},
+            layers: [],
+            baseMap,
+            layerControl: true,
+          }}
+        />
+      </MapContextProvider>
     ),
   });
   render(LoadedComponent);
 
   expect(await screen.findByLabelText("Map Div")).toBeInTheDocument();
 
-  await waitFor(
-    async () => {
-      expect(await screen.findByText("Map Ready")).toBeInTheDocument();
-    },
-    { timeout: 2000 }
-  );
+  expect(await screen.findByText("Map Ready")).toBeInTheDocument();
 
   // no basemap added
   await waitFor(() => {
@@ -1032,28 +1103,25 @@ test("Map bad GeoJSON", async () => {
   ];
   const LoadedComponent = createLoadedComponent({
     children: (
-      <TestingComponent
-        expectedLayerCount={0}
-        mapProps={{
-          mapConfig: {},
-          viewConfig: {},
-          layers,
-          baseMap: null,
-          layerControl: false,
-        }}
-      />
+      <MapContextProvider>
+        <TestingComponent
+          expectedLayerCount={0}
+          mapProps={{
+            mapConfig: {},
+            viewConfig: {},
+            layers,
+            baseMap: null,
+            layerControl: false,
+          }}
+        />
+      </MapContextProvider>
     ),
   });
   render(LoadedComponent);
 
   expect(await screen.findByLabelText("Map Div")).toBeInTheDocument();
 
-  await waitFor(
-    async () => {
-      expect(await screen.findByText("Map Ready")).toBeInTheDocument();
-    },
-    { timeout: 2000 }
-  );
+  expect(await screen.findByText("Map Ready")).toBeInTheDocument();
 
   // no geojson added
   await waitFor(() => {
@@ -1097,28 +1165,25 @@ test("Map bad style", async () => {
   ];
   const LoadedComponent = createLoadedComponent({
     children: (
-      <TestingComponent
-        expectedLayerCount={0}
-        mapProps={{
-          mapConfig: {},
-          viewConfig: {},
-          layers,
-          baseMap: null,
-          layerControl: false,
-        }}
-      />
+      <MapContextProvider>
+        <TestingComponent
+          expectedLayerCount={0}
+          mapProps={{
+            mapConfig: {},
+            viewConfig: {},
+            layers,
+            baseMap: null,
+            layerControl: false,
+          }}
+        />
+      </MapContextProvider>
     ),
   });
   render(LoadedComponent);
 
   expect(await screen.findByLabelText("Map Div")).toBeInTheDocument();
 
-  await waitFor(
-    async () => {
-      expect(await screen.findByText("Map Ready")).toBeInTheDocument();
-    },
-    { timeout: 2000 }
-  );
+  expect(await screen.findByText("Map Ready")).toBeInTheDocument();
 
   // should only add the geojson
   await waitFor(() => {
@@ -1146,5 +1211,7 @@ TestingComponent.propTypes = {
     layers: PropTypes.array,
   }),
   onMapClick: PropTypes.func,
+  onMapPointerMove: PropTypes.bool,
+  onMapZoom: PropTypes.bool,
   clickCoordinates: PropTypes.arrayOf(PropTypes.string),
 };

@@ -44,102 +44,105 @@ const StyledH2 = styled.h2`
   text-align: center;
 `;
 
-export const Visualization = memo(({ vizRef, vizType, vizData }) => {
-  switch (vizType) {
-    case "unknown":
-      return <div data-testid="Source_Unknown" />;
-    case "image":
-      return (
-        <Image
-          source={vizData.source}
-          alt={vizData.alt}
-          imageError={vizData.imageError}
-          visualizationRef={vizRef}
-        />
-      );
-    case "text":
-      return <Text textValue={vizData.text} />;
-    case "variableInput":
-      return (
-        <VariableInput
-          variable_name={vizData.variable_name}
-          initial_value={vizData.initial_value}
-          variable_options_source={vizData.variable_options_source}
-          onChange={vizData.onChange ?? (() => {})}
-        />
-      );
-    case "map":
-      return (
-        <MapVisualization
-          visualizationRef={vizRef}
-          baseMap={vizData.baseMap}
-          layers={vizData.layers}
-          layerControl={vizData.layerControl}
-          viewConfig={vizData.viewConfig}
-          mapConfig={vizData.mapConfig}
-        />
-      );
-    case "plotly":
-      return (
-        <BasePlot
-          data={vizData.data}
-          layout={vizData.layout}
-          config={vizData.config}
-          visualizationRef={vizRef}
-        />
-      );
-    case "card":
-      return (
-        <Card
-          title={vizData.title}
-          description={vizData.description}
-          data={vizData.data}
-          visualizationRef={vizRef}
-        />
-      );
-    case "table":
-      return (
-        <DataTable
-          data={vizData.data}
-          title={vizData.title}
-          subtitle={vizData.subtitle}
-          visualizationRef={vizRef}
-        />
-      );
-    case "custom":
-      return (
-        <ModuleLoader
-          url={vizData.url}
-          scope={vizData.scope}
-          module={vizData.module}
-          props={vizData.props}
-        />
-      );
-    case "vizWarning":
-      return (
-        <StyledH2>
-          {vizData.warnings.map((warning, index) => (
-            <Fragment key={index}>
-              {warning}
-              <br />
-            </Fragment>
-          ))}
-        </StyledH2>
-      );
-    case "vizError":
-      return <StyledH2>{vizData.error}</StyledH2>;
-    default:
-      return (
-        <SpinnerContainer>
-          <StyledSpinner
-            data-testid="Loading..."
-            animation="border"
-            variant="info"
+export const Visualization = memo(
+  ({ vizRef, vizType, vizData, dataviewerViz }) => {
+    switch (vizType) {
+      case "unknown":
+        return <div data-testid="Source_Unknown" />;
+      case "image":
+        return (
+          <Image
+            source={vizData.source}
+            alt={vizData.alt}
+            imageError={vizData.imageError}
+            visualizationRef={vizRef}
           />
-        </SpinnerContainer>
-      );
+        );
+      case "text":
+        return <Text textValue={vizData.text} />;
+      case "variableInput":
+        return (
+          <VariableInput
+            variable_name={vizData.variable_name}
+            initial_value={vizData.initial_value}
+            variable_options_source={vizData.variable_options_source}
+            onChange={vizData.onChange ?? (() => {})}
+          />
+        );
+      case "map":
+        return (
+          <MapVisualization
+            visualizationRef={vizRef}
+            baseMap={vizData.baseMap}
+            layers={vizData.layers}
+            layerControl={vizData.layerControl}
+            mapExtent={vizData.map_extent}
+            mapConfig={vizData.mapConfig}
+            dataviewerViz={dataviewerViz}
+          />
+        );
+      case "plotly":
+        return (
+          <BasePlot
+            data={vizData.data}
+            layout={vizData.layout}
+            config={vizData.config}
+            visualizationRef={vizRef}
+          />
+        );
+      case "card":
+        return (
+          <Card
+            title={vizData.title}
+            description={vizData.description}
+            data={vizData.data}
+            visualizationRef={vizRef}
+          />
+        );
+      case "table":
+        return (
+          <DataTable
+            data={vizData.data}
+            title={vizData.title}
+            subtitle={vizData.subtitle}
+            visualizationRef={vizRef}
+          />
+        );
+      case "custom":
+        return (
+          <ModuleLoader
+            url={vizData.url}
+            scope={vizData.scope}
+            module={vizData.module}
+            props={vizData.props}
+          />
+        );
+      case "vizWarning":
+        return (
+          <StyledH2>
+            {vizData.warnings.map((warning, index) => (
+              <Fragment key={index}>
+                {warning}
+                <br />
+              </Fragment>
+            ))}
+          </StyledH2>
+        );
+      case "vizError":
+        return <StyledH2>{vizData.error}</StyledH2>;
+      default:
+        return (
+          <SpinnerContainer>
+            <StyledSpinner
+              data-testid="Loading..."
+              animation="border"
+              variant="info"
+            />
+          </SpinnerContainer>
+        );
+    }
   }
-});
+);
 
 const BaseVisualization = ({
   source,
@@ -234,7 +237,7 @@ const BaseVisualization = ({
           baseMap: updatedGridItemArgs.baseMap,
           layers: updatedGridItemArgs.layers,
           layerControl: updatedGridItemArgs.layerControl,
-          viewConfig: updatedGridItemArgs.viewConfig,
+          map_extent: updatedGridItemArgs.map_extent,
           mapConfig: updatedGridItemArgs.mapConfig,
         });
       } else if (source === "Text") {
@@ -299,6 +302,7 @@ Visualization.propTypes = {
   ]),
   vizType: PropTypes.string, // determines the type of visualization to be displayed
   vizData: PropTypes.object, // contains information for the various visualization args
+  dataviewerViz: PropTypes.bool, // determines if the visualization is in the dataviewer
 };
 
 export default memo(BaseVisualization);

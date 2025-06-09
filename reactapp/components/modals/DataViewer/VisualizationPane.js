@@ -44,6 +44,7 @@ const VisualizationArguments = ({
   handleInputChange,
   setShowingSubModal,
   gridItemIndex,
+  visualizationRef,
 }) => {
   if (!selectedVizTypeOption || selectedVizTypeOption.value === "Text") {
     return null;
@@ -76,7 +77,7 @@ const VisualizationArguments = ({
         type={vizArgType}
         value={value}
         onChange={(newValue) => handleInputChange(newValue, key)}
-        inputProps={{ gridItemIndex, setShowingSubModal }}
+        inputProps={{ gridItemIndex, setShowingSubModal, visualizationRef }}
       />
     );
   };
@@ -296,17 +297,13 @@ function VisualizationPane({
 
   async function previewVisualization() {
     if (selectedVizTypeOption) {
-      const initialArgs = JSON.parse(argsString);
-
-      const args =
-        selectedVizTypeOption.source === "Map" && "viewConfig" in initialArgs
-          ? { ...vizInputsValues, viewConfig: initialArgs.viewConfig }
-          : vizInputsValues;
-
       const itemData = {
         source: selectedVizTypeOption["source"],
         args: Object.fromEntries(
-          Object.entries(args).map(([key, val]) => [key, val.value ?? val])
+          Object.entries(vizInputsValues).map(([key, val]) => [
+            key,
+            val.value ?? val,
+          ])
         ),
       };
       const sourceType = selectedVizTypeOption.type;
@@ -346,7 +343,7 @@ function VisualizationPane({
         if (selectedVizTypeOption.value === "Map") {
           setVizType("map");
           setVizData({
-            viewConfig: updatedGridItemArgs.viewConfig,
+            map_extent: updatedGridItemArgs.map_extent,
             layers: updatedGridItemArgs.layers,
             baseMap: updatedGridItemArgs.baseMap,
             layerControl: updatedGridItemArgs.layerControl,
@@ -408,6 +405,7 @@ function VisualizationPane({
         handleInputChange={handleInputChange}
         setShowingSubModal={setShowingSubModal}
         gridItemIndex={gridItemIndex}
+        visualizationRef={visualizationRef}
       />
 
       {showVisualizationSelectorModal && (
@@ -431,6 +429,10 @@ VisualizationArguments.propTypes = {
   handleInputChange: PropTypes.func,
   setShowingSubModal: PropTypes.func,
   gridItemIndex: PropTypes.number,
+  visualizationRef: PropTypes.oneOfType([
+    PropTypes.func,
+    PropTypes.shape({ current: PropTypes.any }),
+  ]),
 };
 
 VisualizationPane.propTypes = {

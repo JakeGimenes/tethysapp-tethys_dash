@@ -252,11 +252,13 @@ describe("TextEditor", () => {
     fireEvent.click(highlightButton);
 
     const tooltip = screen.getByRole("tooltip");
+    // eslint-disable-next-line
     const buttons = tooltip.querySelectorAll("button");
 
     let blueButton = null;
 
     buttons.forEach((button) => {
+      // eslint-disable-next-line
       const colorDiv = button.querySelector("div");
       if (!colorDiv) return;
 
@@ -297,11 +299,13 @@ describe("TextEditor", () => {
     fireEvent.click(colorButton);
 
     const tooltip = screen.getByRole("tooltip");
+    // eslint-disable-next-line
     const buttons = tooltip.querySelectorAll("button");
 
     let blueButton = null;
 
     buttons.forEach((button) => {
+      // eslint-disable-next-line
       const colorDiv = button.querySelector("div");
       if (!colorDiv) return;
 
@@ -445,9 +449,11 @@ describe("TextEditor", () => {
     await userEvent.keyboard("{Enter}n");
 
     // Should have triggered the onChange callback
-    expect(onChangeMock).toHaveBeenCalledWith(
-      "<ol><li><p>Hello world</p></li><li><p>n</p></li></ol>"
-    );
+    await waitFor(() => {
+      expect(onChangeMock).toHaveBeenCalledWith(
+        "<ol><li><p>Hello world</p></li><li><p>n</p></li></ol>"
+      );
+    });
 
     expect(indentIncreaseButton.disabled).toBe(false);
     expect(indentDecreaseButton.disabled).toBe(false);

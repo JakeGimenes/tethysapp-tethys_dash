@@ -147,11 +147,12 @@ const Popup = ({ layerAttributes }) => (
 
 const MapVisualization = ({
   mapConfig,
-  viewConfig,
+  mapExtent,
   layers,
   visualizationRef,
   baseMap,
   layerControl,
+  dataviewerViz,
 }) => {
   const [mapLegend, setMapLegend] = useState();
   const [mapLayers, setMapLayers] = useState();
@@ -316,7 +317,11 @@ const MapVisualization = ({
         .then((layerFeatures) => {
           // [{attributes: {key: value}, geometry: {x: "", y: ""}, layerName: ""}]
           // if valid features were selected then continue
-          if (layerFeatures && layerFeatures.length > 0) {
+          if (
+            layerFeatures &&
+            Array.isArray(layerFeatures) &&
+            layerFeatures.length > 0
+          ) {
             let updatedVariableInputs = {};
             for (const layerFeature of layerFeatures) {
               const newHighlightLayer = createHighlightLayer(
@@ -382,11 +387,13 @@ const MapVisualization = ({
     }
 
     const nonEmptyLayers = queryLayerFeaturesResults.filter(
-      (arr) => arr && arr.length > 0
+      (arr) => (arr && Array.isArray(arr) && arr.length > 0) || arr === "zoomed"
     );
     const nonEmptyLayerAttributes = nonEmptyLayers
       .flat()
-      .filter((item) => Object.keys(item.attributes).length > 0);
+      .filter(
+        (item) => item !== "zoomed" && Object.keys(item.attributes).length > 0
+      );
 
     let PopupContent;
     let popupCoordinate;
@@ -407,20 +414,21 @@ const MapVisualization = ({
   return (
     <MapComponent
       mapConfig={mapConfig}
-      viewConfig={viewConfig}
+      mapExtent={mapExtent}
       layers={mapLayers}
       legend={mapLegend}
       layerControl={layerControl}
       onMapClick={inDataViewerMode ? () => {} : onMapClick}
       visualizationRef={visualizationRef}
       data-testid="backlayer-map"
+      dataviewerViz={dataviewerViz}
     />
   );
 };
 
 MapVisualization.propTypes = {
   mapConfig: PropTypes.object, // div element properties for the map
-  viewConfig: PropTypes.object, // keys can be found at https://openlayers.org/en/latest/apidoc/module-ol_View-View.html
+  mapExtent: PropTypes.string, // minX,minY,maxX,maxY or lon,lat,zoom
   layers: PropTypes.arrayOf(
     PropTypes.shape({
       configuration: configurationPropType,
@@ -429,6 +437,7 @@ MapVisualization.propTypes = {
   visualizationRef: PropTypes.shape({ current: PropTypes.any }), // react ref pointing to the ol Map
   baseMap: PropTypes.string, // url for basemap layer, maps to baseMapLayers layers in components/visualizations/utilities.js
   layerControl: PropTypes.bool, // deterimines if a layer control menu should be present
+  dataviewerViz: PropTypes.bool, // determines if the map is in the dataviewer so that it doesnt affect the main map
 };
 
 Popup.propTypes = {

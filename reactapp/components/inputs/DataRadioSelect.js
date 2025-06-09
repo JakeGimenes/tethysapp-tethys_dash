@@ -7,13 +7,19 @@ const StyledDiv = styled.div`
   width: 100%;
 `;
 
-const DataRadioSelect = ({ label, selectedRadio, radioOptions, onChange }) => {
+const DataRadioSelect = ({
+  label,
+  selectedRadio,
+  radioOptions,
+  onChange,
+  blockedRadio,
+}) => {
   let RadioButtons = [];
   const groupName = label.replace(" ", "-");
   for (let i = 0; i < radioOptions.length; i++) {
     RadioButtons.push(
       <Form.Check
-        inline
+        inline={blockedRadio ? false : true}
         key={i}
         label={radioOptions[i]["label"]}
         aria-label={radioOptions[i]["label"]}
@@ -40,6 +46,7 @@ DataRadioSelect.propTypes = {
   onChange: PropTypes.func,
   selectedRadio: PropTypes.oneOfType([PropTypes.bool, PropTypes.string]),
   radioOptions: PropTypes.array,
+  blockedRadio: PropTypes.bool,
 };
 
 export default DataRadioSelect;

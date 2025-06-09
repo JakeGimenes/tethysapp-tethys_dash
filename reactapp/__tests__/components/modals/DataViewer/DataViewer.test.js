@@ -154,6 +154,7 @@ test("Dashboard Viewer Modal Text", async () => {
     await screen.findByText("All arguments must be filled out before saving")
   ).toBeInTheDocument();
 
+  // eslint-disable-next-line
   await act(() => {
     fireEvent.input(textEditor, {
       target: {
@@ -595,11 +596,8 @@ test("Dashboard Viewer Modal Map False layer control", async () => {
             baseMap:
               "https://server.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer",
             layers: [],
+            map_extent: "-10686671.12,4721671.57,4.5",
             layerControl: false,
-            viewConfig: {
-              center: [-10686671.116154263, 4721671.572580108],
-              zoom: 4.5,
-            },
           }),
           metadata_string: "{}",
         },
@@ -655,6 +653,7 @@ test("Dashboard Viewer Modal Text Options", async () => {
   fireEvent.click(visualizationOption);
 
   const textEditor = await screen.findByLabelText("textEditor");
+  // eslint-disable-next-line
   await act(() => {
     fireEvent.input(textEditor, {
       target: {
