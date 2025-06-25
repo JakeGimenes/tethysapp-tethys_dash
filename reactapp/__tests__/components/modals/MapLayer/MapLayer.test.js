@@ -11,6 +11,9 @@ import MapLayerModal from "components/modals/MapLayer/MapLayer";
 import { AppContext } from "components/contexts/Contexts";
 import appAPI from "services/api/app";
 import { getLayerAttributes } from "components/map/utilities";
+import { server } from "__tests__/utilities/server";
+import { rest } from "msw";
+import { fullMapLayer } from "__tests__/utilities/constants";
 
 jest.mock("uuid", () => ({
   v4: () => 12345678,
@@ -38,8 +41,20 @@ const TestingComponent = ({
   layerInfo,
 }) => {
   const csrf = "asdasdasdasd";
+  const mapLayerTemplates = [
+    {
+      source: "template_map_layer_example",
+      value: "Map Layer Template Example",
+      label: "Map Layer Template Example",
+      args: {},
+      type: "map_layer",
+      tags: ["map_layer"],
+      description: "An example plugin for the map layer template",
+    },
+  ];
   const appContext = {
     csrf,
+    mapLayerTemplates,
   };
 
   return (
@@ -55,6 +70,172 @@ const TestingComponent = ({
     </>
   );
 };
+
+test("MapLayerModal layer template full map layer", async () => {
+  server.use(
+    rest.get("http://api.test/apps/tethysdash/data/", (req, res, ctx) => {
+      return res(
+        ctx.status(200),
+        ctx.json({
+          success: true,
+          data: fullMapLayer,
+        }),
+        ctx.set("Content-Type", "application/json")
+      );
+    })
+  );
+
+  const handleModalClose = jest.fn();
+  const addMapLayer = jest.fn();
+  const layerInfo = {};
+  render(
+    <TestingComponent
+      showModal={true}
+      handleModalClose={handleModalClose}
+      addMapLayer={addMapLayer}
+      layerInfo={layerInfo}
+    />
+  );
+
+  expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+  const layerTemplatesDropdown = screen.getByLabelText("Layer Templates Input");
+
+  selectEvent.openMenu(layerTemplatesDropdown);
+  const templateOption = await screen.findByText("Map Layer Template Example");
+  fireEvent.click(templateOption);
+
+  await waitFor(() => {
+    expect(screen.getByLabelText("Name Input").value).toBe("NWC");
+  });
+
+  await waitFor(() => {
+    expect(screen.getByText("ESRI Image and Map Service")).toBeInTheDocument();
+  });
+
+  const createLayerButton = await screen.findByLabelText("Create Layer Button");
+  fireEvent.click(createLayerButton);
+
+  await waitFor(() => {
+    expect(addMapLayer).toHaveBeenCalledWith({
+      configuration: {
+        type: "ImageLayer",
+        props: {
+          name: "NWC",
+          source: {
+            type: "ESRI Image and Map Service",
+            props: {
+              url: "some_url",
+            },
+          },
+        },
+        layerVisibility: false,
+        style: "12345.json",
+      },
+      attributeAliases: {
+        NWC: {
+          nws_lid: "LID",
+        },
+      },
+      attributeVariables: {
+        NWC: {
+          nws_lid: "LID",
+        },
+      },
+      omittedPopupAttributes: {
+        NWC: ["nws_lid"],
+      },
+      legend: {
+        title: "Some Title",
+        items: [
+          {
+            label: "Some label",
+            color: "green",
+            symbol: "square",
+          },
+        ],
+      },
+    });
+  });
+});
+
+test("MapLayerModal layer template partial map layer", async () => {
+  server.use(
+    rest.get("http://api.test/apps/tethysdash/data/", (req, res, ctx) => {
+      return res(
+        ctx.status(200),
+        ctx.json({
+          success: true,
+          data: {
+            configuration: {
+              type: "ImageLayer",
+              props: {
+                name: "NWC",
+                source: {
+                  type: "ESRI Image and Map Service",
+                  props: {
+                    url: "some_url",
+                  },
+                },
+              },
+            },
+            queryable: false,
+          },
+        }),
+        ctx.set("Content-Type", "application/json")
+      );
+    })
+  );
+
+  const handleModalClose = jest.fn();
+  const addMapLayer = jest.fn();
+  const layerInfo = {};
+  render(
+    <TestingComponent
+      showModal={true}
+      handleModalClose={handleModalClose}
+      addMapLayer={addMapLayer}
+      layerInfo={layerInfo}
+    />
+  );
+
+  expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+  const layerTemplatesDropdown = screen.getByLabelText("Layer Templates Input");
+
+  selectEvent.openMenu(layerTemplatesDropdown);
+  const templateOption = await screen.findByText("Map Layer Template Example");
+  fireEvent.click(templateOption);
+
+  await waitFor(() => {
+    expect(screen.getByLabelText("Name Input").value).toBe("NWC");
+  });
+
+  await waitFor(() => {
+    expect(screen.getByText("ESRI Image and Map Service")).toBeInTheDocument();
+  });
+
+  const createLayerButton = await screen.findByLabelText("Create Layer Button");
+  fireEvent.click(createLayerButton);
+
+  await waitFor(() => {
+    expect(addMapLayer).toHaveBeenCalledWith({
+      configuration: {
+        type: "ImageLayer",
+        props: {
+          name: "NWC",
+          source: {
+            type: "ESRI Image and Map Service",
+            props: {
+              url: "some_url",
+            },
+          },
+        },
+      },
+      queryable: false,
+    });
+  });
+});
 
 test("MapLayerModal new ImageArcGISRest layer", async () => {
   const handleModalClose = jest.fn();
@@ -83,7 +264,7 @@ test("MapLayerModal new ImageArcGISRest layer", async () => {
   const sourceTab = screen.getByText("Source");
   fireEvent.click(sourceTab);
   const sourceTabContent = screen.getByLabelText("layer-source-tab");
-  const sourceDropdown = screen.getByRole("combobox");
+  const sourceDropdown = screen.getByLabelText("Source Type Input");
 
   selectEvent.openMenu(sourceDropdown);
   const sourceOption = await screen.findByText("ESRI Image and Map Service");
@@ -139,7 +320,7 @@ test("MapLayerModal new ImageWMS layer", async () => {
   const sourceTab = screen.getByText("Source");
   fireEvent.click(sourceTab);
   const sourceTabContent = screen.getByLabelText("layer-source-tab");
-  const sourceDropdown = screen.getByRole("combobox");
+  const sourceDropdown = screen.getByLabelText("Source Type Input");
 
   selectEvent.openMenu(sourceDropdown);
   const sourceOption = await screen.findByText("WMS");
@@ -207,7 +388,7 @@ test("MapLayerModal new GeoJSON layer", async () => {
 
   const sourceTab = screen.getByText("Source");
   fireEvent.click(sourceTab);
-  const sourceDropdown = screen.getByRole("combobox");
+  const sourceDropdown = screen.getByLabelText("Source Type Input");
 
   selectEvent.openMenu(sourceDropdown);
   const sourceOption = await screen.findByText("GeoJSON");
@@ -323,7 +504,7 @@ test("MapLayerModal new ImageTile layer", async () => {
   const sourceTab = screen.getByText("Source");
   fireEvent.click(sourceTab);
   const sourceTabContent = screen.getByLabelText("layer-source-tab");
-  const sourceDropdown = screen.getByRole("combobox");
+  const sourceDropdown = screen.getByLabelText("Source Type Input");
 
   selectEvent.openMenu(sourceDropdown);
   const sourceOption = await screen.findByText("Image Tile");
@@ -381,7 +562,7 @@ test("MapLayerModal new VectorTile layer", async () => {
   const sourceTab = screen.getByText("Source");
   fireEvent.click(sourceTab);
   const sourceTabContent = screen.getByLabelText("layer-source-tab");
-  const sourceDropdown = screen.getByRole("combobox");
+  const sourceDropdown = screen.getByLabelText("Source Type Input");
 
   selectEvent.openMenu(sourceDropdown);
   const sourceOption = await screen.findByText("Vector Tile");
@@ -452,7 +633,7 @@ test("MapLayerModal missing required properties", async () => {
   const sourceTab = screen.getByText("Source");
   fireEvent.click(sourceTab);
   const sourceTabContent = screen.getByLabelText("layer-source-tab");
-  const sourceDropdown = screen.getByRole("combobox");
+  const sourceDropdown = screen.getByLabelText("Source Type Input");
 
   selectEvent.openMenu(sourceDropdown);
   const sourceOption = await screen.findByText("WMS");
@@ -498,7 +679,7 @@ test("MapLayerModal attribute variables and omitted popups", async () => {
   const sourceTab = screen.getByText("Source");
   fireEvent.click(sourceTab);
   const sourceTabContent = screen.getByLabelText("layer-source-tab");
-  const sourceDropdown = screen.getByRole("combobox");
+  const sourceDropdown = screen.getByLabelText("Source Type Input");
 
   selectEvent.openMenu(sourceDropdown);
   const sourceOption = await screen.findByText("ESRI Image and Map Service");
@@ -571,7 +752,7 @@ test("MapLayerModal legend", async () => {
   const sourceTab = screen.getByText("Source");
   fireEvent.click(sourceTab);
   const sourceTabContent = screen.getByLabelText("layer-source-tab");
-  const sourceDropdown = screen.getByRole("combobox");
+  const sourceDropdown = screen.getByLabelText("Source Type Input");
 
   selectEvent.openMenu(sourceDropdown);
   const sourceOption = await screen.findByText("ESRI Image and Map Service");
@@ -665,7 +846,7 @@ test("MapLayerModal new GeoJSON layer api fail", async () => {
 
   const sourceTab = screen.getByText("Source");
   fireEvent.click(sourceTab);
-  const sourceDropdown = screen.getByRole("combobox");
+  const sourceDropdown = screen.getByLabelText("Source Type Input");
 
   selectEvent.openMenu(sourceDropdown);
   const sourceOption = await screen.findByText("GeoJSON");
@@ -734,7 +915,7 @@ test("MapLayerModal style", async () => {
   const sourceTab = screen.getByText("Source");
   fireEvent.click(sourceTab);
   const sourceTabContent = screen.getByLabelText("layer-source-tab");
-  const sourceDropdown = screen.getByRole("combobox");
+  const sourceDropdown = screen.getByLabelText("Source Type Input");
 
   selectEvent.openMenu(sourceDropdown);
   const sourceOption = await screen.findByText("ESRI Image and Map Service");
@@ -842,7 +1023,7 @@ test("MapLayerModal style api fail", async () => {
   const sourceTab = screen.getByText("Source");
   fireEvent.click(sourceTab);
   const sourceTabContent = screen.getByLabelText("layer-source-tab");
-  const sourceDropdown = screen.getByRole("combobox");
+  const sourceDropdown = screen.getByLabelText("Source Type Input");
 
   selectEvent.openMenu(sourceDropdown);
   const sourceOption = await screen.findByText("ESRI Image and Map Service");
@@ -968,7 +1149,7 @@ test("MapLayerModal update ImageArcGISRest layer", async () => {
   const sourceTab = screen.getByText("Source");
   fireEvent.click(sourceTab);
   const sourceTabContent = screen.getByLabelText("layer-source-tab");
-  const sourceDropdown = screen.getByRole("combobox");
+  const sourceDropdown = screen.getByLabelText("Source Type Input");
 
   selectEvent.openMenu(sourceDropdown);
   const sourceOption = await screen.findByText("ESRI Image and Map Service");
