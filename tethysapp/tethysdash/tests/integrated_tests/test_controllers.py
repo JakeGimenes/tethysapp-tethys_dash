@@ -5,6 +5,9 @@ from tethysapp.tethysdash.model import Dashboard
 from unittest.mock import MagicMock
 import os
 import shutil
+from django.conf import settings
+from datetime import datetime, timedelta
+import types
 
 
 @pytest.mark.django_db
@@ -986,3 +989,159 @@ def test_download_json_failed_unknown_exception(
         response.json()["message"]
         == "Failed to upload the json. Check server for logs."
     )
+
+
+@pytest.mark.django_db
+def test_ping_no_session_id(client, mock_app):
+    mock_app("tethysapp.tethysdash.controllers.App")
+    url = reverse("tethysdash:ping")
+
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == 2
+    assert response.json()["EXPIRE_AFTER"] == 0
+    assert response.json()["WARN_AFTER"] == 0
+
+
+@pytest.mark.django_db
+def test_ping_no_session_security(client, mock_app):
+    mock_app("tethysapp.tethysdash.controllers.App")
+    url = reverse("tethysdash:ping")
+
+    client.cookies["sessionid"] = "mocked-session-id"
+
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == -1
+    assert response.json()["EXPIRE_AFTER"] == 0
+    assert response.json()["WARN_AFTER"] == 0
+
+
+@pytest.mark.django_db
+def test_ping_with_session_security(mocker, client, mock_app):
+    mock_app("tethysapp.tethysdash.controllers.App")
+    url = reverse("tethysdash:ping")
+
+    EXPIRE_AFTER = getattr(settings, "SESSION_SECURITY_EXPIRE_AFTER", 600)  # 10 minutes
+    WARN_AFTER = getattr(settings, "SESSION_SECURITY_WARN_AFTER", 540)  # 9 minutes
+
+    # Create fake modules and attributes
+    fake_utils = types.SimpleNamespace(
+        get_last_activity=mocker.Mock(return_value=datetime.now()),
+        set_last_activity=mocker.Mock(),
+    )
+    fake_settings = types.SimpleNamespace(
+        EXPIRE_AFTER=300, PASSIVE_URLS=["/keepalive/"], PASSIVE_URL_NAMES=["keepalive"]
+    )
+
+    # Patch sys.modules to pretend the imports work
+    mocker.patch.dict(
+        "sys.modules",
+        {
+            "session_security": mocker.Mock(),
+            "session_security.utils": fake_utils,
+            "session_security.settings": fake_settings,
+        },
+    )
+
+    # Create a session manually
+    session = client.session
+    session["_session_security"] = {
+        "EXPIRE_AFTER": EXPIRE_AFTER,
+        "WARN_AFTER": WARN_AFTER,
+    }
+    session.save()
+
+    # Set the sessionid cookie
+    client.cookies["sessionid"] = session.session_key
+
+    itemData = {"idleFor": 5}
+
+    response = client.get(url, itemData)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == 1
+    assert response.json()["EXPIRE_AFTER"] == EXPIRE_AFTER + 1
+    assert response.json()["WARN_AFTER"] == WARN_AFTER + 1
+
+
+@pytest.mark.django_db
+def test_ping_with_session_security_and_logged_out(mocker, client, mock_app):
+    mock_app("tethysapp.tethysdash.controllers.App")
+    url = reverse("tethysdash:ping")
+
+    EXPIRE_AFTER = getattr(settings, "SESSION_SECURITY_EXPIRE_AFTER", 600)  # 10 minutes
+    WARN_AFTER = getattr(settings, "SESSION_SECURITY_WARN_AFTER", 540)  # 9 minutes
+
+    # Create fake modules and attributes
+    fake_utils = types.SimpleNamespace(
+        get_last_activity=mocker.Mock(
+            return_value=datetime.now() - timedelta(seconds=EXPIRE_AFTER + 1000)
+        ),
+        set_last_activity=mocker.Mock(),
+    )
+    fake_settings = types.SimpleNamespace(
+        EXPIRE_AFTER=300, PASSIVE_URLS=["/keepalive/"], PASSIVE_URL_NAMES=["keepalive"]
+    )
+
+    # Patch sys.modules to pretend the imports work
+    mocker.patch.dict(
+        "sys.modules",
+        {
+            "session_security": mocker.Mock(),
+            "session_security.utils": fake_utils,
+            "session_security.settings": fake_settings,
+        },
+    )
+
+    # Create a session manually
+    session = client.session
+    session["_session_security"] = {
+        "EXPIRE_AFTER": EXPIRE_AFTER,
+        "WARN_AFTER": WARN_AFTER,
+    }
+    session.save()
+
+    # Set the sessionid cookie
+    client.cookies["sessionid"] = session.session_key
+
+    itemData = {"idleFor": 5}
+
+    response = client.get(url, itemData)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == -2
+    assert response.json()["EXPIRE_AFTER"] == 0
+    assert response.json()["WARN_AFTER"] == 0
+
+
+@pytest.mark.django_db
+def test_ping_with_session_security_and_name_error(mocker, client, mock_app):
+    mock_app("tethysapp.tethysdash.controllers.App")
+    url = reverse("tethysdash:ping")
+
+    # Create a session manually
+    session = client.session
+    session["_session_security"] = {
+        "EXPIRE_AFTER": getattr(settings, "SESSION_SECURITY_EXPIRE_AFTER", 600),
+        "WARN_AFTER": getattr(settings, "SESSION_SECURITY_WARN_AFTER", 540),
+    }
+    session.save()
+
+    # Set the sessionid cookie
+    client.cookies["sessionid"] = session.session_key
+
+    # 👇 Patch SessionSecurityMiddleware to raise NameError when instantiated
+    mocker.patch(
+        "tethysapp.tethysdash.sessions.SessionSecurityMiddleware",
+        side_effect=NameError("simulated missing function"),
+    )
+
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == -1
+    assert response.json()["EXPIRE_AFTER"] == 0
+    assert response.json()["WARN_AFTER"] == 0

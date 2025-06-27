@@ -1,5 +1,5 @@
 import Loader from "components/loader/AppLoader";
-import { screen, render } from "@testing-library/react";
+import { screen, render, waitFor } from "@testing-library/react";
 import { useContext } from "react";
 import {
   AppContext,
@@ -11,6 +11,12 @@ import { rest } from "msw";
 import { baseMapLayers } from "components/visualizations/utilities";
 import ErrorBoundary from "components/error/ErrorBoundary";
 import userEvent from "@testing-library/user-event";
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+jest.setTimeout(30000);
 
 const TestingComponent = () => {
   const {
@@ -267,13 +273,22 @@ test("AppLoader, public session and continue", async () => {
         ctx.json({ error: "Internal Server Error" }),
         ctx.set("Content-Type", "application/json")
       );
-    })
-  );
-  server.use(
+    }),
     rest.get("http://api.test/apps/tethysdash/dashboards/", (req, res, ctx) => {
       return res(
         ctx.status(200),
         ctx.json({ user: [], public: mockedDashboards.public }),
+        ctx.set("Content-Type", "application/json")
+      );
+    }),
+    rest.get("http://api.test/apps/tethysdash/ping/", (req, res, ctx) => {
+      return res(
+        ctx.status(200),
+        ctx.json({
+          status: 2,
+          EXPIRE_AFTER: 0,
+          WARN_AFTER: 0,
+        }),
         ctx.set("Content-Type", "application/json")
       );
     })
@@ -300,9 +315,12 @@ test("AppLoader, public session and continue", async () => {
     )
   ).toBeInTheDocument();
 
-  const continueButton = screen.getAllByRole("button")[1];
+  const continueButton = screen.getByRole("button", {
+    name: "Proceed Without Signing in",
+  });
   await userEvent.click(continueButton);
 
+  // This component should only redirect when the user clicks the "Sign In" button
   expect(window.location.assign).toHaveBeenCalledTimes(0);
 
   expect(await screen.findByTestId("tethysApp")).toHaveTextContent(
@@ -413,7 +431,7 @@ test("AppLoader, public session and sign in", async () => {
   expect(dontShowOnStartupInput).toBeChecked();
   expect(localStorage.getItem("dontShowPublicLoginOnStart")).toEqual("true");
 
-  const signInButton = screen.getAllByRole("button")[0];
+  const signInButton = screen.getByRole("button", { name: "Sign in" });
   await userEvent.click(signInButton);
 
   expect(window.location.assign).toHaveBeenCalledWith(
@@ -519,4 +537,191 @@ test("AppLoader, load visualization error", async () => {
   expect(
     await screen.findByText("AxiosError: Request failed with status code 500")
   ).toBeInTheDocument();
+});
+
+test("AppLoader, check if user signed in", async () => {
+  const user = userEvent.setup();
+
+  const availableVisualizations = [
+    {
+      label: "Other",
+      options: [
+        {
+          source: "plugin_source_checkbox",
+          value: "plugin_value_checkbox",
+          label: "plugin_label_checkbox",
+          args: { plugin_arg: "checkbox" },
+        },
+      ],
+    },
+  ];
+  server.use(
+    rest.get(
+      "http://api.test/apps/tethysdash/visualizations/",
+      (req, res, ctx) => {
+        return res(
+          ctx.status(200),
+          ctx.json({
+            visualizations: availableVisualizations,
+          }),
+          ctx.set("Content-Type", "application/json")
+        );
+      }
+    ),
+    rest.get("http://api.test/apps/tethysdash/ping/", (req, res, ctx) => {
+      return res(
+        ctx.status(200),
+        ctx.json({
+          status: 1,
+          EXPIRE_AFTER: 10,
+          WARN_AFTER: 3,
+        }),
+        ctx.set("Content-Type", "application/json")
+      );
+    })
+  );
+
+  const { rerender } = render(
+    <Loader>
+      <TestingComponent />
+    </Loader>
+  );
+
+  expect(screen.queryByText("Are you still here?")).not.toBeInTheDocument();
+
+  // This is 6 seconds to match with the test.env settings. If you update this test,
+  // make sure to update the "delays signing out if activity is detected" test and vice versa
+  await sleep(6000);
+
+  rerender(
+    <Loader>
+      <TestingComponent />
+    </Loader>
+  );
+  expect(screen.getByText("Are you still here?")).toBeInTheDocument();
+
+  const staySignedInButton = screen.getByRole("button", {
+    name: "Stay Signed In",
+  });
+  expect(staySignedInButton).toBeInTheDocument();
+
+  await user.click(staySignedInButton);
+  rerender(
+    <Loader>
+      <TestingComponent />
+    </Loader>
+  );
+  expect(screen.queryByText("Are you still here?")).not.toBeInTheDocument();
+  await sleep(6000);
+
+  expect(screen.getByText("Are you still here?")).toBeInTheDocument();
+  await sleep(5000);
+
+  expect(window.location.assign).toHaveBeenCalledTimes(1);
+});
+
+test("AppLoader, user signed out", async () => {
+  server.use(
+    rest.get("http://api.test/apps/tethysdash/ping/", (req, res, ctx) => {
+      return res(
+        ctx.status(200),
+        ctx.json({
+          status: -2,
+          EXPIRE_AFTER: 10,
+          WARN_AFTER: 3,
+        }),
+        ctx.set("Content-Type", "application/json")
+      );
+    })
+  );
+
+  render(
+    <Loader>
+      <TestingComponent />
+    </Loader>
+  );
+
+  expect(screen.queryByText("Are you still here?")).not.toBeInTheDocument();
+
+  await waitFor(() => {
+    expect(window.location.assign).toHaveBeenCalledWith(
+      "http://api.test/accounts/login?next=/"
+    );
+  });
+});
+
+test("AppLoader, failed ping", async () => {
+  server.use(
+    rest.get("http://api.test/apps/tethysdash/ping/", (req, res, ctx) => {
+      return res(
+        ctx.status(500),
+        ctx.json({ error: "Internal Server Error" }),
+        ctx.set("Content-Type", "application/json")
+      );
+    })
+  );
+
+  render(
+    <Loader>
+      <TestingComponent />
+    </Loader>
+  );
+
+  expect(screen.queryByText("Are you still here?")).not.toBeInTheDocument();
+});
+
+test("AppLoader, delays signing out if activity is detected", async () => {
+  const user = userEvent.setup();
+
+  const availableVisualizations = [
+    {
+      label: "Other",
+      options: [
+        {
+          source: "plugin_source_checkbox",
+          value: "plugin_value_checkbox",
+          label: "plugin_label_checkbox",
+          args: { plugin_arg: "checkbox" },
+        },
+      ],
+    },
+  ];
+  server.use(
+    rest.get(
+      "http://api.test/apps/tethysdash/visualizations/",
+      (req, res, ctx) => {
+        return res(
+          ctx.status(200),
+          ctx.json({
+            visualizations: availableVisualizations,
+          }),
+          ctx.set("Content-Type", "application/json")
+        );
+      }
+    )
+  );
+
+  const { rerender } = render(
+    <Loader>
+      <TestingComponent />
+    </Loader>
+  );
+
+  delete window.location; // Remove existing location object
+  window.location = { assign: jest.fn() }; // Mock location.assign
+
+  expect(screen.queryByText("Are you still here?")).not.toBeInTheDocument();
+  await sleep(3000);
+
+  // Splits the original 6 seconds by an activity.If you update this test,
+  // make sure to update the "check if user signed in" test and vice versa
+  await user.click(await screen.findByTestId("routes"));
+
+  await sleep(3000);
+  rerender(
+    <Loader>
+      <TestingComponent />
+    </Loader>
+  );
+  expect(screen.queryByText("Are you still here?")).not.toBeInTheDocument();
 });

@@ -5,6 +5,10 @@ import shutil
 import nh3
 from rest_framework.decorators import api_view
 import uuid
+from datetime import datetime
+
+from django.contrib.sessions.backends.db import SessionStore
+from django.conf import settings
 from tethys_sdk.routing import controller
 from tethysapp.tethysdash.app import App
 from tethysapp.tethysdash.model import (
@@ -27,6 +31,63 @@ def home(request):
     """Controller for the app home page."""
     # The index.html template loads the React frontend
     return App.render(request, "index.html")
+
+
+@api_view(["GET"])
+@controller(login_required=False)
+def ping(request):
+    """
+    Controller for the app activity
+    Returns -1 if a session doesn't have session_security set up.
+    Returns -2 if the user is logged out
+    Returns 1 if the user is logged in
+    Returns 2 if this is a public login
+    If the user isn't logged out, it checks if there's new inputs to update the last activity
+    If there isn't any activity, it sends the log out warning and log out execution
+    """  # noqa: E501
+    session_id = request.COOKIES.get("sessionid", None)
+
+    if not session_id:
+        # Session is missing meaning this is a public login
+        return JsonResponse({"status": 2, "EXPIRE_AFTER": 0, "WARN_AFTER": 0})
+
+    session = SessionStore(session_key=session_id)
+    session_security = session.get("_session_security", None)
+
+    if not session_security:
+        # User is logged out (session missing)
+        # This could also mean that the django-session-security package isn't installed
+        return JsonResponse({"status": -1, "EXPIRE_AFTER": 0, "WARN_AFTER": 0})
+
+    EXPIRE_AFTER = getattr(settings, "SESSION_SECURITY_EXPIRE_AFTER", 600)  # 10 minutes
+    WARN_AFTER = getattr(settings, "SESSION_SECURITY_WARN_AFTER", 540)  # 9 minutes
+    request.session = session
+
+    try:
+        from tethysapp.tethysdash.sessions import SessionSecurityMiddleware
+
+        middleware = SessionSecurityMiddleware()
+        is_user_logged_out = middleware.is_user_session_expired(request)
+        if is_user_logged_out:
+            return JsonResponse({"status": -2, "EXPIRE_AFTER": 0, "WARN_AFTER": 0})
+
+        now = datetime.now()
+        middleware.update_last_activity(request, now)
+        return JsonResponse(
+            {
+                "status": 1,
+                "EXPIRE_AFTER": EXPIRE_AFTER + 1,
+                "WARN_AFTER": WARN_AFTER + 1,
+            }
+        )
+    except NameError:
+        # This is caused by trying to use a function that doesn't exist
+        # Useful for resetting a website that used to have the session security.
+        delattr(request, "session")
+        print(
+            "Deleting session information due to django-session-security being uninstalled."  # noqa: E501
+        )
+        return JsonResponse({"status": -1, "EXPIRE_AFTER": 0, "WARN_AFTER": 0})
 
 
 @api_view(["GET"])
@@ -93,6 +154,7 @@ def get_dashboard(request):
 @controller(url="tethysdash/dashboards/add", login_required=True, app_media=True)
 def add_dashboard(request, app_media):
     """API controller for the dashboards page."""
+
     dashboard_metadata = json.loads(request.body)
     name = dashboard_metadata["name"]
     description = dashboard_metadata.get("description", "")
@@ -142,6 +204,7 @@ def add_dashboard(request, app_media):
 @controller(url="tethysdash/dashboards/copy", login_required=True, app_media=True)
 def copy_dashboard(request, app_media):
     """API controller for the dashboards page."""
+
     dashboard_metadata = json.loads(request.body)
     id = dashboard_metadata["id"]
     new_name = dashboard_metadata["newName"]
@@ -180,6 +243,7 @@ def copy_dashboard(request, app_media):
 @controller(url="tethysdash/dashboards/delete", login_required=True, app_media=True)
 def delete_dashboard(request, app_media):
     """API controller for the dashboards page."""
+
     dashboard_metadata = json.loads(request.body)
     id = dashboard_metadata["id"]
     user = str(request.user)
@@ -207,6 +271,7 @@ def delete_dashboard(request, app_media):
 @controller(url="tethysdash/dashboards/update", login_required=True)
 def update_dashboard(request):
     """API controller for the dashboards page."""
+
     dashboard_updates = json.loads(request.body)
     id = dashboard_updates.pop("id")
     user = str(request.user)
@@ -230,6 +295,7 @@ def update_dashboard(request):
 @controller(url="tethysdash/json/upload", login_required=True, app_workspace=True)
 def upload_json(request, app_workspace):
     """API controller for the dashboards page."""
+
     json_data = json.loads(request.body)
     user = str(request.user)
 

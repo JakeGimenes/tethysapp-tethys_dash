@@ -33,6 +33,9 @@ function replaceHtmlEntitiesInExpressions(obj) {
 }
 
 const appAPI = {
+  getActivityData: (activity) => {
+    return apiClient.get(`${APP_ROOT_URL}ping/`, { params: activity });
+  },
   getPlotData: (itemData) => {
     return apiClient.get(`${APP_ROOT_URL}data/`, { params: itemData });
   },
