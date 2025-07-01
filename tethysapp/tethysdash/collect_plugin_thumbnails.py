@@ -58,6 +58,7 @@ def copy_plugin_images(plugin_modules, static_plugin_images):
                     image_path = "default_custom.png"
                 else:
                     print(f"--> PNG thumbnail not available for {source}")
+                    continue
 
             print(f"Adding to static folder - {source}")
             static_file = os.path.join(static_plugin_images, f"{source}.png")

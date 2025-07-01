@@ -396,6 +396,7 @@ function VisualizationPane({
             options={activeAppTour ? [customImageOption] : visualizations}
             aria-label={"visualizationType"}
             className={"visualizationTypeDropdown"}
+            creatable={false}
           />
         </DropdownDiv>
       </FlexDiv>
