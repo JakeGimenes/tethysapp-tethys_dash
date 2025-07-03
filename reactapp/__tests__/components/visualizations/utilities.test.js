@@ -710,6 +710,7 @@ test("checkForEmptyVariableInputs", async () => {
 
   expect(emptyVariableWarnings).toStrictEqual(null);
 
+  // eslint-disable-next-line
   argsString = JSON.stringify({ source: "${variable}" });
   metadataString = JSON.stringify({});
   variableInputValues = {};
@@ -722,7 +723,9 @@ test("checkForEmptyVariableInputs", async () => {
   expect(emptyVariableWarnings).toStrictEqual(["variable variable is empty"]);
 
   argsString = JSON.stringify({
+    // eslint-disable-next-line
     source: "${variable}",
+    // eslint-disable-next-line
     another_source: "${variable2}",
   });
   metadataString = JSON.stringify({
@@ -741,7 +744,9 @@ test("checkForEmptyVariableInputs", async () => {
   ]);
 
   argsString = JSON.stringify({
+    // eslint-disable-next-line
     source: "${variable}",
+    // eslint-disable-next-line
     another_source: "${variable2}",
   });
   metadataString = JSON.stringify({
@@ -755,4 +760,40 @@ test("checkForEmptyVariableInputs", async () => {
   });
 
   expect(emptyVariableWarnings).toStrictEqual(["general message"]);
+
+  argsString = JSON.stringify({
+    // eslint-disable-next-line
+    source: "${variable}",
+    // eslint-disable-next-line
+    another_source: "${variable2}",
+  });
+  metadataString = JSON.stringify({
+    customMessaging: { anyEmptyVariable: "general message" },
+  });
+  variableInputValues = { variable: "test" };
+  emptyVariableWarnings = checkForEmptyVariableInputs({
+    metadataString,
+    argsString,
+    variableInputValues,
+  });
+
+  expect(emptyVariableWarnings).toStrictEqual(["general message"]);
+
+  argsString = JSON.stringify({
+    // eslint-disable-next-line
+    source: "${variable}",
+    // eslint-disable-next-line
+    another_source: "${variable2}",
+  });
+  metadataString = JSON.stringify({
+    customMessaging: { anyEmptyVariable: "general message" },
+  });
+  variableInputValues = { variable: "test", variable2: "test2" };
+  emptyVariableWarnings = checkForEmptyVariableInputs({
+    metadataString,
+    argsString,
+    variableInputValues,
+  });
+
+  expect(emptyVariableWarnings).toStrictEqual(null);
 });

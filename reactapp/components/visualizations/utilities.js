@@ -8,15 +8,7 @@ export function checkForEmptyVariableInputs({
 }) {
   const metadata = JSON.parse(metadataString);
   const dependentVariableInputs = getDependentVariableInputs(argsString);
-  const warnings = [];
-
-  if (
-    dependentVariableInputs.length > 0 &&
-    metadata.customMessaging?.anyEmptyVariable
-  ) {
-    warnings.push(metadata.customMessaging.anyEmptyVariable);
-    return warnings;
-  }
+  let warnings = [];
 
   if (!dependentVariableInputs.every((key) => key in variableInputValues)) {
     for (const dependentVariableInput of dependentVariableInputs) {
@@ -27,10 +19,13 @@ export function checkForEmptyVariableInputs({
         );
       }
     }
-    return warnings;
   }
 
-  return null;
+  if (warnings.length > 0 && metadata.customMessaging?.anyEmptyVariable) {
+    warnings = [metadata.customMessaging.anyEmptyVariable];
+  }
+
+  return warnings.length > 0 ? warnings : null;
 }
 
 function getDependentVariableInputs(args) {
