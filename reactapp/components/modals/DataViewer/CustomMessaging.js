@@ -19,6 +19,10 @@ const Flex1Div = styled.div`
   margin-left: 1rem;
 `;
 
+const StyledDiv = styled.div`
+  padding-left: 2rem;
+`;
+
 function getDependentVariableInputs(inputs) {
   const regex = /\${(.*?)}/g; // Matches ${...}
   const uniqueValues = new Set();
@@ -62,9 +66,9 @@ const CustomMessaging = ({
   return (
     <WideLabel>
       <b className="no-caret">Custom Messaging</b>:
-      <div>
+      <StyledDiv>
         <FlexLabel>
-          Error -
+          On Error -
           <Flex1Div>
             <NormalInput
               type="text"
@@ -74,9 +78,24 @@ const CustomMessaging = ({
             />
           </Flex1Div>
         </FlexLabel>
+        {dependentVariableInputs.length > 0 && (
+          <FlexLabel>
+            On Any Empty Variable -
+            <Flex1Div>
+              <NormalInput
+                type="text"
+                value={customMessaging.anyEmptyVariable ?? ""}
+                onChange={(e) =>
+                  onCustomMessageChange("anyEmptyVariable", e.target.value)
+                }
+                ariaLabel={"anyEmptyVariable Custom Message Input"}
+              />
+            </Flex1Div>
+          </FlexLabel>
+        )}
         {dependentVariableInputs.map((dependentVariableInput, index) => (
           <FlexLabel key={index}>
-            {`Empty ${dependentVariableInput} Variable -`}
+            {`On Empty ${dependentVariableInput} Variable -`}
             <Flex1Div>
               <NormalInput
                 type="text"
@@ -89,7 +108,7 @@ const CustomMessaging = ({
             </Flex1Div>
           </FlexLabel>
         ))}
-      </div>
+      </StyledDiv>
     </WideLabel>
   );
 };

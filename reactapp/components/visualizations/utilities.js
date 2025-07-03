@@ -8,9 +8,17 @@ export function checkForEmptyVariableInputs({
 }) {
   const metadata = JSON.parse(metadataString);
   const dependentVariableInputs = getDependentVariableInputs(argsString);
+  const warnings = [];
+
+  if (
+    dependentVariableInputs.length > 0 &&
+    metadata.customMessaging?.anyEmptyVariable
+  ) {
+    warnings.push(metadata.customMessaging.anyEmptyVariable);
+    return warnings;
+  }
 
   if (!dependentVariableInputs.every((key) => key in variableInputValues)) {
-    const warnings = [];
     for (const dependentVariableInput of dependentVariableInputs) {
       if (!variableInputValues[dependentVariableInput]) {
         warnings.push(

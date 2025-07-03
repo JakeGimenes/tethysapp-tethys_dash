@@ -6,6 +6,7 @@ import {
   findSelectOptionByValue,
   baseMapLayers,
   downloadJSONFile,
+  checkForEmptyVariableInputs,
 } from "components/visualizations/utilities";
 import { server } from "__tests__/utilities/server";
 import { rest } from "msw";
@@ -694,4 +695,64 @@ describe("downloadJSONFile", () => {
     appendChildSpy.mockRestore();
     removeChildSpy.mockRestore();
   });
+});
+
+test("checkForEmptyVariableInputs", async () => {
+  let argsString = JSON.stringify({ source: "some value" });
+  let metadataString = JSON.stringify({});
+  let variableInputValues = {};
+
+  let emptyVariableWarnings = checkForEmptyVariableInputs({
+    metadataString,
+    argsString,
+    variableInputValues,
+  });
+
+  expect(emptyVariableWarnings).toStrictEqual(null);
+
+  argsString = JSON.stringify({ source: "${variable}" });
+  metadataString = JSON.stringify({});
+  variableInputValues = {};
+  emptyVariableWarnings = checkForEmptyVariableInputs({
+    metadataString,
+    argsString,
+    variableInputValues,
+  });
+
+  expect(emptyVariableWarnings).toStrictEqual(["variable variable is empty"]);
+
+  argsString = JSON.stringify({
+    source: "${variable}",
+    another_source: "${variable2}",
+  });
+  metadataString = JSON.stringify({
+    customMessaging: { variable: "some custom variable message" },
+  });
+  variableInputValues = {};
+  emptyVariableWarnings = checkForEmptyVariableInputs({
+    metadataString,
+    argsString,
+    variableInputValues,
+  });
+
+  expect(emptyVariableWarnings).toStrictEqual([
+    "some custom variable message",
+    "variable2 variable is empty",
+  ]);
+
+  argsString = JSON.stringify({
+    source: "${variable}",
+    another_source: "${variable2}",
+  });
+  metadataString = JSON.stringify({
+    customMessaging: { anyEmptyVariable: "general message" },
+  });
+  variableInputValues = {};
+  emptyVariableWarnings = checkForEmptyVariableInputs({
+    metadataString,
+    argsString,
+    variableInputValues,
+  });
+
+  expect(emptyVariableWarnings).toStrictEqual(["general message"]);
 });
