@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef } from "react";
 import userEvent from "@testing-library/user-event";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import BorderSettings from "components/modals/DataViewer/BorderSettings";
@@ -6,14 +6,16 @@ import {
   defaultBorderStyle,
   defaultBorderWidth,
   defaultBorderColor,
-} from "components/modals/DataViewer/SettingsPane";
+} from "components/modals/DataViewer/BorderSettings";
 import selectEvent from "react-select-event";
 import PropTypes from "prop-types";
 
 global.ResizeObserver = require("resize-observer-polyfill");
 
-const TestingComponent = () => {
-  const [border, setBorder] = useState({
+const TestingComponent = ({ onChange }) => {
+  const settingsPaneRef = useRef(null);
+
+  const initialBorder = {
     top: {
       color: defaultBorderColor,
       style: defaultBorderStyle,
@@ -39,18 +41,20 @@ const TestingComponent = () => {
       style: defaultBorderStyle,
       width: defaultBorderWidth,
     },
-  });
+  };
 
   return (
-    <>
-      <BorderSettings border={border} setBorder={setBorder} />
-      <p data-testid="border">{JSON.stringify(border)}</p>
-    </>
+    <BorderSettings
+      initialBorder={initialBorder}
+      onChange={onChange}
+      settingsPaneRef={settingsPaneRef}
+    />
   );
 };
 
 it("BorderSettings", async () => {
-  render(<TestingComponent />);
+  const mockOnChange = jest.fn();
+  render(<TestingComponent onChange={mockOnChange} />);
 
   expect(await screen.findByText("Border")).toBeInTheDocument();
   const removeBordersButton = screen.getByLabelText("Remove Borders");
@@ -116,35 +120,34 @@ it("BorderSettings", async () => {
     "color",
     "#0000ff"
   );
-  expect(await screen.findByTestId("border")).toHaveTextContent(
-    JSON.stringify({
-      left: {
-        color: "#0000ff",
-        style: { value: "solid", label: "solid" },
-        width: "20",
-      },
-      right: {
-        color: "#0000ff",
-        style: { value: "solid", label: "solid" },
-        width: "20",
-      },
-      top: {
-        color: "#0000ff",
-        style: { value: "solid", label: "solid" },
-        width: "20",
-      },
-      bottom: {
-        color: "#0000ff",
-        style: { value: "solid", label: "solid" },
-        width: "20",
-      },
-      all: {
-        color: "#0000ff",
-        style: { value: "solid", label: "solid" },
-        width: "20",
-      },
-    })
-  );
+
+  expect(mockOnChange).toHaveBeenCalledWith({
+    left: {
+      color: "#0000ff",
+      style: { value: "solid", label: "solid" },
+      width: "20",
+    },
+    right: {
+      color: "#0000ff",
+      style: { value: "solid", label: "solid" },
+      width: "20",
+    },
+    top: {
+      color: "#0000ff",
+      style: { value: "solid", label: "solid" },
+      width: "20",
+    },
+    bottom: {
+      color: "#0000ff",
+      style: { value: "solid", label: "solid" },
+      width: "20",
+    },
+    all: {
+      color: "#0000ff",
+      style: { value: "solid", label: "solid" },
+      width: "20",
+    },
+  });
 
   // left border button will update existing
   await userEvent.click(leftBorderButton);
@@ -185,36 +188,34 @@ it("BorderSettings", async () => {
     "color",
     "#0000ff"
   );
-  // eslint-disable-next-line
-  expect(await screen.findByTestId("border")).toHaveTextContent(
-    JSON.stringify({
-      left: {
-        color: "#FF0000",
-        style: { value: "dashed", label: "dashed" },
-        width: "10",
-      },
-      right: {
-        color: "#0000ff",
-        style: { value: "solid", label: "solid" },
-        width: "20",
-      },
-      top: {
-        color: "#0000ff",
-        style: { value: "solid", label: "solid" },
-        width: "20",
-      },
-      bottom: {
-        color: "#0000ff",
-        style: { value: "solid", label: "solid" },
-        width: "20",
-      },
-      all: {
-        color: "#0000ff",
-        style: { value: "solid", label: "solid" },
-        width: "20",
-      },
-    })
-  );
+
+  expect(mockOnChange).toHaveBeenCalledWith({
+    left: {
+      color: "#FF0000",
+      style: { value: "dashed", label: "dashed" },
+      width: "10",
+    },
+    right: {
+      color: "#0000ff",
+      style: { value: "solid", label: "solid" },
+      width: "20",
+    },
+    top: {
+      color: "#0000ff",
+      style: { value: "solid", label: "solid" },
+      width: "20",
+    },
+    bottom: {
+      color: "#0000ff",
+      style: { value: "solid", label: "solid" },
+      width: "20",
+    },
+    all: {
+      color: "#0000ff",
+      style: { value: "solid", label: "solid" },
+      width: "20",
+    },
+  });
 
   // remove border button will make all border style to none
   await userEvent.click(removeBordersButton);
@@ -228,38 +229,35 @@ it("BorderSettings", async () => {
   // eslint-disable-next-line
   expect(bottomBorderButton.querySelector("svg")).not.toHaveAttribute("color");
 
-  expect(await screen.findByTestId("border")).toHaveTextContent(
-    JSON.stringify({
-      left: {
-        color: "#FF0000",
-        style: { value: "none", label: "none" },
-        width: "10",
-      },
-      right: {
-        color: "#0000ff",
-        style: { value: "none", label: "none" },
-        width: "20",
-      },
-      top: {
-        color: "#0000ff",
-        style: { value: "none", label: "none" },
-        width: "20",
-      },
-      bottom: {
-        color: "#0000ff",
-        style: { value: "none", label: "none" },
-        width: "20",
-      },
-      all: {
-        color: "#0000ff",
-        style: { value: "none", label: "none" },
-        width: "20",
-      },
-    })
-  );
+  expect(mockOnChange).toHaveBeenCalledWith({
+    left: {
+      color: "#FF0000",
+      style: { value: "none", label: "none" },
+      width: "10",
+    },
+    right: {
+      color: "#0000ff",
+      style: { value: "none", label: "none" },
+      width: "20",
+    },
+    top: {
+      color: "#0000ff",
+      style: { value: "none", label: "none" },
+      width: "20",
+    },
+    bottom: {
+      color: "#0000ff",
+      style: { value: "none", label: "none" },
+      width: "20",
+    },
+    all: {
+      color: "#0000ff",
+      style: { value: "none", label: "none" },
+      width: "20",
+    },
+  });
 });
 
 TestingComponent.propTypes = {
-  visualizationRefElement: PropTypes.object,
-  currentSettings: PropTypes.object,
+  onChange: PropTypes.func,
 };

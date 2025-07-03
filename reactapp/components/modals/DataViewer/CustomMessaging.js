@@ -35,12 +35,20 @@ function getDependentVariableInputs(inputs) {
 
 const CustomMessaging = ({
   vizInputsValues,
-  customMessaging,
-  setCustomMessaging,
+  initialCustomMessaging,
+  onChange,
 }) => {
+  const [customMessaging, setCustomMessaging] = useState(
+    initialCustomMessaging ?? {}
+  );
   const [dependentVariableInputs, setDependentVariableInputs] = useState(
     getDependentVariableInputs(vizInputsValues)
   );
+
+  useEffect(() => {
+    onChange(customMessaging);
+    // eslint-disable-next-line
+  }, [customMessaging]);
 
   useEffect(() => {
     setDependentVariableInputs(getDependentVariableInputs(vizInputsValues));
@@ -88,8 +96,8 @@ const CustomMessaging = ({
 
 CustomMessaging.propTypes = {
   vizInputsValues: PropTypes.object,
-  customMessaging: PropTypes.objectOf(PropTypes.string),
-  setCustomMessaging: PropTypes.func,
+  initialCustomMessaging: PropTypes.objectOf(PropTypes.string),
+  onChange: PropTypes.func,
 };
 
 export default CustomMessaging;

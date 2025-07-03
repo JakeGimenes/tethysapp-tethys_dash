@@ -1,24 +1,28 @@
-import { useState } from "react";
+import { useRef } from "react";
 import userEvent from "@testing-library/user-event";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import BackgroundSettings from "components/modals/DataViewer/BackgroundSettings";
 import PropTypes from "prop-types";
 
 global.ResizeObserver = require("resize-observer-polyfill");
 
-const TestingComponent = () => {
-  const [backgroundColor, setBackgroundColor] = useState("black");
+const TestingComponent = ({ onChange }) => {
+  const settingsPaneRef = useRef(null);
 
   return (
-    <BackgroundSettings
-      backgroundColor={backgroundColor}
-      setBackgroundColor={setBackgroundColor}
-    />
+    <div ref={settingsPaneRef}>
+      <BackgroundSettings
+        initialBackgroundColor={"black"}
+        onChange={onChange}
+        settingsPaneRef={settingsPaneRef}
+      />
+    </div>
   );
 };
 
 it("BackgroundSettings", async () => {
-  render(<TestingComponent />);
+  const mockOnChange = jest.fn();
+  render(<TestingComponent onChange={mockOnChange} />);
 
   const backgroundColorButton = await screen.findByLabelText(
     "Background Color Selector"
@@ -35,8 +39,11 @@ it("BackgroundSettings", async () => {
   const hexInput = await screen.findByLabelText(/hex/i);
   expect(hexInput.value).toBe("black");
 
-  fireEvent.change(hexInput, { target: { value: "#0000ff" } });
+  await userEvent.clear(hexInput);
+  await userEvent.type(hexInput, "#0000ff");
+  await userEvent.tab();
 
+  expect(mockOnChange).toHaveBeenCalledWith("#0000ff");
   await waitFor(() => {
     // eslint-disable-next-line
     expect(backgroundColorButton.querySelector("svg")).toHaveAttribute(
@@ -53,6 +60,5 @@ it("BackgroundSettings", async () => {
 });
 
 TestingComponent.propTypes = {
-  visualizationRefElement: PropTypes.object,
-  currentSettings: PropTypes.object,
+  onChange: PropTypes.func,
 };

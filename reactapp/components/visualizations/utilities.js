@@ -1,11 +1,12 @@
 import appAPI from "services/api/app";
 import { spaceAndCapitalize } from "components/modals/utilities";
 
-function checkForEmptyVariableInputs({
-  metadata,
+export function checkForEmptyVariableInputs({
+  metadataString,
   argsString,
   variableInputValues,
 }) {
+  const metadata = JSON.parse(metadataString);
   const dependentVariableInputs = getDependentVariableInputs(argsString);
 
   if (!dependentVariableInputs.every((key) => key in variableInputValues)) {
@@ -41,14 +42,14 @@ export async function getVisualization({
   setVizData,
   sourceType,
   itemData,
-  metadataString,
   argsString,
+  metadataString,
   variableInputValues,
   dashboardView,
 }) {
   const metadata = JSON.parse(metadataString);
   const emptyVariableWarnings = checkForEmptyVariableInputs({
-    metadata,
+    metadataString,
     argsString,
     variableInputValues,
   });
@@ -57,6 +58,33 @@ export async function getVisualization({
     setVizData({
       warnings: emptyVariableWarnings,
     });
+    return;
+  }
+
+  if (itemData.source === "Map") {
+    setVizType("map");
+    setVizData({
+      baseMap: itemData.args.baseMap,
+      layers: itemData.args.layers,
+      layerControl: itemData.args.layerControl,
+      map_extent: itemData.args.map_extent,
+      mapConfig: itemData.args.mapConfig,
+      mapDrawing: itemData.args.mapDrawing,
+    });
+
+    return;
+  } else if (itemData.source === "Text") {
+    setVizType("text");
+    setVizData({ text: itemData.args.text });
+
+    return;
+  } else if (itemData.source === "Custom Image") {
+    setVizType("image");
+    setVizData({
+      source: itemData.args.image_source,
+      alt: "custom_image",
+    });
+
     return;
   }
 

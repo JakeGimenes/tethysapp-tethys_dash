@@ -15,7 +15,7 @@ import Popover from "react-bootstrap/Popover";
 import ColorPicker from "components/inputs/ColorPicker";
 import DataSelect from "components/inputs/DataSelect";
 import NormalInput from "components/inputs/NormalInput";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 const StyledDiv = styled.div`
   margin-bottom: 1rem;
@@ -66,8 +66,13 @@ const borderStyles = [
   { value: "outset", label: "outset" },
 ];
 
+export const defaultBorderStyle = { value: "none", label: "none" };
+export const defaultBorderWidth = 1;
+export const defaultBorderColor = "black";
+
 const BorderOverlay = ({
   target,
+  container,
   show,
   setShow,
   side,
@@ -83,7 +88,7 @@ const BorderOverlay = ({
       placement="right"
       rootClose={true}
       onHide={() => setShow(false)}
-      container={target}
+      container={container}
     >
       <Popover className="color-picker-popover">
         <StyledPopoverBody>
@@ -127,6 +132,7 @@ const ButtonWithOverlay = ({
   onStyleChange,
   onStyleWidth,
   onColorChange,
+  settingsPaneRef,
 }) => {
   const [showPopover, setShowPopover] = useState(false);
   const borderRef = useRef(null);
@@ -143,6 +149,7 @@ const ButtonWithOverlay = ({
         {children}
       </BackgroundColorButton>
       <BorderOverlay
+        container={settingsPaneRef.current}
         target={borderRef.current}
         show={showPopover}
         setShow={setShowPopover}
@@ -156,7 +163,53 @@ const ButtonWithOverlay = ({
   );
 };
 
-const BorderSettings = ({ border, setBorder }) => {
+const BorderSettings = ({ initialBorder, onChange, settingsPaneRef }) => {
+  const [border, setBorder] = useState(parseBorderStyles(initialBorder ?? {}));
+
+  useEffect(() => {
+    onChange(border);
+    // eslint-disable-next-line
+  }, [border]);
+
+  function parseBorderStyles(styles) {
+    const sides = ["top", "bottom", "left", "right"];
+    const borderConfig = {};
+
+    if (styles.border) {
+      const [width, style, color] = styles.border.split(" ");
+      const borderValue = {
+        color: color,
+        style: { value: style, label: style },
+        width: parseInt(width),
+      };
+      sides.forEach((side) => {
+        borderConfig[side] = { ...borderValue };
+      });
+      borderConfig.all = { ...borderValue };
+    } else {
+      sides.forEach((side) => {
+        const key = `border-${side}`;
+        if (styles[key]) {
+          const [width, style, color] = styles[key].split(" ");
+          borderConfig[side] = {
+            color: color,
+            style: { value: style, label: style },
+            width: parseInt(width),
+          };
+        } else {
+          borderConfig[side] = {
+            color: defaultBorderColor,
+            style: defaultBorderStyle,
+            width: defaultBorderWidth,
+          };
+        }
+      });
+      borderConfig.all = { ...borderConfig[sides[0]] };
+    }
+
+    return borderConfig;
+  }
+
   const onColorChange = (changedColor, side) => {
     if (side === "all") {
       setBorder((prevBorder) => {
@@ -260,6 +313,7 @@ const BorderSettings = ({ border, setBorder }) => {
               onStyleWidth={onStyleWidth}
               onColorChange={onColorChange}
               side="all"
+              settingsPaneRef={settingsPaneRef}
             >
               <CgBorderAll size="1.5rem" />
             </ButtonWithOverlay>
@@ -271,6 +325,7 @@ const BorderSettings = ({ border, setBorder }) => {
               onStyleWidth={onStyleWidth}
               onColorChange={onColorChange}
               side="left"
+              settingsPaneRef={settingsPaneRef}
             >
               <CgBorderLeft
                 size="1.5rem"
@@ -287,6 +342,7 @@ const BorderSettings = ({ border, setBorder }) => {
               onStyleWidth={onStyleWidth}
               onColorChange={onColorChange}
               side="top"
+              settingsPaneRef={settingsPaneRef}
             >
               <CgBorderTop
                 size="1.5rem"
@@ -303,6 +359,7 @@ const BorderSettings = ({ border, setBorder }) => {
               onStyleWidth={onStyleWidth}
               onColorChange={onColorChange}
               side="right"
+              settingsPaneRef={settingsPaneRef}
             >
               <CgBorderRight
                 size="1.5rem"
@@ -319,6 +376,7 @@ const BorderSettings = ({ border, setBorder }) => {
               onStyleWidth={onStyleWidth}
               onColorChange={onColorChange}
               side="bottom"
+              settingsPaneRef={settingsPaneRef}
             >
               <CgBorderBottom
                 size="1.5rem"
@@ -353,6 +411,13 @@ BorderOverlay.propTypes = {
     PropTypes.object,
     PropTypes.instanceOf(Element),
   ]),
+  container: PropTypes.oneOfType([
+    PropTypes.arrayOf(PropTypes.node),
+    PropTypes.arrayOf(PropTypes.object),
+    PropTypes.node,
+    PropTypes.object,
+    PropTypes.instanceOf(Element),
+  ]),
   show: PropTypes.bool,
   setShow: PropTypes.func,
   side: PropTypes.string,
@@ -375,17 +440,31 @@ ButtonWithOverlay.propTypes = {
   onStyleChange: PropTypes.func,
   onStyleWidth: PropTypes.func,
   onColorChange: PropTypes.func,
+  settingsPaneRef: PropTypes.oneOfType([
+    PropTypes.arrayOf(PropTypes.node),
+    PropTypes.arrayOf(PropTypes.object),
+    PropTypes.node,
+    PropTypes.object,
+    PropTypes.instanceOf(Element),
+  ]),
 };
 
 BorderSettings.propTypes = {
-  border: PropTypes.shape({
+  initialBorder: PropTypes.shape({
     all: sideProps,
     top: sideProps,
     bottom: sideProps,
     left: sideProps,
     right: sideProps,
   }),
-  setBorder: PropTypes.func,
+  onChange: PropTypes.func,
+  settingsPaneRef: PropTypes.oneOfType([
+    PropTypes.arrayOf(PropTypes.node),
+    PropTypes.arrayOf(PropTypes.object),
+    PropTypes.node,
+    PropTypes.object,
+    PropTypes.instanceOf(Element),
+  ]),
 };
 
 export default BorderSettings;
