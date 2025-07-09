@@ -1,7 +1,7 @@
 import PropTypes from "prop-types";
 import DataRadioSelect from "components/inputs/DataRadioSelect";
 import Button from "react-bootstrap/Button";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, memo, useMemo } from "react";
 import Table from "react-bootstrap/Table";
 import DraggableList from "components/inputs/DraggableList";
 import styled from "styled-components";
@@ -10,7 +10,10 @@ import Popover from "react-bootstrap/Popover";
 import ColorPicker from "components/inputs/ColorPicker";
 import CustomPicker from "components/inputs/CustomPicker";
 import { BsTrash } from "react-icons/bs";
-import { legendSymbols, getLegendSymbol } from "components/map/LegendControl";
+import LegendRenderer, {
+  legendSymbols,
+  LegendSymbol,
+} from "components/map/LegendRenderer";
 import { RxDragHandleHorizontal } from "react-icons/rx";
 import { legendPropType, legendItemPropType } from "components/map/utilities";
 import { valuesEqual } from "components/modals/utilities";
@@ -60,6 +63,11 @@ const FlexDiv = styled.div`
   width: 100%;
 `;
 
+const LegendDiv = styled.div`
+  width: 25%;
+  margin: auto;
+`;
+
 const LegendTemplate = ({
   value,
   index,
@@ -68,44 +76,39 @@ const LegendTemplate = ({
   legendItems,
   setLegendItems,
 }) => {
-  const { label, color, symbol } = value;
-  const [symbolColor, setSymbolColor] = useState(color);
-  const [showColorPopover, setShowColorPopover] = useState(false);
-  const [localLabel, setLocalLabel] = useState(label);
   const colorTarget = useRef(null);
-  const [symbolValue, setSymbolValue] = useState(symbol);
-  const [symbolComponent, setSymbolComponent] = useState();
+  const [showColorPopover, setShowColorPopover] = useState(false);
+  const [localLabel, setLocalLabel] = useState(value.label);
+  const [symbolValue, setSymbolValue] = useState(value.symbol);
+  const [symbolColor, setSymbolColor] = useState(value.color);
 
+  // Sync internal state when props change (e.g. drag reorder)
   useEffect(() => {
-    setLocalLabel(label);
-    setSymbolColor(color);
-    setSymbolValue(symbol);
-  }, [label, color, symbol]);
+    setLocalLabel(value.label);
+    setSymbolValue(value.symbol);
+    setSymbolColor(value.color);
+  }, [value]);
 
+  // Push symbol or color change up
   useEffect(() => {
-    const updatedLegendItems = JSON.parse(JSON.stringify(legendItems));
-    updatedLegendItems[index].symbol = symbolValue;
-    updatedLegendItems[index].color = symbolColor;
-    setSymbolComponent(getLegendSymbol(symbolValue, symbolColor));
-    setLegendItems(updatedLegendItems);
-    // eslint-disable-next-line
+    const updatedItems = legendItems.map((item, i) =>
+      i === index ? { ...item, symbol: symbolValue, color: symbolColor } : item
+    );
+    setLegendItems(updatedItems);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbolValue, symbolColor]);
 
-  const onColorChange = (changedColor) => {
-    setSymbolColor(changedColor);
-  };
-
   const onLabelChange = (e) => {
-    const updatedLegendItems = JSON.parse(JSON.stringify(legendItems));
-    updatedLegendItems[index].label = e.target.value;
-    setLocalLabel(e.target.value);
-    setLegendItems(updatedLegendItems);
+    const newLabel = e.target.value;
+    setLocalLabel(newLabel);
+    const updatedItems = legendItems.map((item, i) =>
+      i === index ? { ...item, label: newLabel } : item
+    );
+    setLegendItems(updatedItems);
   };
 
   const deleteRow = () => {
-    const newLegend = legendItems.filter(
-      (_, arrayIndex) => arrayIndex !== index
-    );
+    const newLegend = legendItems.filter((_, i) => i !== index);
     setLegendItems(newLegend);
     setShowColorPopover(false);
   };
@@ -114,12 +117,9 @@ const LegendTemplate = ({
     <tr key={index} {...draggingProps}>
       <td>
         <FlexDiv>
-          <AlignedDragHandle size={"1rem"} />
+          <AlignedDragHandle size="1rem" />
           <InputDiv>
-            <StyledInput
-              value={localLabel}
-              onChange={onLabelChange}
-            ></StyledInput>
+            <StyledInput value={localLabel} onChange={onLabelChange} />
           </InputDiv>
         </FlexDiv>
       </td>
@@ -128,14 +128,14 @@ const LegendTemplate = ({
           ref={colorTarget}
           onClick={() => setShowColorPopover(!showColorPopover)}
         >
-          {symbolComponent}
+          <LegendSymbol symbol={symbolValue} color={symbolColor} />
         </div>
         <Overlay
           container={containerRef}
           target={colorTarget.current}
           show={showColorPopover}
           placement="left"
-          rootClose={true}
+          rootClose
           onHide={() => setShowColorPopover(false)}
         >
           <Popover className="color-picker-popover">
@@ -146,14 +146,15 @@ const LegendTemplate = ({
                   maxColCount={3}
                   pickerOptions={legendSymbols}
                   onSelect={setSymbolValue}
+                  selected={symbolValue}
                 />
               </StyledLabel>
               <StyledLabel>
                 <b>Color</b>:{" "}
                 <ColorPicker
                   hideInput={["rgb", "hsv"]}
-                  color={color}
-                  onChange={onColorChange}
+                  color={symbolColor}
+                  onChange={setSymbolColor}
                 />
               </StyledLabel>
             </StyledPopoverBody>
@@ -166,123 +167,158 @@ const LegendTemplate = ({
           onMouseOver={(e) => (e.target.style.cursor = "pointer")}
           onMouseOut={(e) => (e.target.style.cursor = "default")}
         >
-          <RedTrashIcon size={"1rem"} />
+          <RedTrashIcon size="1rem" />
         </HoverDiv>
       </td>
     </tr>
   );
 };
 
-const LegendPane = ({ legend, setLegend, containerRef }) => {
-  const [legendMode, setLegendMode] = useState(legend ? "on" : "off");
-  const [legendItems, setLegendItems] = useState(legend?.items ?? []);
-  const [legendTitle, setLegendTitle] = useState(legend?.title ?? "");
-  const previousLegendInfo = useRef(legend);
+const LegendPane = ({ legend, setLegend, containerRef, sourceProps }) => {
+  const [legendMode, setLegendMode] = useState(
+    !legend ? "off" : legend === "default" ? "default" : "custom"
+  );
+  const previousCustomLegendRef = useRef(
+    legend && legend !== "default" ? legend : null
+  );
 
-  useEffect(() => {
-    if (
-      !valuesEqual(previousLegendInfo.current, legend) &&
-      Object.keys(legend ?? {}).length > 0
-    ) {
-      previousLegendInfo.current = legend;
-      setLegendMode("on");
-      setLegendItems(legend.items ?? []);
-      setLegendTitle(legend.title ?? "");
-    }
-    // eslint-disable-next-line
-  }, [legend]);
-
-  useEffect(() => {
-    if (legendMode === "off") return;
-
-    const newLegend = { title: legendTitle, items: legendItems };
-    setLegend(newLegend);
-    // eslint-disable-next-line
-  }, [legendItems, legendTitle]);
-
-  const valueOptions = [
-    { label: "Don't show legend for layer", value: "off" },
-    { label: "Show legend for layer", value: "on" },
+  const limitedLegendTypes = ["GeoJSON", "Image Tile", "Vector Tile"];
+  const limitedLegendOptions = [
+    { label: "No Legend", value: "off" },
+    { label: "Custom Legend", value: "custom" },
+  ];
+  const fullLegendOptions = [
+    { label: "No Legend", value: "off" },
+    { label: "Default Legend", value: "default" },
+    { label: "Custom Legend", value: "custom" },
   ];
 
-  const addLegendItem = () => {
-    setLegendItems((previousLegendItems) => [
-      ...previousLegendItems,
-      { label: "", color: "#ff0000", symbol: "square" },
-    ]);
-  };
-
-  const onOrderUpdate = (newLegendItems) => {
-    setLegendItems(newLegendItems);
-  };
-
-  const changeLegendMode = (e) => {
-    let newLegend;
-    if (e === "off") {
-      previousLegendInfo.current = legend;
-      newLegend = {};
+  // Keep legendMode in sync with incoming legend or sourceProps changes
+  useEffect(() => {
+    if (limitedLegendTypes.includes(sourceProps?.type)) {
+      if (
+        legend &&
+        legend !== "off" &&
+        legend !== "default" &&
+        Object.keys(legend).length > 0
+      ) {
+        setLegend({}); // Only clear it if it’s not already cleared
+      }
+      setLegendMode("off");
     } else {
-      newLegend = previousLegendInfo.current;
+      let nextMode = "off";
+      if (typeof legend === "object" && Object.keys(legend).length > 0) {
+        nextMode = "custom";
+        previousCustomLegendRef.current = legend;
+      } else if (legend === "default") {
+        nextMode = "default";
+      }
+      setLegendMode(nextMode);
     }
-    setLegendMode(e);
-    setLegend(newLegend);
+  }, [sourceProps.type]);
+
+  const handleModeChange = (event) => {
+    const mode = event.target.value;
+
+    if (legendMode === "custom") {
+      previousCustomLegendRef.current = legend;
+    }
+    setLegendMode(mode);
+
+    if (mode === "off") {
+      setLegend({});
+    } else if (mode === "default") {
+      setLegend("default");
+    } else {
+      setLegend(previousCustomLegendRef.current ?? { title: "", items: [] });
+    }
   };
 
-  const onTitleChange = (e) => {
-    setLegendTitle(e.target.value);
+  const handleTitleChange = (e) => {
+    const title = e.target.value;
+    setLegend((prev) => ({ ...prev, title }));
+  };
+
+  const addLegendItem = () => {
+    setLegend((prev) => ({
+      ...prev,
+      items: [
+        ...(prev.items ?? []),
+        { label: "", color: "#ff0000", symbol: "square" },
+      ],
+    }));
+  };
+
+  const updateLegendItems = (newItems) => {
+    setLegend((prev) => ({ ...prev, items: newItems }));
   };
 
   const templateArgs = {
     containerRef,
-    legendItems,
-    setLegendItems,
+    legendItems: legend?.items ?? [],
+    setLegendItems: updateLegendItems,
   };
 
   return (
     <>
       <DataRadioSelect
-        label={"Legend Control"}
-        aria-label={"Legend Control Input"}
+        label="Legend Control"
+        aria-label="Legend Control Input"
         selectedRadio={legendMode}
-        radioOptions={valueOptions}
-        onChange={(e) => {
-          changeLegendMode(e.target.value);
-        }}
+        radioOptions={
+          limitedLegendTypes.includes(sourceProps?.type)
+            ? limitedLegendOptions
+            : fullLegendOptions
+        }
+        onChange={handleModeChange}
       />
-      {legendMode === "on" && (
+
+      {legendMode === "default" && (
+        <LegendDiv>
+          <LegendRenderer
+            legend={{
+              sourceType: sourceProps.type,
+              url: sourceProps.props?.url,
+              layers:
+                sourceProps.props?.params?.LAYERS || sourceProps.props?.layer,
+            }}
+          />
+        </LegendDiv>
+      )}
+
+      {legendMode === "custom" && (
         <>
           <StyledDiv>
             <label>
               <b>Title</b>:{" "}
-              <input value={legendTitle} onChange={onTitleChange}></input>
+              <input value={legend?.title ?? ""} onChange={handleTitleChange} />
             </label>
             <Button
               variant="info"
               onClick={addLegendItem}
-              aria-label={"Add Legend Item Button"}
+              aria-label="Add Legend Item Button"
             >
               Add Legend Item
             </Button>
           </StyledDiv>
-          <div>
-            <Table striped bordered hover size="sm">
-              <thead>
-                <tr>
-                  <th className="text-center">Label</th>
-                  <th className="text-center">Symbol</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                <DraggableList
-                  items={legendItems}
-                  onOrderUpdate={onOrderUpdate}
-                  ItemTemplate={LegendTemplate}
-                  templateArgs={templateArgs}
-                />
-              </tbody>
-            </Table>
-          </div>
+
+          <Table striped bordered hover size="sm">
+            <thead>
+              <tr>
+                <th className="text-center">Label</th>
+                <th className="text-center">Symbol</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <DraggableList
+                items={legend?.items ?? []}
+                onOrderUpdate={updateLegendItems}
+                ItemTemplate={LegendTemplate}
+                templateArgs={templateArgs}
+              />
+            </tbody>
+          </Table>
         </>
       )}
     </>
@@ -314,4 +350,4 @@ LegendPane.propTypes = {
   }), // ref pointing to the container of the content so that color picker renders inside the same div
 };
 
-export default LegendPane;
+export default memo(LegendPane);

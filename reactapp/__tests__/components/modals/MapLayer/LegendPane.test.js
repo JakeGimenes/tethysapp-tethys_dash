@@ -11,7 +11,15 @@ import LegendPane from "components/modals/MapLayer/LegendPane";
 
 global.ResizeObserver = require("resize-observer-polyfill");
 
-const TestingComponent = ({ initialLegend }) => {
+beforeEach(() => {
+  global.fetch = jest.fn();
+});
+
+afterEach(() => {
+  jest.resetAllMocks();
+});
+
+const TestingComponent = ({ initialLegend, sourceProps }) => {
   const [legend, setLegend] = useState(initialLegend);
   const containerRef = useRef();
 
@@ -24,6 +32,7 @@ const TestingComponent = ({ initialLegend }) => {
       <LegendPane
         legend={legend}
         setLegend={setLegend}
+        sourceProps={sourceProps ?? {}}
         containerRef={containerRef}
       />
       <p data-testid="legend">{JSON.stringify(legend)}</p>
@@ -36,15 +45,22 @@ test("LegendPane no initial legend, add new row and delete", async () => {
 
   expect(await screen.findByText("Legend Control")).toBeInTheDocument();
 
-  const offRadio = screen.getByLabelText("Don't show legend for layer");
-  const onRadio = screen.getByLabelText("Show legend for layer");
+  const offRadio = screen.getByLabelText("No Legend");
+  const defaultRadio = screen.getByLabelText("Default Legend");
+  const customRadio = screen.getByLabelText("Custom Legend");
 
   expect(offRadio.checked).toBe(true);
-  expect(onRadio.checked).toBe(false);
+  expect(defaultRadio.checked).toBe(false);
+  expect(customRadio.checked).toBe(false);
   expect(await screen.findByTestId("legend")).toHaveTextContent("");
 
-  fireEvent.click(onRadio);
-  expect(screen.getByTestId("legend").textContent?.trim()).toBe("");
+  fireEvent.click(customRadio);
+  expect(screen.getByTestId("legend").textContent?.trim()).toBe(
+    JSON.stringify({
+      title: "",
+      items: [],
+    })
+  );
 
   const addRowButton = await screen.findByLabelText("Add Legend Item Button");
   fireEvent.click(addRowButton);
@@ -74,6 +90,34 @@ test("LegendPane no initial legend, add new row and delete", async () => {
     })
   );
 
+  fireEvent.click(addRowButton);
+  await waitFor(async () => {
+    expect(await screen.findByTestId("legend")).toHaveTextContent(
+      JSON.stringify({
+        title: "Some Title",
+        items: [
+          { label: "Some Label", color: "#ff0000", symbol: "square" },
+          { label: "", color: "#ff0000", symbol: "square" },
+        ],
+      })
+    );
+  });
+
+  const textboxes = screen.getAllByRole("textbox");
+  const newLabelInput = textboxes[2];
+  fireEvent.change(newLabelInput, { target: { value: "Another Label" } });
+  await waitFor(async () => {
+    expect(await screen.findByTestId("legend")).toHaveTextContent(
+      JSON.stringify({
+        title: "Some Title",
+        items: [
+          { label: "Some Label", color: "#ff0000", symbol: "square" },
+          { label: "Another Label", color: "#ff0000", symbol: "square" },
+        ],
+      })
+    );
+  });
+
   // eslint-disable-next-line
   const symbolButton = screen.getAllByRole("cell")[1].querySelector("svg");
   fireEvent.click(symbolButton);
@@ -88,7 +132,10 @@ test("LegendPane no initial legend, add new row and delete", async () => {
   expect(await screen.findByTestId("legend")).toHaveTextContent(
     JSON.stringify({
       title: "Some Title",
-      items: [{ label: "Some Label", color: "#ff0000", symbol: "circle" }],
+      items: [
+        { label: "Some Label", color: "#ff0000", symbol: "circle" },
+        { label: "Another Label", color: "#ff0000", symbol: "square" },
+      ],
     })
   );
 
@@ -99,7 +146,10 @@ test("LegendPane no initial legend, add new row and delete", async () => {
     expect(await screen.findByTestId("legend")).toHaveTextContent(
       JSON.stringify({
         title: "Some Title",
-        items: [{ label: "Some Label", color: "#2aff00", symbol: "circle" }],
+        items: [
+          { label: "Some Label", color: "#2aff00", symbol: "circle" },
+          { label: "Another Label", color: "#ff0000", symbol: "square" },
+        ],
       })
     );
   });
@@ -114,7 +164,7 @@ test("LegendPane no initial legend, add new row and delete", async () => {
   expect(await screen.findByTestId("legend")).toHaveTextContent(
     JSON.stringify({
       title: "Some Title",
-      items: [],
+      items: [{ label: "Another Label", color: "#ff0000", symbol: "square" }],
     })
   );
 
@@ -124,7 +174,7 @@ test("LegendPane no initial legend, add new row and delete", async () => {
   rerender(<TestingComponent initialLegend={{ title: "some title" }} />);
 
   expect(await screen.findByTestId("legend")).toHaveTextContent(
-    JSON.stringify({ title: "some title", items: [] })
+    JSON.stringify({ title: "some title" })
   );
 
   rerender(
@@ -137,7 +187,6 @@ test("LegendPane no initial legend, add new row and delete", async () => {
 
   expect(await screen.findByTestId("legend")).toHaveTextContent(
     JSON.stringify({
-      title: "",
       items: [{ color: "yellow", label: "Some Label", symbol: "square" }],
     })
   );
@@ -155,8 +204,8 @@ test("LegendPane initial legend", async () => {
 
   expect(await screen.findByText("Legend Control")).toBeInTheDocument();
 
-  const offRadio = screen.getByLabelText("Don't show legend for layer");
-  const onRadio = screen.getByLabelText("Show legend for layer");
+  const offRadio = screen.getByLabelText("No Legend");
+  const onRadio = screen.getByLabelText("Custom Legend");
 
   expect(offRadio.checked).toBe(false);
   expect(onRadio.checked).toBe(true);
@@ -174,19 +223,12 @@ test("LegendPane initial legend", async () => {
   });
 
   const tabelCells = screen.getAllByRole("cell");
-
-  await waitFor(() => {
-    // eslint-disable-next-line
-    expect(tabelCells[1].querySelector("svg").getAttribute("color")).toBe(
-      "yellow"
-    );
-  });
-  await waitFor(() => {
-    // eslint-disable-next-line
-    expect(tabelCells[4].querySelector("svg").getAttribute("color")).toBe(
-      "green"
-    );
-  });
+  expect(
+    within(tabelCells[1]).getByLabelText("yellow-square")
+  ).toBeInTheDocument();
+  expect(
+    within(tabelCells[4]).getByLabelText("green-square")
+  ).toBeInTheDocument();
 
   // Simulate dragging row 1 to row 2
   fireEvent.dragStart(tabelCells[0], {
@@ -203,19 +245,147 @@ test("LegendPane initial legend", async () => {
   await waitFor(() => {
     expect(textboxes[2].value).toBe("Some Label");
   });
+  expect(
+    within(tabelCells[1]).getByLabelText("green-square")
+  ).toBeInTheDocument();
+  expect(
+    within(tabelCells[4]).getByLabelText("yellow-square")
+  ).toBeInTheDocument();
+});
 
-  await waitFor(() => {
-    // eslint-disable-next-line
-    expect(tabelCells[1].querySelector("svg").getAttribute("color")).toBe(
-      "green"
-    );
+test("LegendPane updated sourceProps", async () => {
+  global.fetch.mockResolvedValue({
+    ok: false,
   });
-  await waitFor(() => {
-    // eslint-disable-next-line
-    expect(tabelCells[4].querySelector("svg").getAttribute("color")).toBe(
-      "yellow"
-    );
+
+  const { rerender } = render(
+    <TestingComponent sourceProps={{ type: "ESRI Image and Map Service" }} />
+  );
+
+  expect(screen.getByLabelText("No Legend")).toBeInTheDocument();
+  expect(screen.getByLabelText("Default Legend")).toBeInTheDocument();
+  expect(screen.getByLabelText("Custom Legend")).toBeInTheDocument();
+  const customRadio = screen.getByLabelText("Custom Legend");
+  expect(customRadio).toBeInTheDocument();
+
+  fireEvent.click(customRadio);
+  expect(screen.getByTestId("legend").textContent?.trim()).toBe(
+    JSON.stringify({
+      title: "",
+      items: [],
+    })
+  );
+
+  const addRowButton = await screen.findByLabelText("Add Legend Item Button");
+  fireEvent.click(addRowButton);
+  expect(await screen.findByTestId("legend")).toHaveTextContent(
+    JSON.stringify({
+      title: "",
+      items: [{ label: "", color: "#ff0000", symbol: "square" }],
+    })
+  );
+
+  rerender(<TestingComponent sourceProps={{ type: "GeoJSON" }} />);
+
+  expect(screen.getByLabelText("No Legend")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Default Legend")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Custom Legend")).toBeInTheDocument();
+  expect(await screen.findByTestId("legend")).toHaveTextContent("{}");
+
+  rerender(
+    <TestingComponent
+      initialLegend={"default"}
+      sourceProps={{ type: "ESRI Feature Service", props: { url: "some/url" } }}
+    />
+  );
+
+  expect(screen.getByLabelText("No Legend")).toBeInTheDocument();
+  expect(screen.getByLabelText("Default Legend")).toBeInTheDocument();
+  expect(screen.getByLabelText("Custom Legend")).toBeInTheDocument();
+  expect(await screen.findByTestId("legend")).toHaveTextContent("default");
+
+  rerender(
+    <TestingComponent
+      initialLegend={"default"}
+      sourceProps={{
+        type: "ESRI Image and Map Service",
+        props: { url: "some/url" },
+      }}
+    />
+  );
+
+  expect(screen.getByLabelText("No Legend")).toBeInTheDocument();
+  expect(screen.getByLabelText("Default Legend")).toBeInTheDocument();
+  expect(screen.getByLabelText("Custom Legend")).toBeInTheDocument();
+  expect(await screen.findByTestId("legend")).toHaveTextContent("default");
+});
+
+test("LegendPane set to default", async () => {
+  global.fetch.mockResolvedValue({
+    ok: false,
   });
+
+  render(
+    <TestingComponent
+      sourceProps={{
+        type: "ESRI Image and Map Service",
+        props: { url: "some/url" },
+      }}
+    />
+  );
+
+  expect(screen.getByLabelText("No Legend")).toBeInTheDocument();
+  expect(screen.getByLabelText("Default Legend")).toBeInTheDocument();
+  expect(screen.getByLabelText("Custom Legend")).toBeInTheDocument();
+  const defaultRadio = screen.getByLabelText("Default Legend");
+  expect(defaultRadio).toBeInTheDocument();
+
+  fireEvent.click(defaultRadio);
+
+  expect(await screen.findByTestId("legend")).toHaveTextContent("default");
+});
+
+test("LegendPane title partial initial legend", async () => {
+  render(<TestingComponent initialLegend={{ title: "" }} />);
+
+  expect(await screen.findByText("Legend Control")).toBeInTheDocument();
+
+  expect(screen.getByTestId("legend").textContent?.trim()).toBe(
+    JSON.stringify({
+      title: "",
+    })
+  );
+
+  const addRowButton = await screen.findByLabelText("Add Legend Item Button");
+  fireEvent.click(addRowButton);
+
+  expect(screen.getByTestId("legend").textContent?.trim()).toBe(
+    JSON.stringify({
+      title: "",
+      items: [{ label: "", color: "#ff0000", symbol: "square" }],
+    })
+  );
+});
+
+test("LegendPane items partial initial legend", async () => {
+  render(<TestingComponent initialLegend={{ items: [] }} />);
+
+  expect(await screen.findByText("Legend Control")).toBeInTheDocument();
+
+  expect(screen.getByTestId("legend").textContent?.trim()).toBe(
+    JSON.stringify({
+      items: [],
+    })
+  );
+
+  const addRowButton = await screen.findByLabelText("Add Legend Item Button");
+  fireEvent.click(addRowButton);
+
+  expect(screen.getByTestId("legend").textContent?.trim()).toBe(
+    JSON.stringify({
+      items: [{ label: "", color: "#ff0000", symbol: "square" }],
+    })
+  );
 });
 
 TestingComponent.propTypes = {
