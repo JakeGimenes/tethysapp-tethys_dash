@@ -127,7 +127,7 @@ const MapComponent = ({
       mapViewConfig.setZoom(zoomLevel);
       mapViewConfig.setCenter([lon, lat]);
     } else {
-      mapViewConfig.fit(extent.split(","), {
+      mapViewConfig.fit(extent.split(",").map(Number), {
         size: visualizationRef.current.getSize(),
       });
       setZoom(mapViewConfig.getZoom().toFixed(2));
@@ -155,50 +155,93 @@ const MapComponent = ({
   useEffect(() => {
     setErrorMessage(null);
     const updateLayers = async () => {
-      // Remove current map layers so new ones can be added
-      const mapDerivedLayers = [
-        ...visualizationRef.current.getLayers().getArray(),
-      ];
-      mapDerivedLayers.forEach((mapLayer) =>
-        visualizationRef.current.removeLayer(mapLayer)
-      );
+      const map = visualizationRef.current;
+      const currentLayers = map.getLayers().getArray();
+      const newLayerIds = (layers ?? []).map((l) => l.props?.name); // or use unique id
+
+      // Remove only layers not in the new config
+      currentLayers.forEach((layer) => {
+        const layerName = layer.get("name"); // make sure name is set via layer.set("name", ...) in moduleLoader
+        if (layerName && !newLayerIds.includes(layerName)) {
+          map.removeLayer(layer);
+        }
+      });
 
       // setup constants for handling new layers
       const customLayers = layers ?? [];
       let failedLayers = [];
 
-      // for each layer, load the layer instance, add it to the map, and style if needed
+      // Add or update layers in parallel
       await Promise.all(
         customLayers.map(async (layerConfig) => {
-          try {
-            const layerInstance = await moduleLoader(
-              layerConfig,
-              visualizationRef.current.getView().getProjection().getCode()
-            );
+          const name = layerConfig.props?.name;
+          if (!name) return;
+
+          const isGeoJSON = layerConfig.props?.source?.type === "GeoJSON";
+
+          let existingLayer = map
+            .getLayers()
+            .getArray()
+            .find((l) => l.get("name") === name);
+
+          if (existingLayer && isGeoJSON) {
+            map.removeLayer(existingLayer);
+            existingLayer = null;
+          }
+
+          if (existingLayer) {
+            // Update visibility and style in-place
             if (
               layerConfig.layerVisibility === false &&
               isFirstRender.current
             ) {
-              layerInstance.setVisible(false);
+              existingLayer.setVisible(false);
+            } else {
+              existingLayer.setVisible(true);
             }
-            visualizationRef.current.addLayer(layerInstance);
+
             if (layerConfig.style) {
-              await applyStyle(
-                layerInstance,
-                layerConfig.style,
-                layerConfig.props.name
-              ).catch((err) => {
+              try {
+                await applyStyle(existingLayer, layerConfig.style, name);
+              } catch (err) {
                 console.log(err);
-              });
+              }
+            }
+
+            return;
+          }
+
+          // Layer doesn't exist, so create and add it
+          try {
+            const newLayer = await moduleLoader(
+              layerConfig,
+              map.getView().getProjection().getCode()
+            );
+            newLayer.set("name", name);
+
+            if (
+              layerConfig.layerVisibility === false &&
+              isFirstRender.current
+            ) {
+              newLayer.setVisible(false);
+            }
+
+            map.addLayer(newLayer);
+
+            if (layerConfig.style) {
+              try {
+                await applyStyle(newLayer, layerConfig.style, name);
+              } catch (err) {
+                console.log(err);
+              }
             }
           } catch (err) {
             console.log(err);
-            failedLayers.push(layerConfig.props.name);
+            failedLayers.push(name);
           }
         })
       );
 
-      // If any layers failed to load, add an error message will all the failed layers
       if (failedLayers.length > 0) {
         setErrorMessage(
           `Failed to load the "${failedLayers.join(", ")}" layer(s)`

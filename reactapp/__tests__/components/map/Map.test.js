@@ -9,6 +9,7 @@ import { Map } from "ol";
 import createLoadedComponent, {
   InputVariablePComponent,
 } from "__tests__/utilities/customRender";
+import { exampleStyle } from "__tests__/utilities/constants";
 
 global.ResizeObserver = require("resize-observer-polyfill");
 
@@ -233,6 +234,7 @@ test("Custom bounding box map extent with variable", async () => {
 
 test("Map Layers and Updated Layers", async () => {
   const addLayerSpy = jest.spyOn(Map.prototype, "addLayer");
+  const removeLayerSpy = jest.spyOn(Map.prototype, "removeLayer");
   const layers = [
     {
       type: "WebGLTile",
@@ -270,18 +272,138 @@ test("Map Layers and Updated Layers", async () => {
     ),
   });
 
-  render(loadedComponent);
+  const { rerender } = render(loadedComponent);
 
   expect(await screen.findByText("Map Ready")).toBeInTheDocument();
 
   await waitFor(() => {
     expect(addLayerSpy.mock.calls.length).toBe(2);
   });
+  expect(removeLayerSpy.mock.calls.length).toBe(0);
 
   expect(addLayerSpy.mock.calls[0][0].values_.name).toBe(
     "World Light Gray Base"
   );
   expect(addLayerSpy.mock.calls[1][0].values_.name).toBe("esri");
+
+  let newLayers = [
+    {
+      type: "VectorLayer",
+      props: {
+        name: "GeoJSON Layer",
+        source: {
+          type: "GeoJSON",
+          props: {},
+          geojson: {
+            type: "FeatureCollection",
+            crs: {
+              type: "name",
+              properties: {
+                name: "EPSG:3857",
+              },
+            },
+            features: [
+              {
+                type: "Feature",
+                geometry: {
+                  type: "Point",
+                  coordinates: [0, 0],
+                },
+              },
+            ],
+          },
+        },
+      },
+      style: exampleStyle,
+    },
+    {
+      type: "ImageLayer",
+      props: {
+        name: "esri",
+        source: {
+          type: "ESRI Image and Map Service",
+          props: {
+            url: "https://maps.water.noaa.gov/server/rest/services/rfc/rfc_max_forecast/MapServer",
+          },
+        },
+        zIndex: 1,
+      },
+      layerVisibility: true,
+    },
+  ];
+  let newLoadedComponent = createLoadedComponent({
+    children: (
+      <MapContextProvider>
+        <TestingComponent mapProps={{ layers: newLayers }} />
+      </MapContextProvider>
+    ),
+  });
+
+  rerender(newLoadedComponent);
+
+  await waitFor(() => {
+    expect(addLayerSpy.mock.calls.length).toBe(3);
+  });
+  expect(removeLayerSpy.mock.calls.length).toBe(1);
+
+  newLayers = [
+    {
+      type: "VectorLayer",
+      props: {
+        name: "GeoJSON Layer",
+        source: {
+          type: "GeoJSON",
+          props: {},
+          geojson: {
+            type: "FeatureCollection",
+            crs: {
+              type: "name",
+              properties: {
+                name: "EPSG:3857",
+              },
+            },
+            features: [
+              {
+                type: "Feature",
+                geometry: {
+                  type: "Point",
+                  coordinates: [0, 0],
+                },
+              },
+            ],
+          },
+        },
+      },
+    },
+    {
+      type: "ImageLayer",
+      props: {
+        name: "esri",
+        source: {
+          type: "ESRI Image and Map Service",
+          props: {
+            url: "https://maps.water.noaa.gov/server/rest/services/rfc/rfc_max_forecast/MapServer",
+          },
+        },
+        zIndex: 1,
+      },
+      layerVisibility: true,
+    },
+  ];
+  newLoadedComponent = createLoadedComponent({
+    children: (
+      <MapContextProvider>
+        <TestingComponent mapProps={{ layers: newLayers }} />
+      </MapContextProvider>
+    ),
+  });
+
+  rerender(newLoadedComponent);
+
+  await waitFor(() => {
+    expect(addLayerSpy.mock.calls.length).toBe(4);
+  });
+  expect(removeLayerSpy.mock.calls.length).toBe(2);
 });
 
 test("Map Layers  default invisible layer", async () => {
