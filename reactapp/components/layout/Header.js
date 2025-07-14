@@ -293,8 +293,8 @@ export const DashboardHeader = () => {
     setShowErrorMessage(false);
     setIsSaving(true);
 
-    const image = await captureScreenshot();
-    saveLayoutContext({ gridItems, image }).then((response) => {
+    // const image = await captureScreenshot();
+    saveLayoutContext({ gridItems }).then((response) => {
       if (response.success) {
         setSuccessMessage("Change have been saved.");
         setShowSuccessMessage(true);
