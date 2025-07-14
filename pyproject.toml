@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tethysdash"
+version = "0.11.12"
+description = "A Tethys App for no code/low code web application development app"
+authors = [{ name = "Corey Krewson", email = "ckrewson@aquaveo.com" }]
+license = { text = "MIT" }
+keywords = [""]
+dependencies = [
+    "hjson==3.1",
+    "nh3==0.2.21",
+    "bleach==6.1.0",
+    "bleach[css]",
+    "cssutils==2.11.1",
+    "pytest-django",
+    "pytest-mock",
+    "pytest-cov",
+    "intake==2.0.7",
+    "djangorestframework",
+    "alembic==1.14.0",
+]
+classifiers = [
+     "Environment :: Web Environment",
+     "Framework :: Django",
+     "Intended Audience :: Developers",
+     "License :: OSI Approved :: MIT",
+     "Operating System :: OS Independent",
+     "Programming Language :: Python",
+     "Programming Language :: Python :: 3",
+     "Programming Language :: Python :: 3.10",
+     "Topic :: Internet :: WWW/HTTP",
+     "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+# Find namespace packages like `tethysapp.tethysdash`
+include = ["tethysapp.*"]
+
+[tool.setuptools.package-data]
+# The key "" applies to all packages
+"*" = [
+    "default_dashboard.png",
+    "default_card.png",
+    "default_chart.png",
+    "default_custom.png",
+    "default_image.png",
+    "default_map.png",
+    "default_table.png",
+    "default_text.png",
+    "default_variable_input.png",
+    "alembic.ini",
+    # Add more patterns or use wildcards if needed
+]
+
+# Optional: for compatibility with pytest if you run tests with `pytest`
+[tool.pytest.ini_options]
+django_find_project = false
