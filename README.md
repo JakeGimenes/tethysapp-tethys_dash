@@ -11,7 +11,7 @@ You need to install both the Tethys dependencies and the node dependencies:
 ```
 conda activate tethys
 cd tethysapp-tethysdash
-tethys install -d
+pip install -e .
 ```
 
 2. Install the node and dependencies
