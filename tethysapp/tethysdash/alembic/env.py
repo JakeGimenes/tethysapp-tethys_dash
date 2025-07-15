@@ -1,8 +1,8 @@
 from logging.config import fileConfig
 import os
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, create_engine, pool
+from sqlalchemy.exc import OperationalError
 
 from alembic import context
 
@@ -29,10 +29,10 @@ target_metadata = None
 
 def get_db_url():
     db_user = "postgres"
-    db_pass = os.environ["POSTGRES_PASSWORD"]
-    db_host = os.environ["TETHYS_DB_HOST"]
-    db_name = os.environ["TETHYSDASH_DB_NAME"]
-    db_port = os.environ["TETHYS_DB_PORT"]
+    db_pass = os.environ.get("POSTGRES_PASSWORD", "mysecretpassword")
+    db_host = os.environ.get("TETHYS_DB_HOST", "localhost")
+    db_name = os.environ.get("TETHYSDASH_DB_NAME", "tethysdash_primary_db")
+    db_port = os.environ.get("TETHYS_DB_PORT", 5432)
     return f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
 
 
@@ -67,6 +67,19 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    try:
+        # Create SQLAlchemy engine
+        engine = create_engine(get_db_url())
+
+        # Try to connect
+        with engine.connect() as conn:
+            print("✅ Successfully connected to the database.")
+    except OperationalError as e:
+        print("❌ Failed to connect to the database.")
+        print(e)
+        print("Check DB connection parameters. To override connection parameters set the POSTGRES_PASSWORD, TETHYS_DB_HOST, TETHYSDASH_DB_NAME, and/or TETHYS_DB_PORT as needed")
+        return
+    
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
