@@ -37,7 +37,7 @@ tethys services create persistent -n primary_db -c postgres:mysecretpassword@loc
 tethys link persistent:primary_db tethysdash:ps_database:primary_db
 ```
 
-6. Setup Environment Variables (update values as needed)
+6. Setup Environment Variables (not necessary unless connection values are different)
 
 ```
 export POSTGRES_PASSWORD=mysecretpassword
