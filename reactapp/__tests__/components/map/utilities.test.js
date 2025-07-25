@@ -1257,7 +1257,7 @@ test("getLayerAttributes ImageWMS Bad Fetch", async () => {
   const layerName = layerConfigImageWMS.configuration.props.name;
 
   await expect(getLayerAttributes(sourceProps, layerName)).rejects.toThrow(
-    "Failed to fetch attribute data. Check to make sure layers exist."
+    "Failed to fetch attribute data for layer 'topp:states'. Check if the layer exists."
   );
 });
 
@@ -1277,7 +1277,77 @@ test("getLayerAttributes ImageWMS XML Error", async () => {
   const layerName = layerConfigImageWMS.configuration.props.name;
 
   await expect(getLayerAttributes(sourceProps, layerName)).rejects.toThrow(
-    "Failed to fetch attribute data. Check to make sure WFS extension is enabled on layers or that layer names are correct."
+    "WFS DescribeFeatureType request failed for layer 'topp:states'. Ensure WFS is enabled and the layer name is correct."
+  );
+});
+
+test("getLayerAttributes ImageWMS XML Schema Error", async () => {
+  const mockInfoResults =
+    '<?xml version="1.0" encoding="UTF-8"?><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:gml="http://www.opengis.net/gml/3.2" xmlns:topp="http://www.openplans.org/topp" xmlns:wfs="http://www.opengis.net/wfs/2.0" elementFormDefault="qualified" targetNamespace="http://www.openplans.org/topp"></xsd:schema>';
+
+  const mockFetch = jest.fn();
+  global.fetch = jest.fn(() =>
+    Promise.resolve({
+      text: mockFetch,
+    })
+  );
+  mockFetch.mockResolvedValueOnce(mockInfoResults);
+
+  const sourceProps = layerConfigImageWMS.configuration.props.source;
+  const layerName = layerConfigImageWMS.configuration.props.name;
+
+  await expect(getLayerAttributes(sourceProps, layerName)).rejects.toThrow(
+    "Unexpected DescribeFeatureType format for layer 'topp:states'."
+  );
+});
+
+test("getLayerAttributes ImageWMS XML Bad Fields", async () => {
+  const mockInfoResults =
+    '<?xml version="1.0" encoding="UTF-8"?><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:gml="http://www.opengis.net/gml/3.2" xmlns:topp="http://www.openplans.org/topp" xmlns:wfs="http://www.opengis.net/wfs/2.0" elementFormDefault="qualified" targetNamespace="http://www.openplans.org/topp"><xsd:import namespace="http://www.opengis.net/gml/3.2" schemaLocation="https://ahocevar.com/geoserver/schemas/gml/3.2.1/gml.xsd"/><xsd:complexType name="statesType"><xsd:complexContent></xsd:complexContent></xsd:complexType><xsd:element name="states" substitutionGroup="gml:AbstractFeature" type="topp:statesType"/></xsd:schema>';
+
+  const mockFetch = jest.fn();
+  global.fetch = jest.fn(() =>
+    Promise.resolve({
+      text: mockFetch,
+    })
+  );
+  mockFetch.mockResolvedValueOnce(mockInfoResults);
+
+  const sourceProps = layerConfigImageWMS.configuration.props.source;
+  const layerName = layerConfigImageWMS.configuration.props.name;
+  const attributes = await getLayerAttributes(sourceProps, layerName);
+
+  expect(attributes).toStrictEqual({});
+});
+
+test("getLayerAttributes ImageWMS No complexType Type and No element Name", async () => {
+  const mockInfoResults =
+    '<?xml version="1.0" encoding="UTF-8"?><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:gml="http://www.opengis.net/gml/3.2" xmlns:topp="http://www.openplans.org/topp" xmlns:wfs="http://www.opengis.net/wfs/2.0" elementFormDefault="qualified" targetNamespace="http://www.openplans.org/topp"><xsd:import namespace="http://www.opengis.net/gml/3.2" schemaLocation="https://ahocevar.com/geoserver/schemas/gml/3.2.1/gml.xsd"/><xsd:complexType><xsd:complexContent><xsd:extension base="gml:AbstractFeatureType"><xsd:sequence><xsd:element maxOccurs="1" minOccurs="0" name="the_geom" nillable="true" type="gml:MultiSurfacePropertyType"/><xsd:element maxOccurs="1" minOccurs="0" nillable="true" type="xsd:string"/></xsd:sequence></xsd:extension></xsd:complexContent></xsd:complexType><xsd:element name="states" substitutionGroup="gml:AbstractFeature" type="topp:statesType"/></xsd:schema>';
+
+  const mockFetch = jest.fn();
+  global.fetch = jest.fn(() =>
+    Promise.resolve({
+      text: mockFetch,
+    })
+  );
+  mockFetch.mockResolvedValueOnce(mockInfoResults);
+
+  const sourceProps = layerConfigImageWMS.configuration.props.source;
+  const layerName = layerConfigImageWMS.configuration.props.name;
+  const attributes = await getLayerAttributes(sourceProps, layerName);
+
+  expect(attributes).toStrictEqual({
+    "topp:states": [{ name: "the_geom", alias: "the_geom" }],
+  });
+});
+
+test("getLayerAttributes ImageWMS no layers", async () => {
+  const sourceProps = layerConfigImageWMS.configuration.props.source;
+  sourceProps.props.params.LAYERS = undefined;
+  const layerName = layerConfigImageWMS.configuration.props.name;
+
+  await expect(getLayerAttributes(sourceProps, layerName)).rejects.toThrow(
+    "No layers specified in source parameters."
   );
 });
 
