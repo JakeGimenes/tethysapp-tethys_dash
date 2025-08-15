@@ -49,6 +49,7 @@ export async function getVisualization({
   metadataString,
   variableInputValues,
   dashboardView,
+  vizLoadingIcon = true,
 }) {
   const metadata = JSON.parse(metadataString);
   const emptyVariableWarnings = checkForEmptyVariableInputs({
@@ -91,7 +92,7 @@ export async function getVisualization({
     return;
   }
 
-  if (sourceType !== "map") {
+  if (vizLoadingIcon && sourceType !== "map") {
     setVizType("loader");
   }
 
@@ -169,6 +170,7 @@ export async function getVisualization({
         variable_name: responseData.variable_name,
         initial_value: responseData.initial_value,
         variable_options_source: responseData.variable_options_source,
+        metadata: responseData.metadata,
       });
     } else {
       setVizType("vizWarning");
@@ -181,7 +183,10 @@ export async function getVisualization({
   } else {
     setVizType("vizError");
     setVizData({
-      error: metadata.customMessaging?.error ?? "Failed to retrieve data",
+      error:
+        metadata.customMessaging?.error ??
+        apiResponse?.data?.error ??
+        "Failed to retrieve data",
     });
   }
 }
@@ -226,6 +231,11 @@ export const nonDropDownVariableInputTypes = [
   "checkbox",
   "date",
   "date-hour",
+  {
+    value: "slider",
+    label: "slider",
+    sub_args: { metadata: "custom-SliderMetadata" },
+  },
 ];
 
 export const baseMapLayers = [

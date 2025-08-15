@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useContext } from "react";
+import { useCallback, useEffect, useState, useContext, memo } from "react";
 import PropTypes from "prop-types";
 import styled from "styled-components";
 import DataInput from "components/inputs/DataInput";
@@ -13,6 +13,8 @@ import {
 } from "components/visualizations/utilities";
 import TooltipButton from "components/buttons/TooltipButton";
 import { BsArrowClockwise } from "react-icons/bs";
+import Slider from "components/inputs/Slider";
+import { parseDateMath } from "components/inputs/DatePicker";
 
 const StyledDiv = styled.div`
   padding: 1rem;
@@ -36,6 +38,7 @@ const VariableInput = ({
   variable_name,
   initial_value,
   variable_options_source,
+  metadata,
   onChange,
 }) => {
   const [value, setValue] = useState("");
@@ -50,12 +53,22 @@ const VariableInput = ({
   const updateVariableInputs = useCallback(
     (new_value) => {
       if (new_value || new_value === false || new_value === 0) {
+        if (["date", "date-hour"].includes(variable_options_source)) {
+          const parsedDate = parseDateMath({
+            value: new_value,
+            type: variable_options_source,
+          });
+          if (parsedDate) {
+            new_value = parsedDate;
+          }
+        }
         setVariableInputValues((prevVariableInputValues) => ({
           ...prevVariableInputValues,
           [variable_name]: new_value,
         }));
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [variable_name, setVariableInputValues]
   );
 
@@ -66,7 +79,11 @@ const VariableInput = ({
 
       // Sets the type to the variable_options_source if not a dropdown
       if (
-        nonDropDownVariableInputTypes.includes(variable_options_source) ||
+        nonDropDownVariableInputTypes.some(
+          (type) =>
+            (typeof type === "string" && type === variable_options_source) ||
+            (typeof type === "object" && type.value === variable_options_source)
+        ) ||
         Array.isArray(variable_options_source)
       ) {
         setType(variable_options_source);
@@ -115,20 +132,29 @@ const VariableInput = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [variableInputValues]);
 
-  function handleInputChange(e) {
-    let inputValue = e;
-    if (variable_options_source === "number") {
-      inputValue = parseInt(e);
-    }
-    setValue(inputValue);
-    onChange(inputValue);
-
-    if (Array.isArray(type) || type === "checkbox") {
-      if (!inDataViewerMode) {
-        updateVariableInputs(e.value ?? e);
+  const handleInputChange = useCallback(
+    (e) => {
+      let inputValue = e;
+      if (variable_options_source === "number") {
+        inputValue = parseInt(e);
       }
-    }
-  }
+      setValue(inputValue);
+      onChange(inputValue);
+
+      if (Array.isArray(type) || type === "checkbox" || type === "slider") {
+        if (!inDataViewerMode) {
+          updateVariableInputs(e.value ?? e);
+        }
+      }
+    },
+    [
+      variable_options_source,
+      onChange,
+      type,
+      inDataViewerMode,
+      updateVariableInputs,
+    ]
+  );
 
   function handleInputRefresh() {
     if (!inDataViewerMode) {
@@ -143,6 +169,30 @@ const VariableInput = ({
           label={label}
           type={type}
           value={value}
+          onChange={handleInputChange}
+        />
+      </StyledDiv>
+    );
+  } else if (type === "slider") {
+    const requiredKeys = ["step", "min", "max", "initialValue", "dataType"];
+
+    if (!metadata || requiredKeys.some((key) => metadata?.[key] == null)) {
+      return <div data-testid="slider-missing-metadata" />;
+    }
+
+    return (
+      <StyledDiv>
+        <Slider
+          label={label}
+          step={metadata.step}
+          min={metadata.min}
+          max={metadata.max}
+          initialValue={metadata.initialValue}
+          initialRange={metadata.initialRange}
+          rangeMode={metadata.rangeMode}
+          outputFormat={metadata.outputFormat}
+          dataType={metadata.dataType}
+          dateTimeDelta={metadata?.dateTimeDelta}
           onChange={handleInputChange}
         />
       </StyledDiv>
@@ -164,6 +214,7 @@ const VariableInput = ({
               tooltipText={"Refresh variable input"}
               variant={"warning"}
               style={{ height: "100%" }}
+              aria-label={"Refresh variable input"}
             >
               <BsArrowClockwise />
             </TooltipButton>
@@ -183,6 +234,27 @@ VariableInput.propTypes = {
   variable_name: PropTypes.string,
   variable_options_source: PropTypes.string, // This is where the name of the source comes in like in the dropdown
   onChange: PropTypes.func,
+  metadata: PropTypes.shape({
+    min: PropTypes.oneOfType([
+      PropTypes.number,
+      PropTypes.string,
+      PropTypes.instanceOf(Date),
+    ]),
+    max: PropTypes.oneOfType([
+      PropTypes.number,
+      PropTypes.string,
+      PropTypes.instanceOf(Date),
+    ]),
+    step: PropTypes.number,
+    dataType: PropTypes.string,
+    initialValue: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    initialRange: PropTypes.arrayOf(
+      PropTypes.oneOfType([PropTypes.number, PropTypes.string])
+    ),
+    rangeMode: PropTypes.string,
+    outputFormat: PropTypes.string,
+    dateTimeDelta: PropTypes.string, // For slider metadata
+  }),
 };
 
-export default VariableInput;
+export default memo(VariableInput);

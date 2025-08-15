@@ -65,6 +65,7 @@ export const Visualization = memo(
             variable_name={vizData.variable_name}
             initial_value={vizData.initial_value}
             variable_options_source={vizData.variable_options_source}
+            metadata={vizData.metadata}
             onChange={vizData.onChange ?? (() => {})}
           />
         );
@@ -166,6 +167,7 @@ const BaseVisualization = ({ source, argsString, metadataString }) => {
         variable_name: args.variable_name,
         initial_value: args.initial_value,
         variable_options_source: args.variable_options_source,
+        metadata: args["variable_options_source.metadata"],
       });
     } else {
       setVariableDependentVisualizations({});
@@ -241,6 +243,11 @@ const BaseVisualization = ({ source, argsString, metadataString }) => {
         metadataString,
         variableInputValues,
         dashboardView: true,
+        vizLoadingIcon: findSelectOptionByValue(
+          visualizations,
+          source,
+          "source"
+        )?.loading_icon,
       });
     }
   }

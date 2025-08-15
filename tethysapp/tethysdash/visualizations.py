@@ -32,6 +32,7 @@ def get_available_visualizations():
             "type": plugin.visualization_type,
             "tags": getattr(plugin, "visualization_tags", []),
             "description": getattr(plugin, "visualization_description", ""),
+            "loading_icon": getattr(plugin, "visualization_loading_icon", True),
         }
 
         existing_group = [
