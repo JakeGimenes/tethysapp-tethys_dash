@@ -1,22 +1,16 @@
 import Loader from "components/loader/AppLoader";
-import { screen, render, waitFor } from "@testing-library/react";
+import { screen, render } from "@testing-library/react";
 import { useContext } from "react";
 import {
   AppContext,
   AvailableDashboardsContext,
+  PermissionGroupContext,
 } from "components/contexts/Contexts";
 import { mockedDashboards } from "__tests__/utilities/constants";
 import { server } from "__tests__/utilities/server";
 import { rest } from "msw";
 import { baseMapLayers } from "components/visualizations/utilities";
 import ErrorBoundary from "components/error/ErrorBoundary";
-import userEvent from "@testing-library/user-event";
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-jest.setTimeout(30000);
 
 const TestingComponent = () => {
   const {
@@ -28,6 +22,7 @@ const TestingComponent = () => {
     visualizationArgs,
     mapLayerTemplates,
   } = useContext(AppContext);
+  const { permissionGroups } = useContext(PermissionGroupContext);
   const { availableDashboards } = useContext(AvailableDashboardsContext);
 
   return (
@@ -44,6 +39,7 @@ const TestingComponent = () => {
       <p data-testid="availableDashboards">
         {JSON.stringify(availableDashboards)}
       </p>
+      <p data-testid="permissionGroups">{JSON.stringify(permissionGroups)}</p>
     </>
   );
 };
@@ -135,8 +131,8 @@ test("AppLoader", async () => {
     JSON.stringify([
       "route-home",
       "dashboard-not-found",
-      "route-user-editable",
-      "route-public-noneditable",
+      "route-user-uuid",
+      "route-public-uuid",
     ])
   );
 
@@ -268,231 +264,12 @@ test("AppLoader", async () => {
   );
 
   expect(await screen.findByTestId("availableDashboards")).toHaveTextContent(
-    JSON.stringify(mockedDashboards)
-  );
-});
-
-test("AppLoader, public session and continue", async () => {
-  server.use(
-    rest.get("http://api.test/api/session/", (req, res, ctx) => {
-      return res(
-        ctx.status(401),
-        ctx.json({ error: "Internal Server Error" }),
-        ctx.set("Content-Type", "application/json")
-      );
-    }),
-    rest.get("http://api.test/apps/tethysdash/dashboards/", (req, res, ctx) => {
-      return res(
-        ctx.status(200),
-        ctx.json({ user: [], public: mockedDashboards.public }),
-        ctx.set("Content-Type", "application/json")
-      );
-    }),
-    rest.get("http://api.test/apps/tethysdash/ping/", (req, res, ctx) => {
-      return res(
-        ctx.status(200),
-        ctx.json({
-          status: 2,
-          EXPIRE_AFTER: 0,
-          WARN_AFTER: 0,
-        }),
-        ctx.set("Content-Type", "application/json")
-      );
-    })
+    JSON.stringify(mockedDashboards.dashboards)
   );
 
-  delete window.location; // Remove existing location object
-  window.location = { assign: jest.fn() }; // Mock location.assign
-
-  render(
-    <Loader>
-      <TestingComponent />
-    </Loader>
+  expect(await screen.findByTestId("permissionGroups")).toHaveTextContent(
+    JSON.stringify(mockedDashboards.permission_groups)
   );
-
-  expect(
-    await screen.findByText(
-      "You are not signed in. Sign in to create and update dashboards."
-    )
-  ).toBeInTheDocument();
-
-  expect(
-    await screen.findByText(
-      "If you'd like to continue, you will only have access to public dashboards"
-    )
-  ).toBeInTheDocument();
-
-  const continueButton = screen.getByRole("button", {
-    name: "Proceed Without Signing in",
-  });
-  await userEvent.click(continueButton);
-
-  // This component should only redirect when the user clicks the "Sign In" button
-  expect(window.location.assign).toHaveBeenCalledTimes(0);
-
-  expect(await screen.findByTestId("tethysApp")).toHaveTextContent(
-    JSON.stringify({
-      title: "TethysDash",
-      description: "",
-      tags: "",
-      package: "tethysdash",
-      urlNamespace: "tethysdash",
-      color: "",
-      icon: "/static/tethysdash/images/tethys_dash.png",
-      exitUrl: "/apps/",
-      rootUrl: "/apps/tethysdash/",
-      settingsUrl: "/admin/tethys_apps/tethysapp/999/change/",
-    })
-  );
-
-  expect(await screen.findByTestId("user")).toHaveTextContent(
-    JSON.stringify({
-      username: null,
-      firstName: null,
-      lastName: null,
-      email: null,
-      isAuthenticated: true,
-      isStaff: false,
-    })
-  );
-
-  expect(await screen.findByTestId("csrf")).toHaveTextContent("");
-
-  expect(await screen.findByTestId("routes")).toHaveTextContent(
-    JSON.stringify([
-      "route-home",
-      "dashboard-not-found",
-      "route-public-noneditable",
-    ])
-  );
-
-  expect(await screen.findByTestId("visualizations")).toHaveTextContent([]);
-
-  expect(await screen.findByTestId("visualizationArgs")).toHaveTextContent([]);
-
-  expect(await screen.findByTestId("availableDashboards")).toHaveTextContent(
-    JSON.stringify({ user: [], public: mockedDashboards.public })
-  );
-});
-
-test("AppLoader, public session and sign in", async () => {
-  server.use(
-    rest.get("http://api.test/api/session/", (req, res, ctx) => {
-      return res(
-        ctx.status(401),
-        ctx.json({ error: "Internal Server Error" }),
-        ctx.set("Content-Type", "application/json")
-      );
-    })
-  );
-  const localStorageMock = (function () {
-    let store = {};
-
-    return {
-      getItem(key) {
-        return store[key] || null;
-      },
-
-      setItem(key, value) {
-        store[key] = value.toString();
-      },
-
-      removeItem(key) {
-        delete store[key];
-      },
-
-      clear() {
-        store = {};
-      },
-    };
-  })();
-
-  Object.defineProperty(window, "localStorage", { value: localStorageMock });
-
-  delete window.location; // Remove existing location object
-  window.location = { assign: jest.fn() }; // Mock location.assign
-
-  render(
-    <Loader>
-      <TestingComponent />
-    </Loader>
-  );
-
-  expect(
-    await screen.findByText(
-      "You are not signed in. Sign in to create and update dashboards."
-    )
-  ).toBeInTheDocument();
-
-  expect(
-    await screen.findByText(
-      "If you'd like to continue, you will only have access to public dashboards"
-    )
-  ).toBeInTheDocument();
-
-  expect(localStorage.getItem("dontShowPublicLoginOnStart")).toEqual(null);
-  const dontShowOnStartupInput = screen.getByLabelText(
-    "dont-show-public-user-on-startup"
-  );
-  await userEvent.click(dontShowOnStartupInput);
-  expect(dontShowOnStartupInput).toBeChecked();
-  expect(localStorage.getItem("dontShowPublicLoginOnStart")).toEqual("true");
-
-  const signInButton = screen.getByRole("button", { name: "Sign in" });
-  await userEvent.click(signInButton);
-
-  expect(window.location.assign).toHaveBeenCalledWith(
-    "http://api.test/accounts/login?next=undefined"
-  );
-  localStorage.clear();
-});
-
-test("AppLoader, public session and no sign in prompt", async () => {
-  server.use(
-    rest.get("http://api.test/api/session/", (req, res, ctx) => {
-      return res(
-        ctx.status(401),
-        ctx.json({ error: "Internal Server Error" }),
-        ctx.set("Content-Type", "application/json")
-      );
-    })
-  );
-  const localStorageMock = (function () {
-    let store = { dontShowPublicLoginOnStart: true };
-
-    return {
-      getItem(key) {
-        return store[key] || null;
-      },
-
-      setItem(key, value) {
-        store[key] = value.toString();
-      },
-
-      removeItem(key) {
-        delete store[key];
-      },
-
-      clear() {
-        store = {};
-      },
-    };
-  })();
-
-  Object.defineProperty(window, "localStorage", { value: localStorageMock });
-
-  render(
-    <Loader>
-      <TestingComponent />
-    </Loader>
-  );
-
-  expect(
-    screen.queryByText(
-      "You are not signed in. Sign in to create and update dashboards."
-    )
-  ).not.toBeInTheDocument();
-  localStorage.clear();
 });
 
 test("AppLoader, load session error", async () => {
@@ -544,191 +321,4 @@ test("AppLoader, load visualization error", async () => {
   expect(
     await screen.findByText("AxiosError: Request failed with status code 500")
   ).toBeInTheDocument();
-});
-
-test("AppLoader, check if user signed in", async () => {
-  const user = userEvent.setup();
-
-  const availableVisualizations = [
-    {
-      label: "Other",
-      options: [
-        {
-          source: "plugin_source_checkbox",
-          value: "plugin_value_checkbox",
-          label: "plugin_label_checkbox",
-          args: { plugin_arg: "checkbox" },
-        },
-      ],
-    },
-  ];
-  server.use(
-    rest.get(
-      "http://api.test/apps/tethysdash/visualizations/",
-      (req, res, ctx) => {
-        return res(
-          ctx.status(200),
-          ctx.json({
-            visualizations: availableVisualizations,
-          }),
-          ctx.set("Content-Type", "application/json")
-        );
-      }
-    ),
-    rest.get("http://api.test/apps/tethysdash/ping/", (req, res, ctx) => {
-      return res(
-        ctx.status(200),
-        ctx.json({
-          status: 1,
-          EXPIRE_AFTER: 10,
-          WARN_AFTER: 3,
-        }),
-        ctx.set("Content-Type", "application/json")
-      );
-    })
-  );
-
-  const { rerender } = render(
-    <Loader>
-      <TestingComponent />
-    </Loader>
-  );
-
-  expect(screen.queryByText("Are you still here?")).not.toBeInTheDocument();
-
-  // This is 6 seconds to match with the test.env settings. If you update this test,
-  // make sure to update the "delays signing out if activity is detected" test and vice versa
-  await sleep(6000);
-
-  rerender(
-    <Loader>
-      <TestingComponent />
-    </Loader>
-  );
-  expect(screen.getByText("Are you still here?")).toBeInTheDocument();
-
-  const staySignedInButton = screen.getByRole("button", {
-    name: "Stay Signed In",
-  });
-  expect(staySignedInButton).toBeInTheDocument();
-
-  await user.click(staySignedInButton);
-  rerender(
-    <Loader>
-      <TestingComponent />
-    </Loader>
-  );
-  expect(screen.queryByText("Are you still here?")).not.toBeInTheDocument();
-  await sleep(6000);
-
-  expect(screen.getByText("Are you still here?")).toBeInTheDocument();
-  await sleep(5000);
-
-  expect(window.location.assign).toHaveBeenCalledTimes(1);
-});
-
-test("AppLoader, user signed out", async () => {
-  server.use(
-    rest.get("http://api.test/apps/tethysdash/ping/", (req, res, ctx) => {
-      return res(
-        ctx.status(200),
-        ctx.json({
-          status: -2,
-          EXPIRE_AFTER: 10,
-          WARN_AFTER: 3,
-        }),
-        ctx.set("Content-Type", "application/json")
-      );
-    })
-  );
-
-  render(
-    <Loader>
-      <TestingComponent />
-    </Loader>
-  );
-
-  expect(screen.queryByText("Are you still here?")).not.toBeInTheDocument();
-
-  await waitFor(() => {
-    expect(window.location.assign).toHaveBeenCalledWith(
-      "http://api.test/accounts/login?next=/"
-    );
-  });
-});
-
-test("AppLoader, failed ping", async () => {
-  server.use(
-    rest.get("http://api.test/apps/tethysdash/ping/", (req, res, ctx) => {
-      return res(
-        ctx.status(500),
-        ctx.json({ error: "Internal Server Error" }),
-        ctx.set("Content-Type", "application/json")
-      );
-    })
-  );
-
-  render(
-    <Loader>
-      <TestingComponent />
-    </Loader>
-  );
-
-  expect(screen.queryByText("Are you still here?")).not.toBeInTheDocument();
-});
-
-test("AppLoader, delays signing out if activity is detected", async () => {
-  const user = userEvent.setup();
-
-  const availableVisualizations = [
-    {
-      label: "Other",
-      options: [
-        {
-          source: "plugin_source_checkbox",
-          value: "plugin_value_checkbox",
-          label: "plugin_label_checkbox",
-          args: { plugin_arg: "checkbox" },
-        },
-      ],
-    },
-  ];
-  server.use(
-    rest.get(
-      "http://api.test/apps/tethysdash/visualizations/",
-      (req, res, ctx) => {
-        return res(
-          ctx.status(200),
-          ctx.json({
-            visualizations: availableVisualizations,
-          }),
-          ctx.set("Content-Type", "application/json")
-        );
-      }
-    )
-  );
-
-  const { rerender } = render(
-    <Loader>
-      <TestingComponent />
-    </Loader>
-  );
-
-  delete window.location; // Remove existing location object
-  window.location = { assign: jest.fn() }; // Mock location.assign
-
-  expect(screen.queryByText("Are you still here?")).not.toBeInTheDocument();
-  await sleep(3000);
-
-  // Splits the original 6 seconds by an activity.If you update this test,
-  // make sure to update the "check if user signed in" test and vice versa
-  await user.click(await screen.findByTestId("routes"));
-
-  await sleep(3000);
-  rerender(
-    <Loader>
-      <TestingComponent />
-    </Loader>
-  );
-  expect(screen.queryByText("Are you still here?")).not.toBeInTheDocument();
 });

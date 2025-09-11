@@ -2,6 +2,7 @@ import { rest } from "msw";
 import {
   mockedVisualizations,
   mockedDashboards,
+  userDashboard,
 } from "__tests__/utilities/constants";
 
 const handlers = [
@@ -75,7 +76,7 @@ const handlers = [
     (req, res, ctx) => {
       return res(
         ctx.status(200),
-        ctx.json({ success: true, dashboard: mockedDashboards.user[0] }),
+        ctx.json({ success: true, dashboard: userDashboard }),
         ctx.set("Content-Type", "application/json")
       );
     }

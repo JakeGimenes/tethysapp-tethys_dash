@@ -14,7 +14,11 @@ import { AppTourContext } from "components/contexts/Contexts";
 import {
   mockedDashboards,
   mockedTextVariable,
+  publicDashboard,
+  userDashboard,
 } from "__tests__/utilities/constants";
+import { server } from "__tests__/utilities/server";
+import { rest } from "msw";
 
 jest.mock("html2canvas");
 
@@ -22,6 +26,11 @@ jest.mock("react-router-dom", () => ({
   ...jest.requireActual("react-router-dom"),
   useNavigate: jest.fn(),
 }));
+
+afterEach(() => {
+  server.resetHandlers();
+  jest.restoreAllMocks();
+});
 
 window.matchMedia =
   window.matchMedia ||
@@ -142,7 +151,8 @@ test("LandingPageHeader, import dashboard", async () => {
     description: "this is a new description",
   };
   const mockAddDashboard = jest.fn();
-  appAPI.addDashboard = mockAddDashboard;
+  jest.spyOn(appAPI, "addDashboard").mockImplementation(mockAddDashboard);
+
   mockAddDashboard.mockResolvedValue({
     success: true,
     new_dashboard: {
@@ -151,7 +161,7 @@ test("LandingPageHeader, import dashboard", async () => {
       description: "this is a new description",
       notes: "",
       editable: true,
-      accessGroups: [],
+      publicDashboard: false,
       gridItems: [],
     },
   });
@@ -248,6 +258,24 @@ test("LandingPageHeader, public user and not show info", async () => {
   expect(screen.getByLabelText("appExitButton")).toBeInTheDocument();
 });
 
+test("LandingPageHeader, permission group modal", async () => {
+  render(
+    createLoadedComponent({
+      children: (
+        <MemoryRouter initialEntries={["/"]}>
+          <LayoutAlertContextProvider>
+            <LandingPageHeader />
+          </LayoutAlertContextProvider>
+        </MemoryRouter>
+      ),
+    })
+  );
+
+  const manageGroupsButton = await screen.findByLabelText("manageGroupsButton");
+  await userEvent.click(manageGroupsButton);
+  expect(await screen.findByText("Permission Groups")).toBeInTheDocument();
+});
+
 test("DashboardHeader, user and editable", async () => {
   render(
     createLoadedComponent({
@@ -258,9 +286,6 @@ test("DashboardHeader, user and editable", async () => {
           </LayoutAlertContextProvider>
         </MemoryRouter>
       ),
-      options: {
-        editableDashboard: true,
-      },
     })
   );
 
@@ -286,7 +311,7 @@ test("DashboardHeader, user and not editable", async () => {
         </MemoryRouter>
       ),
       options: {
-        editableDashboard: false,
+        initialDashboard: publicDashboard,
       },
     })
   );
@@ -344,7 +369,6 @@ test("DashboardHeader, show info", async () => {
       ),
       options: {
         user: { isAuthenticated: true, isStaff: false },
-        editableDashboard: true,
       },
     })
   );
@@ -356,7 +380,7 @@ test("DashboardHeader, show info", async () => {
 
 test("DashboardHeader, import gridItem", async () => {
   const updatedMockedDashboards = JSON.parse(JSON.stringify(mockedDashboards));
-  const mockedDashboard = updatedMockedDashboards.user[0];
+  const mockedDashboard = updatedMockedDashboards.dashboards[0];
   mockedDashboard.gridItems = [
     {
       i: "1",
@@ -379,7 +403,7 @@ test("DashboardHeader, import gridItem", async () => {
       id: 1,
       name: "some dashboard updated",
       description: "some description",
-      accessGroups: ["public"],
+      publicDashboard: true,
       image: "some_image.png",
       gridItems: [
         {
@@ -398,7 +422,7 @@ test("DashboardHeader, import gridItem", async () => {
       ],
     },
   });
-  appAPI.updateDashboard = mockUpdateDashboard;
+  jest.spyOn(appAPI, "updateDashboard").mockImplementation(mockUpdateDashboard);
 
   render(
     createLoadedComponent({
@@ -412,7 +436,6 @@ test("DashboardHeader, import gridItem", async () => {
       ),
       options: {
         user: { isAuthenticated: true, isStaff: false },
-        editableDashboard: true,
         dashboards: updatedMockedDashboards,
       },
     })
@@ -442,7 +465,6 @@ test("DashboardHeader, import gridItem", async () => {
           initial_value: "",
           variable_name: "Test Variable",
           variable_options_source: "text",
-          variable_input_type: "text",
         },
         metadata_string: {
           refreshRate: 0,
@@ -479,7 +501,6 @@ test("DashboardHeader, import gridItem", async () => {
               initial_value: "",
               variable_name: "Test Variable",
               variable_options_source: "text",
-              variable_input_type: "text",
             }),
             metadata_string: JSON.stringify({
               refreshRate: 0,
@@ -520,7 +541,6 @@ test("DashboardHeader, signin", async () => {
       ),
       options: {
         user: { username: null, isAuthenticated: true, isStaff: false },
-        editableDashboard: true,
       },
     })
   );
@@ -543,14 +563,18 @@ test("DashboardHeader, not editable, no show info", async () => {
   render(
     createLoadedComponent({
       children: (
-        <MemoryRouter initialEntries={["/dashboard/user/editable"]}>
+        <MemoryRouter initialEntries={["/dashboard/123456789"]}>
           <LayoutAlertContextProvider>
             <DashboardHeader />
           </LayoutAlertContextProvider>
         </MemoryRouter>
       ),
       options: {
-        user: { isAuthenticated: true, isStaff: false },
+        user: {
+          isAuthenticated: true,
+          isStaff: false,
+        },
+        initialDashboard: publicDashboard,
       },
     })
   );
@@ -562,6 +586,9 @@ test("DashboardHeader, not editable, no show info", async () => {
     await screen.findByLabelText("dashboardSettingButton")
   ).toBeInTheDocument();
   expect(screen.queryByLabelText("appInfoButton")).not.toBeInTheDocument();
+  expect(
+    screen.queryByLabelText("importDashboardButton")
+  ).not.toBeInTheDocument();
 });
 
 test("DashboardHeader, show settings", async () => {
@@ -577,7 +604,6 @@ test("DashboardHeader, show settings", async () => {
       ),
       options: {
         user: { isAuthenticated: true, isStaff: false },
-        editableDashboard: true,
       },
     })
   );
@@ -610,7 +636,6 @@ test("DashboardHeader, show settings in App Tour", async () => {
       ),
       options: {
         user: { isAuthenticated: true, isStaff: false },
-        editableDashboard: true,
       },
     })
   );
@@ -637,7 +662,6 @@ test("DashboardHeader, editable, lock movement", async () => {
           <DisabledMovementPComponent />
         </MemoryRouter>
       ),
-      options: { editableDashboard: true },
     })
   );
 
@@ -646,7 +670,7 @@ test("DashboardHeader, editable, lock movement", async () => {
   ).toBeInTheDocument();
 
   const editButton = await screen.findByLabelText("editButton");
-  expect(await screen.findByText("editable")).toBeInTheDocument();
+  expect(await screen.findByText(userDashboard.name)).toBeInTheDocument();
   expect(editButton).toBeInTheDocument();
   expect(screen.getByLabelText("appInfoButton")).toBeInTheDocument();
   expect(screen.getByLabelText("dashboardSettingButton")).toBeInTheDocument();
@@ -682,6 +706,7 @@ test("DashboardHeader, not editable and return to landing page", async () => {
           </LayoutAlertContextProvider>
         </MemoryRouter>
       ),
+      options: { initialDashboard: publicDashboard },
     })
   );
 
@@ -689,7 +714,7 @@ test("DashboardHeader, not editable and return to landing page", async () => {
     "dashboardExitButton"
   );
   expect(dashboardExitButton).toBeInTheDocument();
-  expect(await screen.findByText("editable")).toBeInTheDocument();
+  expect(await screen.findByText(publicDashboard.name)).toBeInTheDocument();
   expect(screen.queryByLabelText("editButton")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("appInfoButton")).not.toBeInTheDocument();
   expect(screen.getByLabelText("dashboardSettingButton")).toBeInTheDocument();
@@ -717,7 +742,6 @@ test("DashboardHeader, editable, edit in app tour", async () => {
           </AppTourContext.Provider>
         </MemoryRouter>
       ),
-      options: { editableDashboard: true },
     })
   );
 
@@ -740,7 +764,6 @@ test("DashboardHeader, editable, edit and cancel", async () => {
           </LayoutAlertContextProvider>
         </MemoryRouter>
       ),
-      options: { editableDashboard: true },
     })
   );
 
@@ -749,7 +772,7 @@ test("DashboardHeader, editable, edit and cancel", async () => {
   ).toBeInTheDocument();
 
   const editButton = await screen.findByLabelText("editButton");
-  expect(await screen.findByText("editable")).toBeInTheDocument();
+  expect(await screen.findByText(userDashboard.name)).toBeInTheDocument();
   expect(editButton).toBeInTheDocument();
   expect(screen.getByLabelText("appInfoButton")).toBeInTheDocument();
   expect(screen.getByLabelText("dashboardSettingButton")).toBeInTheDocument();
@@ -785,7 +808,7 @@ test("DashboardHeader, editable, edit and cancel", async () => {
 
 test("DashboardHeader, editable, edit and save", async () => {
   const updatedMockedDashboards = JSON.parse(JSON.stringify(mockedDashboards));
-  const mockedDashboard = updatedMockedDashboards.user[0];
+  const mockedDashboard = updatedMockedDashboards.dashboards[0];
   mockedDashboard.gridItems = [
     {
       i: "1",
@@ -825,68 +848,133 @@ test("DashboardHeader, editable, edit and save", async () => {
     },
   ];
 
-  const mockUpdateDashboard = jest.fn();
-  mockUpdateDashboard.mockResolvedValue({
-    success: true,
-    updated_dashboard: {
-      id: 1,
-      name: "some dashboard updated",
-      description: "some description",
-      accessGroups: ["public"],
-      image: "some_image.png",
-      gridItems: [
-        {
-          i: "4",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "",
-          args_string: "{}",
-          metadata_string: JSON.stringify({
-            refreshRate: 0,
+  const expectedRequestCall = {
+    gridItems: [
+      {
+        i: "4",
+        x: 0,
+        y: 0,
+        w: 20,
+        h: 20,
+        source: "",
+        args_string: "{}",
+        metadata_string: JSON.stringify({
+          refreshRate: 0,
+        }),
+      },
+      {
+        i: "1",
+        x: 0,
+        y: 20,
+        w: 20,
+        h: 20,
+        source: "",
+        args_string: "{}",
+        metadata_string: JSON.stringify({
+          refreshRate: 0,
+        }),
+      },
+      {
+        i: "3",
+        x: 0,
+        y: 40,
+        w: 20,
+        h: 20,
+        source: "",
+        args_string: "{}",
+        metadata_string: JSON.stringify({
+          refreshRate: 0,
+        }),
+      },
+      {
+        i: "2",
+        x: 0,
+        y: 60,
+        w: 20,
+        h: 20,
+        source: "",
+        args_string: "{}",
+        metadata_string: JSON.stringify({
+          refreshRate: 0,
+        }),
+      },
+    ],
+    id: 1,
+  };
+
+  server.use(
+    rest.post(
+      "http://api.test/apps/tethysdash/dashboards/update/",
+      async (req, res, ctx) => {
+        expect(await req.json()).toEqual(expectedRequestCall);
+        return res(
+          ctx.delay(200),
+          ctx.status(200),
+          ctx.json({
+            success: true,
+            updated_dashboard: {
+              id: 1,
+              name: "some dashboard updated",
+              description: "some description",
+              publicDashboard: true,
+              image: "some_image.png",
+              gridItems: [
+                {
+                  i: "4",
+                  x: 0,
+                  y: 0,
+                  w: 20,
+                  h: 20,
+                  source: "",
+                  args_string: "{}",
+                  metadata_string: JSON.stringify({
+                    refreshRate: 0,
+                  }),
+                },
+                {
+                  i: "1",
+                  x: 0,
+                  y: 0,
+                  w: 20,
+                  h: 20,
+                  source: "",
+                  args_string: "{}",
+                  metadata_string: JSON.stringify({
+                    refreshRate: 0,
+                  }),
+                },
+                {
+                  i: "3",
+                  x: 0,
+                  y: 0,
+                  w: 20,
+                  h: 20,
+                  source: "",
+                  args_string: "{}",
+                  metadata_string: JSON.stringify({
+                    refreshRate: 0,
+                  }),
+                },
+                {
+                  i: "2",
+                  x: 0,
+                  y: 0,
+                  w: 20,
+                  h: 20,
+                  source: "",
+                  args_string: "{}",
+                  metadata_string: JSON.stringify({
+                    refreshRate: 0,
+                  }),
+                },
+              ],
+            },
           }),
-        },
-        {
-          i: "1",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "",
-          args_string: "{}",
-          metadata_string: JSON.stringify({
-            refreshRate: 0,
-          }),
-        },
-        {
-          i: "3",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "",
-          args_string: "{}",
-          metadata_string: JSON.stringify({
-            refreshRate: 0,
-          }),
-        },
-        {
-          i: "2",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "",
-          args_string: "{}",
-          metadata_string: JSON.stringify({
-            refreshRate: 0,
-          }),
-        },
-      ],
-    },
-  });
-  appAPI.updateDashboard = mockUpdateDashboard;
+          ctx.set("Content-Type", "application/json")
+        );
+      }
+    )
+  );
 
   render(
     createLoadedComponent({
@@ -898,7 +986,7 @@ test("DashboardHeader, editable, edit and save", async () => {
           </LayoutAlertContextProvider>
         </MemoryRouter>
       ),
-      options: { editableDashboard: true, dashboards: updatedMockedDashboards },
+      options: { dashboards: updatedMockedDashboards },
     })
   );
 
@@ -907,7 +995,7 @@ test("DashboardHeader, editable, edit and save", async () => {
   ).toBeInTheDocument();
 
   const editButton = await screen.findByLabelText("editButton");
-  expect(await screen.findByText("editable")).toBeInTheDocument();
+  expect(await screen.findByText(userDashboard.name)).toBeInTheDocument();
   expect(editButton).toBeInTheDocument();
   expect(screen.getByLabelText("appInfoButton")).toBeInTheDocument();
   expect(screen.getByLabelText("dashboardSettingButton")).toBeInTheDocument();
@@ -922,69 +1010,12 @@ test("DashboardHeader, editable, edit and save", async () => {
   expect(screen.getByLabelText("Disable Movement Button")).toBeInTheDocument();
   expect(screen.queryByLabelText("editButton")).not.toBeInTheDocument();
 
+  expect(screen.queryByTestId("header-loading")).not.toBeInTheDocument();
+
   await userEvent.click(addGridItemButton);
-  userEvent.click(saveButton);
+  await userEvent.click(saveButton);
 
-  expect(await screen.findByTestId("Loading...")).toBeInTheDocument();
-
-  await waitFor(() => {
-    expect(mockUpdateDashboard).toHaveBeenCalledWith(
-      {
-        gridItems: [
-          {
-            i: "4",
-            x: 0,
-            y: 0,
-            w: 20,
-            h: 20,
-            source: "",
-            args_string: "{}",
-            metadata_string: JSON.stringify({
-              refreshRate: 0,
-            }),
-          },
-          {
-            i: "1",
-            x: 0,
-            y: 20,
-            w: 20,
-            h: 20,
-            source: "",
-            args_string: "{}",
-            metadata_string: JSON.stringify({
-              refreshRate: 0,
-            }),
-          },
-          {
-            i: "3",
-            x: 0,
-            y: 40,
-            w: 20,
-            h: 20,
-            source: "",
-            args_string: "{}",
-            metadata_string: JSON.stringify({
-              refreshRate: 0,
-            }),
-          },
-          {
-            i: "2",
-            x: 0,
-            y: 60,
-            w: 20,
-            h: 20,
-            source: "",
-            args_string: "{}",
-            metadata_string: JSON.stringify({
-              refreshRate: 0,
-            }),
-          },
-        ],
-        id: 1,
-      },
-      "SxICmOkFldX4o4YVaySdZq9sgn0eRd3Ih6uFtY8BgU5tMyZc7n90oJ4M2My5i7cy"
-    );
-  });
+  expect(await screen.findByTestId("header-loading")).toBeInTheDocument();
 
   expect(screen.queryByTestId("Loading...")).not.toBeInTheDocument();
 });
@@ -994,7 +1025,8 @@ test("DashboardHeader, editable, edit, save and error", async () => {
   mockUpdateDashboard.mockResolvedValue({
     success: false,
   });
-  appAPI.updateDashboard = mockUpdateDashboard;
+
+  jest.spyOn(appAPI, "updateDashboard").mockImplementation(mockUpdateDashboard);
 
   render(
     createLoadedComponent({
@@ -1007,7 +1039,6 @@ test("DashboardHeader, editable, edit, save and error", async () => {
           </LayoutAlertContextProvider>
         </MemoryRouter>
       ),
-      options: { editableDashboard: true },
     })
   );
 
@@ -1016,7 +1047,7 @@ test("DashboardHeader, editable, edit, save and error", async () => {
   ).toBeInTheDocument();
 
   const editButton = await screen.findByLabelText("editButton");
-  expect(await screen.findByText("editable")).toBeInTheDocument();
+  expect(await screen.findByText(userDashboard.name)).toBeInTheDocument();
   expect(editButton).toBeInTheDocument();
   expect(screen.getByLabelText("appInfoButton")).toBeInTheDocument();
   expect(screen.getByLabelText("dashboardSettingButton")).toBeInTheDocument();
@@ -1076,13 +1107,14 @@ test("DashboardHeader, editable, edit, save and error with unrestricted movement
   mockUpdateDashboard.mockResolvedValue({
     success: false,
   });
-  appAPI.updateDashboard = mockUpdateDashboard;
-  updatedMockedDashboards.user[0].unrestrictedPlacement = true;
+
+  jest.spyOn(appAPI, "updateDashboard").mockImplementation(mockUpdateDashboard);
+  updatedMockedDashboards.dashboards[0].unrestrictedPlacement = true;
 
   render(
     createLoadedComponent({
       children: (
-        <MemoryRouter initialEntries={["/dashboard/user/editable"]}>
+        <MemoryRouter initialEntries={["/dashboard/123456789"]}>
           <LayoutAlertContextProvider>
             <DashboardHeader />
             <DashboardLayoutAlerts />
@@ -1090,7 +1122,7 @@ test("DashboardHeader, editable, edit, save and error with unrestricted movement
           </LayoutAlertContextProvider>
         </MemoryRouter>
       ),
-      options: { editableDashboard: true, dashboards: updatedMockedDashboards },
+      options: { dashboards: updatedMockedDashboards },
     })
   );
 
@@ -1099,7 +1131,7 @@ test("DashboardHeader, editable, edit, save and error with unrestricted movement
   ).toBeInTheDocument();
 
   const editButton = await screen.findByLabelText("editButton");
-  expect(await screen.findByText("editable")).toBeInTheDocument();
+  expect(await screen.findByText(userDashboard.name)).toBeInTheDocument();
   expect(editButton).toBeInTheDocument();
   expect(screen.getByLabelText("appInfoButton")).toBeInTheDocument();
   expect(screen.getByLabelText("dashboardSettingButton")).toBeInTheDocument();

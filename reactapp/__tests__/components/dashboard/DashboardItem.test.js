@@ -12,7 +12,7 @@ import DashboardItem, {
   requiredGridItemKeys,
   minMapLayerStructure,
 } from "components/dashboard/DashboardItem";
-import { mockedDashboards } from "__tests__/utilities/constants";
+import { mockedDashboards, userDashboard } from "__tests__/utilities/constants";
 import { confirm } from "components/inputs/DeleteConfirmation";
 import createLoadedComponent, {
   ContextLayoutPComponent,
@@ -68,7 +68,7 @@ const exampleGeoJSON = {
 };
 
 test("Dashboard Item not editing", async () => {
-  const mockedDashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const mockedDashboard = JSON.parse(JSON.stringify(userDashboard));
   const gridItem = mockedDashboard.gridItems[0];
   mockedConfirm.mockResolvedValue(true);
 
@@ -87,8 +87,7 @@ test("Dashboard Item not editing", async () => {
         </>
       ),
       options: {
-        editableDashboard: true,
-        initialDashboard: mockedDashboards.user[0],
+        initialDashboard: userDashboard,
       },
     })
   );
@@ -107,7 +106,7 @@ test("Dashboard Item not editing", async () => {
 });
 
 test("Dashboard Item editing, no custom borders/css", async () => {
-  const mockedDashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const mockedDashboard = JSON.parse(JSON.stringify(userDashboard));
   const gridItem = mockedDashboard.gridItems[0];
   mockedConfirm.mockResolvedValue(true);
 
@@ -126,8 +125,7 @@ test("Dashboard Item editing, no custom borders/css", async () => {
         </>
       ),
       options: {
-        editableDashboard: true,
-        initialDashboard: mockedDashboards.user[0],
+        initialDashboard: userDashboard,
         inEditing: true,
       },
     })
@@ -154,7 +152,7 @@ test("Dashboard Item editing, no custom borders/css", async () => {
 });
 
 test("Dashboard Item editing, custom borders/css", async () => {
-  const mockedDashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const mockedDashboard = JSON.parse(JSON.stringify(userDashboard));
   const gridItem = mockedDashboard.gridItems[0];
   gridItem.metadata_string = JSON.stringify({
     border: {
@@ -181,8 +179,7 @@ test("Dashboard Item editing, custom borders/css", async () => {
         </>
       ),
       options: {
-        editableDashboard: true,
-        initialDashboard: mockedDashboards.user[0],
+        initialDashboard: userDashboard,
         inEditing: true,
       },
     })
@@ -217,7 +214,7 @@ test("Dashboard Item editing, custom borders/css", async () => {
 });
 
 test("Dashboard Item delete grid item", async () => {
-  const mockedDashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const mockedDashboard = JSON.parse(JSON.stringify(userDashboard));
   const gridItem = mockedDashboard.gridItems[0];
   mockedConfirm.mockResolvedValue(true);
 
@@ -237,8 +234,7 @@ test("Dashboard Item delete grid item", async () => {
         </>
       ),
       options: {
-        editableDashboard: true,
-        initialDashboard: mockedDashboards.user[0],
+        initialDashboard: userDashboard,
         inEditing: true,
       },
     })
@@ -252,22 +248,17 @@ test("Dashboard Item delete grid item", async () => {
   const deleteGridItemButton = await screen.findByText("Delete");
   await userEvent.click(deleteGridItemButton);
 
+  let expectedDashboard = JSON.parse(JSON.stringify(mockedDashboard));
+  expectedDashboard.gridItems = [];
+
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...expectedDashboard, editable: true })
   );
   expect(await screen.findByTestId("editing")).toHaveTextContent("editing");
 });
 
 test("Dashboard Item delete grid item cancel", async () => {
-  const mockedDashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const mockedDashboard = JSON.parse(JSON.stringify(userDashboard));
   const gridItem = mockedDashboard.gridItems[0];
   mockedConfirm.mockResolvedValue(false);
 
@@ -287,8 +278,7 @@ test("Dashboard Item delete grid item cancel", async () => {
         </>
       ),
       options: {
-        editableDashboard: true,
-        initialDashboard: mockedDashboards.user[0],
+        initialDashboard: userDashboard,
         inEditing: true,
       },
     })
@@ -302,35 +292,30 @@ test("Dashboard Item delete grid item cancel", async () => {
   const deleteGridItemButton = await screen.findByText("Delete");
   await userEvent.click(deleteGridItemButton);
 
+  let expectedDashboard = JSON.parse(JSON.stringify(mockedDashboard));
+  expectedDashboard.gridItems = [
+    {
+      i: "1",
+      x: 0,
+      y: 0,
+      w: 20,
+      h: 20,
+      source: "",
+      args_string: "{}",
+      metadata_string: JSON.stringify({
+        refreshRate: 0,
+      }),
+    },
+  ];
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [
-        {
-          i: "1",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "",
-          args_string: "{}",
-          metadata_string: JSON.stringify({
-            refreshRate: 0,
-          }),
-        },
-      ],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...expectedDashboard, editable: true })
   );
+
   expect(await screen.findByTestId("editing")).toHaveTextContent("editing");
 });
 
 test("Dashboard Item edit item", async () => {
-  const mockedDashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const mockedDashboard = JSON.parse(JSON.stringify(userDashboard));
   const gridItem = mockedDashboard.gridItems[0];
 
   render(
@@ -350,7 +335,6 @@ test("Dashboard Item edit item", async () => {
         </>
       ),
       options: {
-        editableDashboard: true,
         initialDashboard: mockedDashboard,
         inEditing: true,
       },
@@ -382,7 +366,7 @@ test("Dashboard Item edit item", async () => {
 
 test("Dashboard Item copy item", async () => {
   const updatedMockedDashboards = JSON.parse(JSON.stringify(mockedDashboards));
-  const mockedDashboard = updatedMockedDashboards.user[0];
+  const mockedDashboard = updatedMockedDashboards.dashboards[0];
   mockedDashboard.gridItems = [
     {
       i: "1",
@@ -440,7 +424,6 @@ test("Dashboard Item copy item", async () => {
         </>
       ),
       options: {
-        editableDashboard: true,
         dashboards: updatedMockedDashboards,
         initialDashboard: mockedDashboard,
         inEditing: true,
@@ -456,72 +439,66 @@ test("Dashboard Item copy item", async () => {
   const createCopyButton = await screen.findByText("Copy");
   await userEvent.click(createCopyButton);
 
+  let expectedDashboard = JSON.parse(JSON.stringify(mockedDashboard));
+  expectedDashboard.gridItems = [
+    {
+      i: "1",
+      x: 0,
+      y: 0,
+      w: 10,
+      h: 10,
+      source: "",
+      args_string: "{}",
+      metadata_string: JSON.stringify({
+        refreshRate: 0,
+      }),
+    },
+    {
+      i: "3",
+      x: 0,
+      y: 0,
+      w: 30,
+      h: 30,
+      source: "",
+      args_string: "{}",
+      metadata_string: JSON.stringify({
+        refreshRate: 0,
+      }),
+    },
+    {
+      i: "2",
+      x: 0,
+      y: 0,
+      w: 20,
+      h: 20,
+      source: "",
+      args_string: "{}",
+      metadata_string: JSON.stringify({
+        refreshRate: 0,
+      }),
+    },
+    {
+      i: "4",
+      x: 0,
+      y: 0,
+      w: 20,
+      h: 20,
+      source: "",
+      args_string: "{}",
+      metadata_string: JSON.stringify({
+        refreshRate: 0,
+      }),
+    },
+  ];
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [
-        {
-          i: "1",
-          x: 0,
-          y: 0,
-          w: 10,
-          h: 10,
-          source: "",
-          args_string: "{}",
-          metadata_string: JSON.stringify({
-            refreshRate: 0,
-          }),
-        },
-        {
-          i: "3",
-          x: 0,
-          y: 0,
-          w: 30,
-          h: 30,
-          source: "",
-          args_string: "{}",
-          metadata_string: JSON.stringify({
-            refreshRate: 0,
-          }),
-        },
-        {
-          i: "2",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "",
-          args_string: "{}",
-          metadata_string: JSON.stringify({
-            refreshRate: 0,
-          }),
-        },
-        {
-          i: "4",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "",
-          args_string: "{}",
-          metadata_string: JSON.stringify({
-            refreshRate: 0,
-          }),
-        },
-      ],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...expectedDashboard, editable: true })
   );
   expect(await screen.findByTestId("editing")).toHaveTextContent("editing");
 });
 
 test("Dashboard Item copy item variable input", async () => {
   const updatedMockedDashboards = JSON.parse(JSON.stringify(mockedDashboards));
-  const mockedDashboard = updatedMockedDashboards.user[0];
+  const mockedDashboard = updatedMockedDashboards.dashboards[0];
   mockedDashboard.gridItems = [
     {
       i: "1",
@@ -559,7 +536,6 @@ test("Dashboard Item copy item variable input", async () => {
         </>
       ),
       options: {
-        editableDashboard: true,
         dashboards: updatedMockedDashboards,
         initialDashboard: mockedDashboard,
         inEditing: true,
@@ -575,50 +551,45 @@ test("Dashboard Item copy item variable input", async () => {
   const createCopyButton = await screen.findByText("Copy");
   await userEvent.click(createCopyButton);
 
+  let expectedDashboard = JSON.parse(JSON.stringify(mockedDashboard));
+  expectedDashboard.gridItems = [
+    {
+      i: "1",
+      x: 0,
+      y: 0,
+      w: 20,
+      h: 20,
+      source: "Variable Input",
+      args_string: JSON.stringify({
+        variable_name: "test_var",
+        variable_options_source: "checkbox",
+        initial_value: true,
+      }),
+      metadata_string: JSON.stringify({
+        refreshRate: 0,
+      }),
+    },
+    {
+      i: "2",
+      x: 0,
+      y: 0,
+      w: 20,
+      h: 20,
+      source: "Variable Input",
+      args_string: JSON.stringify({
+        variable_name: "test_var_1",
+        variable_options_source: "checkbox",
+        initial_value: true,
+      }),
+      metadata_string: JSON.stringify({
+        refreshRate: 0,
+      }),
+    },
+  ];
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [
-        {
-          i: "1",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "Variable Input",
-          args_string: JSON.stringify({
-            variable_name: "test_var",
-            variable_options_source: "checkbox",
-            initial_value: true,
-          }),
-          metadata_string: JSON.stringify({
-            refreshRate: 0,
-          }),
-        },
-        {
-          i: "2",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "Variable Input",
-          args_string: JSON.stringify({
-            variable_name: "test_var_1",
-            variable_options_source: "checkbox",
-            initial_value: true,
-          }),
-          metadata_string: JSON.stringify({
-            refreshRate: 0,
-          }),
-        },
-      ],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...expectedDashboard, editable: true })
   );
+
   expect(await screen.findByTestId("editing")).toHaveTextContent("editing");
   expect(await screen.findByTestId("input-variables")).toHaveTextContent(
     JSON.stringify({
@@ -630,7 +601,7 @@ test("Dashboard Item copy item variable input", async () => {
 
 test("Dashboard Item copy item variable input already exists", async () => {
   const updatedMockedDashboards = JSON.parse(JSON.stringify(mockedDashboards));
-  const mockedDashboard = updatedMockedDashboards.user[0];
+  const mockedDashboard = updatedMockedDashboards.dashboards[0];
   mockedDashboard.gridItems = [
     {
       i: "1",
@@ -684,7 +655,6 @@ test("Dashboard Item copy item variable input already exists", async () => {
         </>
       ),
       options: {
-        editableDashboard: true,
         dashboards: updatedMockedDashboards,
         initialDashboard: mockedDashboard,
         inEditing: true,
@@ -700,66 +670,61 @@ test("Dashboard Item copy item variable input already exists", async () => {
   const createCopyButton = await screen.findByText("Copy");
   await userEvent.click(createCopyButton);
 
+  let expectedDashboard = JSON.parse(JSON.stringify(mockedDashboard));
+  expectedDashboard.gridItems = [
+    {
+      i: "1",
+      x: 0,
+      y: 0,
+      w: 20,
+      h: 20,
+      source: "Variable Input",
+      args_string: JSON.stringify({
+        variable_name: "test_var",
+        variable_options_source: "checkbox",
+        initial_value: true,
+      }),
+      metadata_string: JSON.stringify({
+        refreshRate: 0,
+      }),
+    },
+    {
+      i: "2",
+      x: 0,
+      y: 0,
+      w: 20,
+      h: 20,
+      source: "Variable Input",
+      args_string: JSON.stringify({
+        variable_name: "test_var_1",
+        variable_options_source: "checkbox",
+        initial_value: true,
+      }),
+      metadata_string: JSON.stringify({
+        refreshRate: 0,
+      }),
+    },
+    {
+      i: "3",
+      x: 0,
+      y: 0,
+      w: 20,
+      h: 20,
+      source: "Variable Input",
+      args_string: JSON.stringify({
+        variable_name: "test_var_2",
+        variable_options_source: "checkbox",
+        initial_value: true,
+      }),
+      metadata_string: JSON.stringify({
+        refreshRate: 0,
+      }),
+    },
+  ];
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [
-        {
-          i: "1",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "Variable Input",
-          args_string: JSON.stringify({
-            variable_name: "test_var",
-            variable_options_source: "checkbox",
-            initial_value: true,
-          }),
-          metadata_string: JSON.stringify({
-            refreshRate: 0,
-          }),
-        },
-        {
-          i: "2",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "Variable Input",
-          args_string: JSON.stringify({
-            variable_name: "test_var_1",
-            variable_options_source: "checkbox",
-            initial_value: true,
-          }),
-          metadata_string: JSON.stringify({
-            refreshRate: 0,
-          }),
-        },
-        {
-          i: "3",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "Variable Input",
-          args_string: JSON.stringify({
-            variable_name: "test_var_2",
-            variable_options_source: "checkbox",
-            initial_value: true,
-          }),
-          metadata_string: JSON.stringify({
-            refreshRate: 0,
-          }),
-        },
-      ],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...expectedDashboard, editable: true })
   );
+
   expect(await screen.findByTestId("editing")).toHaveTextContent("editing");
   expect(await screen.findByTestId("input-variables")).toHaveTextContent(
     JSON.stringify({
@@ -772,7 +737,7 @@ test("Dashboard Item copy item variable input already exists", async () => {
 
 test("Dashboard Item order options disabled for single grid item", async () => {
   const updatedMockedDashboards = JSON.parse(JSON.stringify(mockedDashboards));
-  const mockedDashboard = updatedMockedDashboards.user[0];
+  const mockedDashboard = updatedMockedDashboards.dashboards[0];
   mockedDashboard.unrestrictedPlacement = true;
   const gridItem = mockedDashboard.gridItems[0];
   gridItem.source = "Custom Image";
@@ -792,7 +757,6 @@ test("Dashboard Item order options disabled for single grid item", async () => {
         />
       ),
       options: {
-        editableDashboard: true,
         dashboards: updatedMockedDashboards,
         initialDashboard: mockedDashboard,
         inEditing: true,
@@ -828,7 +792,7 @@ test("Dashboard Item order options disabled for single grid item", async () => {
 
 test("Dashboard Item order forward", async () => {
   const updatedMockedDashboards = JSON.parse(JSON.stringify(mockedDashboards));
-  const mockedDashboard = updatedMockedDashboards.user[0];
+  const mockedDashboard = updatedMockedDashboards.dashboards[0];
   mockedDashboard.unrestrictedPlacement = true;
   const greenGridItem = {
     i: "3",
@@ -918,7 +882,6 @@ test("Dashboard Item order forward", async () => {
         </>
       ),
       options: {
-        editableDashboard: true,
         dashboards: updatedMockedDashboards,
         initialDashboard: mockedDashboard,
         inEditing: true,
@@ -939,16 +902,15 @@ test("Dashboard Item order forward", async () => {
   expect(bringToFrontOption).toBeInTheDocument();
   await userEvent.click(bringToFrontOption);
 
+  let expectedDashboard = JSON.parse(JSON.stringify(mockedDashboard));
+  expectedDashboard.gridItems = [
+    greenGridItem,
+    redGridItem,
+    yellowGridItem,
+    blueGridItem,
+  ];
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [greenGridItem, redGridItem, yellowGridItem, blueGridItem],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...expectedDashboard, editable: true })
   );
 
   await userEvent.click(dashboardItemDropdownToggle);
@@ -961,22 +923,21 @@ test("Dashboard Item order forward", async () => {
   expect(bringForwardOption).toBeInTheDocument();
   await userEvent.click(bringForwardOption);
 
+  expectedDashboard = JSON.parse(JSON.stringify(mockedDashboard));
+  expectedDashboard.gridItems = [
+    greenGridItem,
+    yellowGridItem,
+    redGridItem,
+    blueGridItem,
+  ];
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [greenGridItem, yellowGridItem, redGridItem, blueGridItem],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...expectedDashboard, editable: true })
   );
 });
 
 test("Dashboard Item order backward", async () => {
   const updatedMockedDashboards = JSON.parse(JSON.stringify(mockedDashboards));
-  const mockedDashboard = updatedMockedDashboards.user[0];
+  const mockedDashboard = updatedMockedDashboards.dashboards[0];
   mockedDashboard.unrestrictedPlacement = true;
   const greenGridItem = {
     i: "3",
@@ -1066,7 +1027,6 @@ test("Dashboard Item order backward", async () => {
         </>
       ),
       options: {
-        editableDashboard: true,
         dashboards: updatedMockedDashboards,
         initialDashboard: mockedDashboard,
         inEditing: true,
@@ -1087,16 +1047,15 @@ test("Dashboard Item order backward", async () => {
   expect(sendToBackOption).toBeInTheDocument();
   await userEvent.click(sendToBackOption);
 
+  let expectedDashboard = JSON.parse(JSON.stringify(mockedDashboard));
+  expectedDashboard.gridItems = [
+    redGridItem,
+    greenGridItem,
+    blueGridItem,
+    yellowGridItem,
+  ];
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [redGridItem, greenGridItem, blueGridItem, yellowGridItem],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...expectedDashboard, editable: true })
   );
 
   await userEvent.click(dashboardItemDropdownToggle);
@@ -1109,22 +1068,20 @@ test("Dashboard Item order backward", async () => {
   expect(sendBackwardOption).toBeInTheDocument();
   await userEvent.click(sendBackwardOption);
 
+  expectedDashboard.gridItems = [
+    redGridItem,
+    blueGridItem,
+    greenGridItem,
+    yellowGridItem,
+  ];
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [redGridItem, blueGridItem, greenGridItem, yellowGridItem],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...expectedDashboard, editable: true })
   );
 });
 
 test("Dashboard Item export", async () => {
   const updatedMockedDashboards = JSON.parse(JSON.stringify(mockedDashboards));
-  const mockedDashboard = updatedMockedDashboards.user[0];
+  const mockedDashboard = updatedMockedDashboards.dashboards[0];
   const gridItem = mockedDashboard.gridItems[0];
   gridItem.source = "Custom Image";
   gridItem.args_string = JSON.stringify({
@@ -1146,7 +1103,6 @@ test("Dashboard Item export", async () => {
         />
       ),
       options: {
-        editableDashboard: true,
         dashboards: updatedMockedDashboards,
         initialDashboard: mockedDashboard,
         inEditing: true,
@@ -1183,7 +1139,7 @@ test("Dashboard Item export", async () => {
 
 test("Dashboard Item export fail", async () => {
   const updatedMockedDashboards = JSON.parse(JSON.stringify(mockedDashboards));
-  const mockedDashboard = updatedMockedDashboards.user[0];
+  const mockedDashboard = updatedMockedDashboards.dashboards[0];
   const gridItem = mockedDashboard.gridItems[0];
   gridItem.source = "Custom Image";
   gridItem.args_string = JSON.stringify({
@@ -1207,7 +1163,6 @@ test("Dashboard Item export fail", async () => {
         />
       ),
       options: {
-        editableDashboard: true,
         dashboards: updatedMockedDashboards,
         initialDashboard: mockedDashboard,
         inEditing: true,
@@ -1307,7 +1262,6 @@ test("handleGridItemExport with map and no layers", async () => {
 
 test("handleGridItemExport with map and geojson layer", async () => {
   const mockDownloadJSON = jest.fn();
-  appAPI.downloadJSON = mockDownloadJSON;
   mockDownloadJSON.mockResolvedValueOnce({
     success: true,
     data: exampleStyle,
@@ -1316,6 +1270,7 @@ test("handleGridItemExport with map and geojson layer", async () => {
     success: true,
     data: exampleGeoJSON,
   });
+  jest.spyOn(appAPI, "downloadJSON").mockImplementation(mockDownloadJSON);
 
   const gridItem = {
     i: "1",
@@ -1382,12 +1337,12 @@ test("handleGridItemExport with map and geojson layer", async () => {
 
 test("handleGridItemExport bad load", async () => {
   const mockDownloadJSON = jest.fn();
-  appAPI.downloadJSON = mockDownloadJSON;
   const apiResponse = {
     success: false,
     message: "some error",
   };
   mockDownloadJSON.mockResolvedValueOnce(apiResponse);
+  jest.spyOn(appAPI, "downloadJSON").mockImplementation(mockDownloadJSON);
 
   const gridItem = {
     i: "1",
@@ -1512,7 +1467,6 @@ test("handleGridItemImport with map and no layers", async () => {
 
 test("handleGridItemImport with map geojson layer and style", async () => {
   const mockUploadJSON = jest.fn();
-  appAPI.uploadJSON = mockUploadJSON;
   mockUploadJSON.mockResolvedValueOnce({
     success: true,
     filename: "geojson.json",
@@ -1521,6 +1475,7 @@ test("handleGridItemImport with map geojson layer and style", async () => {
     success: true,
     filename: "style.json",
   });
+  jest.spyOn(appAPI, "uploadJSON").mockImplementation(mockUploadJSON);
 
   const gridItem = {
     i: "1",
@@ -1590,11 +1545,11 @@ test("handleGridItemImport with map geojson layer and style", async () => {
 
 test("handleGridItemImport with map geojson layer and no style", async () => {
   const mockUploadJSON = jest.fn();
-  appAPI.uploadJSON = mockUploadJSON;
   mockUploadJSON.mockResolvedValueOnce({
     success: true,
     filename: "geojson.json",
   });
+  jest.spyOn(appAPI, "uploadJSON").mockImplementation(mockUploadJSON);
 
   const gridItem = {
     i: "1",
@@ -1663,7 +1618,7 @@ test("handleGridItemImport with map geojson layer and no style", async () => {
 
 test("handleGridItemImport with map arcgis layer and no style", async () => {
   const mockUploadJSON = jest.fn();
-  appAPI.uploadJSON = mockUploadJSON;
+  jest.spyOn(appAPI, "uploadJSON").mockImplementation(mockUploadJSON);
 
   const gridItem = {
     i: "1",
@@ -1742,12 +1697,12 @@ test("handleGridItemImport with map geojson layer missing props", async () => {
 
 test("handleGridItemImport bad geojson load", async () => {
   const mockUploadJSON = jest.fn();
-  appAPI.uploadJSON = mockUploadJSON;
   const apiResponse = {
     success: false,
     message: "some error",
   };
   mockUploadJSON.mockResolvedValueOnce(apiResponse);
+  jest.spyOn(appAPI, "uploadJSON").mockImplementation(mockUploadJSON);
 
   const gridItem = {
     i: "1",
@@ -1786,7 +1741,6 @@ test("handleGridItemImport bad geojson load", async () => {
 
 test("handleGridItemImport bad style load", async () => {
   const mockUploadJSON = jest.fn();
-  appAPI.uploadJSON = mockUploadJSON;
   mockUploadJSON.mockResolvedValueOnce({
     success: true,
     filename: "geojson.json",
@@ -1796,6 +1750,7 @@ test("handleGridItemImport bad style load", async () => {
     message: "some error",
   };
   mockUploadJSON.mockResolvedValueOnce(apiResponse);
+  jest.spyOn(appAPI, "uploadJSON").mockImplementation(mockUploadJSON);
 
   const gridItem = {
     i: "1",

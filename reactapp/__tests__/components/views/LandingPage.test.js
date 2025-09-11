@@ -1,9 +1,13 @@
 import { render, screen } from "@testing-library/react";
-
+import {
+  publicDashboard,
+  mockedDashboards,
+} from "__tests__/utilities/constants";
 import LandingPage from "views/LandingPage";
 import {
   AppContext,
   AvailableDashboardsContext,
+  PermissionGroupContext,
 } from "components/contexts/Contexts";
 import AppTourContextProvider from "components/contexts/AppTourContext";
 import { MemoryRouter } from "react-router-dom";
@@ -19,7 +23,7 @@ describe("LandingPage", () => {
       >
         <AvailableDashboardsContext.Provider
           value={{
-            availableDashboards: { public: [], user: [] },
+            availableDashboards: [],
             deleteDashboard: jest.fn(),
             copyDashboard: jest.fn(),
             updateDashboard: jest.fn(),
@@ -38,27 +42,6 @@ describe("LandingPage", () => {
   });
 
   it("Shows both public and user dashboard cards when they are available", () => {
-    const publicDashboards = [
-      {
-        id: 1,
-        uuid: "aa8a8ce9-f940-4abd-b476-2091e901a030",
-        name: "test",
-        description: "test",
-        accessGroups: ["public"],
-        image: "/static/tethysdash/images/tethys_dash.png",
-      },
-    ];
-
-    const userDashboards = [
-      {
-        id: 2,
-        uuid: "ce3d4dab-334c-4143-8f74-6e4983574f01",
-        name: "Private Test",
-        description: "Nobody should have access to this one!",
-        accessGroups: [],
-        image: "/media/tethysdash/app/ce3d4dab-334c-4143-8f74-6e4983574f01.png",
-      },
-    ];
     render(
       <MemoryRouter initialEntries={["/"]}>
         <AppContext.Provider
@@ -67,21 +50,24 @@ describe("LandingPage", () => {
             tethysApp: { exitUrl: "/home" },
           }}
         >
-          <AvailableDashboardsContext.Provider
+          <PermissionGroupContext.Provider
             value={{
-              availableDashboards: {
-                public: publicDashboards,
-                user: userDashboards,
-              },
-              deleteDashboard: jest.fn(),
-              copyDashboard: jest.fn(),
-              updateDashboard: jest.fn(),
+              permissionGroups: [],
             }}
           >
-            <AppTourContextProvider>
-              <LandingPage />
-            </AppTourContextProvider>
-          </AvailableDashboardsContext.Provider>
+            <AvailableDashboardsContext.Provider
+              value={{
+                availableDashboards: mockedDashboards.dashboards,
+                deleteDashboard: jest.fn(),
+                copyDashboard: jest.fn(),
+                updateDashboard: jest.fn(),
+              }}
+            >
+              <AppTourContextProvider>
+                <LandingPage />
+              </AppTourContextProvider>
+            </AvailableDashboardsContext.Provider>
+          </PermissionGroupContext.Provider>
         </AppContext.Provider>
       </MemoryRouter>
     );
@@ -92,17 +78,6 @@ describe("LandingPage", () => {
   });
 
   it("Shows only public dashboards when not logged in", () => {
-    const publicDashboards = [
-      {
-        id: 1,
-        uuid: "aa8a8ce9-f940-4abd-b476-2091e901a030",
-        name: "test",
-        description: "test",
-        accessGroups: ["public"],
-        image: "/static/tethysdash/images/tethys_dash.png",
-      },
-    ];
-
     render(
       <MemoryRouter initialEntries={["/"]}>
         <AppContext.Provider
@@ -110,7 +85,7 @@ describe("LandingPage", () => {
         >
           <AvailableDashboardsContext.Provider
             value={{
-              availableDashboards: { public: publicDashboards, user: [] },
+              availableDashboards: [publicDashboard],
               deleteDashboard: jest.fn(),
               copyDashboard: jest.fn(),
               updateDashboard: jest.fn(),
@@ -139,7 +114,7 @@ describe("LandingPage", () => {
         >
           <AvailableDashboardsContext.Provider
             value={{
-              availableDashboards: { public: [], user: [] },
+              availableDashboards: [],
               deleteDashboard: jest.fn(),
               copyDashboard: jest.fn(),
               updateDashboard: jest.fn(),

@@ -45,7 +45,6 @@ test("Dashboard App Tour", async () => {
   let backButton;
   let endTourButton;
   const mockAddDashboard = jest.fn();
-  appAPI.addDashboard = mockAddDashboard;
   mockAddDashboard.mockResolvedValue({
     success: true,
     new_dashboard: {
@@ -54,7 +53,7 @@ test("Dashboard App Tour", async () => {
       label: "New Name",
       notes: "test_notes",
       editable: true,
-      accessGroups: [],
+      publicDashboard: false,
       gridItems: [
         {
           i: "1",
@@ -71,6 +70,7 @@ test("Dashboard App Tour", async () => {
       ],
     },
   });
+  jest.spyOn(appAPI, "addDashboard").mockImplementation(mockAddDashboard);
 
   render(
     createLoadedComponent({
@@ -486,11 +486,6 @@ test("Dashboard App Tour", async () => {
   ).toBeInTheDocument();
   expect(
     await screen.findByText(
-      /Determines if the dashboard is publicly available./i
-    )
-  ).toBeInTheDocument();
-  expect(
-    await screen.findByText(
       /This allows grid items to be placed in any location in the dashboard and overlap./i
     )
   ).toBeInTheDocument();
@@ -530,7 +525,7 @@ test("Dashboard App Tour", async () => {
   ////////////////////////////////
   expect(
     await screen.findByText(
-      'Copy with the same settings and dashboard items. The new dashboard will have the name with "_copy" at the end.'
+      "Manage the dashboard's permissions and access controls."
     )
   ).toBeInTheDocument();
   nextButton = await screen.findByLabelText("Next");
@@ -542,15 +537,12 @@ test("Dashboard App Tour", async () => {
   ////////////////////////////////
   expect(
     await screen.findByText(
-      'Click on the "Close" button to exit the settings editor and continue with the App Tour.'
+      'Copy with the same settings and dashboard items. The new dashboard will have the name with "_copy" at the end.'
     )
   ).toBeInTheDocument();
-  expect(screen.queryByLabelText("Next")).not.toBeInTheDocument();
-  expect(screen.queryByLabelText("Back")).not.toBeInTheDocument();
-  const cancelDashboardEditorButton = await screen.findByLabelText(
-    "Cancel Dashboard Editor Button"
-  );
-  await userEvent.click(cancelDashboardEditorButton);
+  nextButton = await screen.findByLabelText("Next");
+  backButton = await screen.findByLabelText("Back");
+  await userEvent.click(nextButton);
 
   /////////////
   // STEP 33 //
@@ -619,7 +611,6 @@ test("Dashboard App Tour", async () => {
 
 test("Dashboard App Tour while editing and then exit", async () => {
   const mockAddDashboard = jest.fn();
-  appAPI.addDashboard = mockAddDashboard;
   mockAddDashboard.mockResolvedValue({
     success: true,
     new_dashboard: {
@@ -628,7 +619,7 @@ test("Dashboard App Tour while editing and then exit", async () => {
       label: "New Name",
       notes: "test_notes",
       editable: true,
-      accessGroups: [],
+      publicDashboard: false,
       gridItems: [
         {
           i: "1",
@@ -645,6 +636,7 @@ test("Dashboard App Tour while editing and then exit", async () => {
       ],
     },
   });
+  jest.spyOn(appAPI, "addDashboard").mockImplementation(mockAddDashboard);
   mockedConfirm.mockResolvedValueOnce(false);
   mockedConfirm.mockResolvedValueOnce(true);
 
@@ -659,7 +651,7 @@ test("Dashboard App Tour while editing and then exit", async () => {
           </LayoutAlertContextProvider>
         </MemoryRouter>
       ),
-      options: { editableDashboard: true, inEditing: true },
+      options: { inEditing: true },
     })
   );
 
@@ -725,7 +717,6 @@ test("Landing Page App Tour", async () => {
   let nextButton;
   let endTourButton;
   const mockAddDashboard = jest.fn();
-  appAPI.addDashboard = mockAddDashboard;
   mockAddDashboard.mockResolvedValue({
     success: true,
     new_dashboard: {
@@ -734,7 +725,7 @@ test("Landing Page App Tour", async () => {
       label: "New Name",
       notes: "test_notes",
       editable: true,
-      accessGroups: [],
+      publicDashboard: false,
       gridItems: [
         {
           i: "1",
@@ -751,6 +742,7 @@ test("Landing Page App Tour", async () => {
       ],
     },
   });
+  jest.spyOn(appAPI, "addDashboard").mockImplementation(mockAddDashboard);
 
   render(
     createLoadedComponent({
@@ -782,12 +774,8 @@ test("Landing Page App Tour", async () => {
   ).toBeInTheDocument();
   const startTourButton = await screen.findByText("Start Landing Page Tour");
   expect(startTourButton).toBeInTheDocument();
-  userEvent.click(startTourButton);
-  await waitFor(() => {
-    expect(
-      screen.queryByText("Start Landing Page Tour")
-    ).not.toBeInTheDocument();
-  });
+  await userEvent.click(startTourButton);
+  expect(screen.queryByText("Start Landing Page Tour")).not.toBeInTheDocument();
 
   ////////////
   // STEP 0 //

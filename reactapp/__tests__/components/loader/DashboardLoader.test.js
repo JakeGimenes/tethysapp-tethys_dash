@@ -3,7 +3,7 @@ import { screen, render } from "@testing-library/react";
 import { useContext } from "react";
 import { AvailableDashboardsContext } from "components/contexts/Contexts";
 import {
-  mockedDashboards,
+  userDashboard,
   mockedTextVariable,
   mockedCheckboxVariable,
 } from "__tests__/utilities/constants";
@@ -72,7 +72,7 @@ test("DashboardLoader", async () => {
         return res(
           ctx.delay(500),
           ctx.status(200),
-          ctx.json({ success: true, dashboard: mockedDashboards.user[0] }),
+          ctx.json({ success: true, dashboard: userDashboard }),
           ctx.set("Content-Type", "application/json")
         );
       }
@@ -199,45 +199,21 @@ test("DashboardLoader edit and disable movement when not editing", async () => {
 
 test("DashboardLoader updateGridItems and then reset", async () => {
   const mockUpdateDashboard = jest.fn();
+  const updatedDashboard = JSON.parse(JSON.stringify(userDashboard));
+  updatedDashboard.gridItems = [];
 
   render(
     <AvailableDashboardsContext.Provider
       value={{ updateDashboard: mockUpdateDashboard }}
     >
-      <DashboardLoader
-        id={mockedDashboards.user[0].id}
-        name={mockedDashboards.user[0].name}
-        notes={mockedDashboards.user[0].notes}
-        editable={true}
-        accessGroups={mockedDashboards.user[0].accessGroups}
-        description={mockedDashboards.user[0].description}
-      >
+      <DashboardLoader {...userDashboard}>
         <TestingComponent updatedGridItems={[]} />
       </DashboardLoader>
     </AvailableDashboardsContext.Provider>
   );
 
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [
-        {
-          i: "1",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "",
-          args_string: "{}",
-          metadata_string: '{"refreshRate":0}',
-        },
-      ],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...userDashboard, editable: true })
   );
 
   const updatedGridItemsButton = await screen.findByTestId(
@@ -246,15 +222,7 @@ test("DashboardLoader updateGridItems and then reset", async () => {
   await userEvent.click(updatedGridItemsButton);
 
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...updatedDashboard, editable: true })
   );
 
   const resetGridItemsButton = await screen.findByTestId(
@@ -263,32 +231,14 @@ test("DashboardLoader updateGridItems and then reset", async () => {
   await userEvent.click(resetGridItemsButton);
 
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [
-        {
-          i: "1",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "",
-          args_string: "{}",
-          metadata_string: '{"refreshRate":0}',
-        },
-      ],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...userDashboard, editable: true })
   );
 });
 
 test("DashboardLoader updateGridItems existing variable input", async () => {
   const mockUpdateDashboard = jest.fn();
-  const mockedDashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const updatedDashboard = JSON.parse(JSON.stringify(userDashboard));
+  const mockedDashboard = JSON.parse(JSON.stringify(userDashboard));
   mockedDashboard.gridItems = [mockedTextVariable];
 
   const updatedTextVariable = JSON.parse(
@@ -298,8 +248,8 @@ test("DashboardLoader updateGridItems existing variable input", async () => {
     initial_value: "New initial value",
     variable_name: "Test Variable",
     variable_options_source: "text",
-    variable_input_type: "text",
   });
+  updatedDashboard.gridItems = [updatedTextVariable];
 
   server.use(
     rest.get(
@@ -318,14 +268,7 @@ test("DashboardLoader updateGridItems existing variable input", async () => {
     <AvailableDashboardsContext.Provider
       value={{ updateDashboard: mockUpdateDashboard }}
     >
-      <DashboardLoader
-        id={mockedDashboard.id}
-        name={mockedDashboard.name}
-        notes={mockedDashboard.notes}
-        editable={true}
-        accessGroups={mockedDashboard.accessGroups}
-        description={mockedDashboard.description}
-      >
+      <DashboardLoader {...mockedDashboard}>
         <TestingComponent updatedGridItems={[updatedTextVariable]} />
       </DashboardLoader>
     </AvailableDashboardsContext.Provider>
@@ -338,27 +281,7 @@ test("DashboardLoader updateGridItems existing variable input", async () => {
   );
 
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [
-        {
-          i: "1",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "Variable Input",
-          args_string:
-            '{"initial_value":"","variable_name":"Test Variable","variable_options_source":"text","variable_input_type":"text"}',
-          metadata_string: '{"refreshRate":0}',
-        },
-      ],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...mockedDashboard, editable: true })
   );
 
   const updatedGridItemsButton = await screen.findByTestId(
@@ -367,27 +290,7 @@ test("DashboardLoader updateGridItems existing variable input", async () => {
   await userEvent.click(updatedGridItemsButton);
 
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [
-        {
-          i: "1",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "Variable Input",
-          args_string:
-            '{"initial_value":"New initial value","variable_name":"Test Variable","variable_options_source":"text","variable_input_type":"text"}',
-          metadata_string: '{"refreshRate":0}',
-        },
-      ],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...updatedDashboard, editable: true })
   );
 
   // Doesn't change input variables so that the existing variable input keeps the same value from before and not rerender everything in the page
@@ -400,19 +303,14 @@ test("DashboardLoader updateGridItems existing variable input", async () => {
 
 test("DashboardLoader updateGridItems add variable input", async () => {
   const mockUpdateDashboard = jest.fn();
+  const updatedDashboard = JSON.parse(JSON.stringify(userDashboard));
+  updatedDashboard.gridItems = [mockedTextVariable];
 
   render(
     <AvailableDashboardsContext.Provider
       value={{ updateDashboard: mockUpdateDashboard }}
     >
-      <DashboardLoader
-        id={mockedDashboards.user[0].id}
-        name={mockedDashboards.user[0].name}
-        notes={mockedDashboards.user[0].notes}
-        editable={true}
-        accessGroups={mockedDashboards.user[0].accessGroups}
-        description={mockedDashboards.user[0].description}
-      >
+      <DashboardLoader {...userDashboard}>
         <TestingComponent updatedGridItems={[mockedTextVariable]} />
       </DashboardLoader>
     </AvailableDashboardsContext.Provider>
@@ -423,26 +321,7 @@ test("DashboardLoader updateGridItems add variable input", async () => {
   );
 
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [
-        {
-          i: "1",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "",
-          args_string: "{}",
-          metadata_string: '{"refreshRate":0}',
-        },
-      ],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...userDashboard, editable: true })
   );
 
   const updatedGridItemsButton = await screen.findByTestId(
@@ -451,27 +330,7 @@ test("DashboardLoader updateGridItems add variable input", async () => {
   await userEvent.click(updatedGridItemsButton);
 
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [
-        {
-          i: "1",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "Variable Input",
-          args_string:
-            '{"initial_value":"","variable_name":"Test Variable","variable_options_source":"text","variable_input_type":"text"}',
-          metadata_string: '{"refreshRate":0}',
-        },
-      ],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...updatedDashboard, editable: true })
   );
 
   expect(await screen.findByTestId("input-variables")).toHaveTextContent(
@@ -483,6 +342,7 @@ test("DashboardLoader updateGridItems add variable input", async () => {
 
 test("DashboardLoader updateGridItems add checkbox variable input", async () => {
   const mockUpdateDashboard = jest.fn();
+  const updatedDashboard = JSON.parse(JSON.stringify(userDashboard));
 
   const updatedTextVariable = JSON.parse(
     JSON.stringify(mockedCheckboxVariable)
@@ -490,22 +350,15 @@ test("DashboardLoader updateGridItems add checkbox variable input", async () => 
   updatedTextVariable.args_string = JSON.stringify({
     initial_value: null,
     variable_name: "Test Variable",
-    variable_options_source: "checkbox", // TODO Change this to be an empty string or null
-    variable_input_type: "number",
+    variable_options_source: "checkbox",
   });
+  updatedDashboard.gridItems = [updatedTextVariable];
 
   render(
     <AvailableDashboardsContext.Provider
       value={{ updateDashboard: mockUpdateDashboard }}
     >
-      <DashboardLoader
-        id={mockedDashboards.user[0].id}
-        name={mockedDashboards.user[0].name}
-        notes={mockedDashboards.user[0].notes}
-        editable={true}
-        accessGroups={mockedDashboards.user[0].accessGroups}
-        description={mockedDashboards.user[0].description}
-      >
+      <DashboardLoader {...userDashboard}>
         <TestingComponent updatedGridItems={[updatedTextVariable]} />
       </DashboardLoader>
     </AvailableDashboardsContext.Provider>
@@ -516,26 +369,7 @@ test("DashboardLoader updateGridItems add checkbox variable input", async () => 
   );
 
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [
-        {
-          i: "1",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "",
-          args_string: "{}",
-          metadata_string: '{"refreshRate":0}',
-        },
-      ],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...userDashboard, editable: true })
   );
 
   const updatedGridItemsButton = await screen.findByTestId(
@@ -544,27 +378,7 @@ test("DashboardLoader updateGridItems add checkbox variable input", async () => 
   await userEvent.click(updatedGridItemsButton);
 
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [
-        {
-          i: "1",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "Variable Input",
-          args_string:
-            '{"initial_value":null,"variable_name":"Test Variable","variable_options_source":"checkbox","variable_input_type":"number"}',
-          metadata_string: '{"refreshRate":0}',
-        },
-      ],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...updatedDashboard, editable: true })
   );
 
   expect(await screen.findByTestId("input-variables")).toHaveTextContent(
@@ -583,7 +397,7 @@ test("DashboardLoader save layout", async () => {
       id: 1,
       name: "some dashboard updated",
       description: "some description",
-      accessGroups: ["public"],
+      publicDashboard: true,
       image: "some_image.png",
     },
   });
@@ -593,14 +407,7 @@ test("DashboardLoader save layout", async () => {
       value={{ updateDashboard: mockUpdateDashboard }}
     >
       <DashboardLoader>
-        <DashboardLoader
-          id={mockedDashboards.user[0].id}
-          name={mockedDashboards.user[0].name}
-          notes={mockedDashboards.user[0].notes}
-          editable={true}
-          accessGroups={mockedDashboards.user[0].accessGroups}
-          description={mockedDashboards.user[0].description}
-        >
+        <DashboardLoader {...userDashboard}>
           <TestingComponent newProperties={{ name: "some new name" }} />
         </DashboardLoader>
       </DashboardLoader>
@@ -620,17 +427,12 @@ test("DashboardLoader save layout", async () => {
 
 test("DashboardLoader save layout with griditems", async () => {
   const mockUpdateDashboard = jest.fn();
+  const updatedDashboard = JSON.parse(JSON.stringify(userDashboard));
+  updatedDashboard.gridItems = [];
 
   mockUpdateDashboard.mockResolvedValue({
     success: true,
-    updated_dashboard: {
-      id: 1,
-      name: "some dashboard updated",
-      description: "some description",
-      accessGroups: ["public"],
-      image: "some_image.png",
-      gridItems: [],
-    },
+    updated_dashboard: updatedDashboard,
   });
 
   render(
@@ -638,14 +440,7 @@ test("DashboardLoader save layout with griditems", async () => {
       value={{ updateDashboard: mockUpdateDashboard }}
     >
       <DashboardLoader>
-        <DashboardLoader
-          id={mockedDashboards.user[0].id}
-          name={mockedDashboards.user[0].name}
-          notes={mockedDashboards.user[0].notes}
-          editable={true}
-          accessGroups={mockedDashboards.user[0].accessGroups}
-          description={mockedDashboards.user[0].description}
-        >
+        <DashboardLoader {...userDashboard}>
           <TestingComponent newProperties={{ gridItems: [] }} />
         </DashboardLoader>
       </DashboardLoader>
@@ -663,15 +458,7 @@ test("DashboardLoader save layout with griditems", async () => {
   });
 
   expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({
-      id: 1,
-      name: "editable",
-      notes: "test_notes",
-      gridItems: [],
-      editable: true,
-      accessGroups: [],
-      description: "test_description",
-    })
+    JSON.stringify({ ...updatedDashboard, editable: true })
   );
 });
 

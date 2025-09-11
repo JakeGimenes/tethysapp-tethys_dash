@@ -10,11 +10,18 @@ from tethysapp.tethysdash.model import (
     delete_grid_item,
     Dashboard,
     GridItem,
-    check_existing_user_dashboard_names,
-    check_existing_public_dashboards,
+    DashboardPermission,
+    DashboardPermissionLevel,
+    PermissionGroup,
+    GroupPermissionLevel,
     parse_db_dashboard,
     clean_up_jsons,
     init_primary_db,
+    get_dashboard_user_permission,
+    update_dashboard_permissions,
+    update_permission_groups,
+    get_user_permission_groups,
+    delete_permission_groups,
 )
 from unittest.mock import MagicMock
 import base64
@@ -58,7 +65,7 @@ def test_add_and_delete_dashboard(db_session, mock_app_get_ps_db):
     owner = "some_user"
     grid_items = []
     notes = ""
-    access_groups = []
+    public = False
     unrestricted_placement = False
 
     # Create a new dashboard and Verify dashboard, rows, and columns were created
@@ -68,7 +75,7 @@ def test_add_and_delete_dashboard(db_session, mock_app_get_ps_db):
         name,
         description,
         notes,
-        access_groups,
+        public,
         unrestricted_placement,
         grid_items,
     )
@@ -79,7 +86,7 @@ def test_add_and_delete_dashboard(db_session, mock_app_get_ps_db):
     assert dashboard.notes == ""
     assert dashboard.uuid == uuid
     assert dashboard.owner == owner
-    assert dashboard.access_groups == []
+    assert not dashboard.public
     assert not dashboard.unrestricted_placement
     dashboard_id = dashboard.id
 
@@ -155,7 +162,7 @@ def test_add_and_delete_dashboard_with_grid_items(db_session, mock_app_get_ps_db
         }
     ]
     notes = ""
-    access_groups = []
+    public = False
     unrestricted_placement = True
 
     # Create a new dashboard and Verify dashboard, rows, and columns were created
@@ -165,7 +172,7 @@ def test_add_and_delete_dashboard_with_grid_items(db_session, mock_app_get_ps_db
         name,
         description,
         notes,
-        access_groups,
+        public,
         unrestricted_placement,
         grid_items,
     )
@@ -176,7 +183,7 @@ def test_add_and_delete_dashboard_with_grid_items(db_session, mock_app_get_ps_db
     assert dashboard.notes == ""
     assert dashboard.uuid == uuid
     assert dashboard.owner == owner
-    assert dashboard.access_groups == []
+    assert not dashboard.public
     assert dashboard.unrestricted_placement
     dashboard_id = dashboard.id
 
@@ -216,14 +223,32 @@ def test_delete_named_dashboard(dashboard, db_session, mock_app_get_ps_db):
 
 
 @pytest.mark.django_db
+def test_delete_named_dashboard_id_doesnt_exist(
+    dashboard, db_session, mock_app_get_ps_db
+):
+    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
+
+    with pytest.raises(Exception) as excinfo:
+        delete_named_dashboard("admin", 1000000000000000000)
+    assert "A dashboard with the id 1000000000000000000 does not exist." in str(
+        excinfo.value
+    )
+
+    db_dashboard = (
+        db_session.query(Dashboard).filter(Dashboard.id == dashboard.id).all()
+    )
+    assert len(db_dashboard) == 1
+    assert db_dashboard[0].name == dashboard.name
+
+
+@pytest.mark.django_db
 def test_delete_named_dashboard_not_allowed(dashboard, db_session, mock_app_get_ps_db):
     mock_app_get_ps_db("tethysapp.tethysdash.model.App")
 
     with pytest.raises(Exception) as excinfo:
         delete_named_dashboard("test_not_valid_user", dashboard.id)
-    assert (
-        f"A dashboard with the id {dashboard.id} does not exist for this user"
-        in str(excinfo.value)
+    assert "User does not have admin permission to delete the dashboard." in str(
+        excinfo.value
     )
 
     db_dashboard = (
@@ -267,16 +292,18 @@ def test_update_named_dashboard(
 
     # Add rows/cells and update dashboards
     updated_notes = "Some new notes"
-    updated_access_groups = ["public"]
     update_named_dashboard(
         dashboard.owner,
         dashboard.id,
         {
             "name": new_dashboard_name,
             "notes": updated_notes,
-            "accessGroups": updated_access_groups,
+            "public": True,
             "gridItems": grid_items,
             "unrestrictedPlacement": True,
+            "permissions": [
+                {"permission": "admin", "username": dashboard.owner},
+            ],
         },
     )
 
@@ -286,8 +313,11 @@ def test_update_named_dashboard(
     assert len(dashboard.grid_items) == 2
     assert dashboard.grid_items[0].args_string == json.dumps({"uri": "some_path"})
     assert dashboard.grid_items[0].metadata_string == json.dumps({"refreshRate": 0})
-    assert dashboard.access_groups == updated_access_groups
+    assert dashboard.public is True
     assert dashboard.unrestricted_placement
+    assert len(dashboard.permissions) == 1
+    assert dashboard.permissions[0].permission == DashboardPermissionLevel.admin
+    assert dashboard.permissions[0].username == dashboard.owner
 
     grid_item1 = dashboard.grid_items[0]
 
@@ -323,12 +353,16 @@ def test_update_named_dashboard(
 
 
 @pytest.mark.django_db
-def test_update_named_dashboard_image(dashboard, mock_app_get_ps_db, mocker, tmp_path):
+def test_update_named_dashboard_image(
+    db_session, dashboard, mock_app_get_ps_db, mocker, tmp_path
+):
     mock_app_get_ps_db("tethysapp.tethysdash.model.App")
     mock_get_app_media = mocker.patch("tethysapp.tethysdash.model.get_app_media")
     mock_get_app_media.return_value = MagicMock(path=tmp_path)
 
-    existing_dashboard = parse_db_dashboard([dashboard], False)
+    existing_dashboard = parse_db_dashboard(
+        db_session, [dashboard], dashboard.owner, False
+    )
     assert (
         existing_dashboard[0]["image"]
         == "/static/tethysdash/images/dashboard_thumbnail.png"
@@ -356,7 +390,7 @@ def test_update_named_dashboard_image(dashboard, mock_app_get_ps_db, mocker, tmp
 
 
 @pytest.mark.django_db
-def test_update_named_dashboard_not_allowed(dashboard, db_session, mock_app_get_ps_db):
+def test_update_named_dashboard_not_exist(mock_app_get_ps_db):
     mock_app_get_ps_db("tethysapp.tethysdash.model.App")
 
     with pytest.raises(Exception) as excinfo:
@@ -364,82 +398,132 @@ def test_update_named_dashboard_not_allowed(dashboard, db_session, mock_app_get_
         updated_access_groups = ["public"]
         update_named_dashboard(
             "test_not_valid_user",
-            dashboard.id,
+            12345678912345678912346789,
             {"notes": updated_notes, "accessGroups": updated_access_groups},
         )
     assert (
-        f"A dashboard with the id {dashboard.id} does not exist for this user"
+        "A dashboard with the id 12345678912345678912346789 does not exist for this user"  # noqa: E501
         in str(excinfo.value)
     )
-
-    db_session.refresh(dashboard)
-    assert dashboard.notes == dashboard.notes
-    assert dashboard.grid_items == []
-    assert dashboard.access_groups == dashboard.access_groups
 
 
 @pytest.mark.django_db
-def test_update_named_dashboard_already_public_name(
-    dashboard, public_dashboard, db_session, mock_app_get_ps_db
+def test_update_named_dashboard_no_edit_permissions(
+    dashboard, mock_app_get_ps_db, mocker, tmp_path
 ):
     mock_app_get_ps_db("tethysapp.tethysdash.model.App")
+    mock_get_app_media = mocker.patch("tethysapp.tethysdash.model.get_app_media")
+    mock_get_app_media.return_value = MagicMock(path=tmp_path)
+    new_dashboard_name = "new_name"
 
     with pytest.raises(Exception) as excinfo:
         update_named_dashboard(
-            dashboard.owner,
+            "viewer",
             dashboard.id,
-            {"name": public_dashboard.name, "accessGroups": ["public"]},
+            {
+                "name": new_dashboard_name,
+            },
         )
 
     assert (
-        f"A dashboard with the name {public_dashboard.name} is already public. Change the name before attempting again."  # noqa: E501
+        "User does not have admin or editor permissions to update the dashboard."
         in str(excinfo.value)
     )
 
-    db_session.refresh(dashboard)
-    assert dashboard.notes == dashboard.notes
-    assert dashboard.grid_items == []
-    assert dashboard.access_groups == dashboard.access_groups
+
+@pytest.mark.django_db
+def test_update_named_dashboard_no_admin_permissions_for_name(
+    dashboard, mock_app_get_ps_db, mocker, tmp_path
+):
+    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
+    mock_get_app_media = mocker.patch("tethysapp.tethysdash.model.get_app_media")
+    mock_get_app_media.return_value = MagicMock(path=tmp_path)
+    new_dashboard_name = "new_name"
+
+    with pytest.raises(Exception) as excinfo:
+        update_named_dashboard(
+            "editor",
+            dashboard.id,
+            {
+                "name": new_dashboard_name,
+            },
+        )
+
+    assert (
+        "User does not have admin permission to change the name of the dashboard."
+        in str(excinfo.value)
+    )
+
+
+@pytest.mark.django_db
+def test_update_named_dashboard_no_admin_permissions_for_public(
+    dashboard, mock_app_get_ps_db, mocker, tmp_path
+):
+    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
+    mock_get_app_media = mocker.patch("tethysapp.tethysdash.model.get_app_media")
+    mock_get_app_media.return_value = MagicMock(path=tmp_path)
+
+    with pytest.raises(Exception) as excinfo:
+        update_named_dashboard(
+            "editor",
+            dashboard.id,
+            {
+                "public": True,
+            },
+        )
+
+    assert (
+        "User does not have admin permission to change the public status of the dashboard."  # noqa: E501
+        in str(excinfo.value)
+    )
 
 
 @pytest.mark.django_db
 def test_get_dashboards_all(
-    dashboard, public_dashboard, mock_app_get_ps_db, mocker, tmp_path
+    dashboard, public_dashboard, mock_app_get_ps_db, mocker, tmp_path, permission_group
 ):
     mock_app_get_ps_db("tethysapp.tethysdash.model.App")
     mock_get_app_media = mocker.patch("tethysapp.tethysdash.model.get_app_media")
     mock_get_app_media.return_value = MagicMock(path=tmp_path)
 
     all_dashboards = get_dashboards(dashboard.owner)
-    assert all_dashboards == {
-        "user": [
-            {
-                "id": dashboard.id,
-                "name": dashboard.name,
-                "description": dashboard.description,
-                "accessGroups": [],
-                "image": "/static/tethysdash/images/dashboard_thumbnail.png",
-                "uuid": "some_user_dashboard_uuid",
-                "unrestrictedPlacement": False,
-            }
-        ],
-        "public": [
-            {
-                "id": public_dashboard.id,
-                "name": public_dashboard.name,
-                "description": public_dashboard.description,
-                "accessGroups": ["public"],
-                "image": "/static/tethysdash/images/dashboard_thumbnail.png",
-                "uuid": "some_public_dashboard_uuid",
-                "unrestrictedPlacement": False,
-            }
-        ],
-    }
+    assert all_dashboards == [
+        {
+            "id": dashboard.id,
+            "uuid": dashboard.uuid,
+            "name": dashboard.name,
+            "description": dashboard.description,
+            "publicDashboard": dashboard.public,
+            "userPermission": "admin",
+            "permissions": [
+                {"permission": "admin", "username": dashboard.owner},
+                {"permission": "editor", "username": "editor"},
+                {"permission": "viewer", "group": permission_group["name"]},
+            ],
+            "unrestrictedPlacement": dashboard.unrestricted_placement,
+            "image": "/static/tethysdash/images/dashboard_thumbnail.png",
+            "owner": dashboard.owner,
+        },
+        {
+            "id": public_dashboard.id,
+            "uuid": public_dashboard.uuid,
+            "name": public_dashboard.name,
+            "description": public_dashboard.description,
+            "publicDashboard": public_dashboard.public,
+            "userPermission": None,
+            "permissions": [
+                {"permission": "admin", "username": public_dashboard.owner}
+            ],
+            "unrestrictedPlacement": public_dashboard.unrestricted_placement,
+            "image": "/static/tethysdash/images/dashboard_thumbnail.png",
+            "owner": public_dashboard.owner,
+        },
+    ]
 
 
 @pytest.mark.django_db
 def test_get_dashboards_specific_dashboard_view(
-    dashboard, mock_app_get_ps_db, mocker, tmp_path
+    dashboard, mock_app_get_ps_db, mocker, tmp_path, permission_group
 ):
     mock_app_get_ps_db("tethysapp.tethysdash.model.App")
     mock_get_app_media = mocker.patch("tethysapp.tethysdash.model.get_app_media")
@@ -453,17 +537,24 @@ def test_get_dashboards_specific_dashboard_view(
         "name": dashboard.name,
         "description": dashboard.description,
         "notes": dashboard.notes,
-        "accessGroups": [],
         "gridItems": [],
         "image": "/static/tethysdash/images/dashboard_thumbnail.png",
         "uuid": "some_user_dashboard_uuid",
         "unrestrictedPlacement": False,
+        "owner": dashboard.owner,
+        "permissions": [
+            {"permission": "admin", "username": dashboard.owner},
+            {"permission": "editor", "username": "editor"},
+            {"permission": "viewer", "group": permission_group["name"]},
+        ],
+        "publicDashboard": False,
+        "userPermission": "admin",
     }
 
 
 @pytest.mark.django_db
 def test_get_dashboards_specific_landing_page_view(
-    dashboard, mock_app_get_ps_db, mocker, tmp_path
+    dashboard, mock_app_get_ps_db, mocker, tmp_path, permission_group
 ):
     mock_app_get_ps_db("tethysapp.tethysdash.model.App")
     mock_get_app_media = mocker.patch("tethysapp.tethysdash.model.get_app_media")
@@ -474,56 +565,18 @@ def test_get_dashboards_specific_landing_page_view(
         "id": dashboard.id,
         "name": dashboard.name,
         "description": dashboard.description,
-        "accessGroups": [],
         "image": "/static/tethysdash/images/dashboard_thumbnail.png",
         "uuid": "some_user_dashboard_uuid",
         "unrestrictedPlacement": False,
+        "owner": dashboard.owner,
+        "permissions": [
+            {"permission": "admin", "username": dashboard.owner},
+            {"permission": "editor", "username": "editor"},
+            {"permission": "viewer", "group": permission_group["name"]},
+        ],
+        "publicDashboard": False,
+        "userPermission": "admin",
     }
-
-
-@pytest.mark.django_db
-def test_check_existing_user_dashboard_names(dashboard, db_session, mock_app_get_ps_db):
-    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
-
-    check_existing_user_dashboard_names(
-        db_session, dashboard.owner, "some_new_dashboard_name"
-    )
-
-
-@pytest.mark.django_db
-def test_check_existing_user_dashboard_names_fail(
-    dashboard, db_session, mock_app_get_ps_db
-):
-    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
-    with pytest.raises(Exception) as excinfo:
-        check_existing_user_dashboard_names(db_session, dashboard.owner, dashboard.name)
-
-    assert (
-        f"A dashboard with the name {dashboard.name} already exists. Change the name before attempting again."  # noqa: E501
-        in str(excinfo.value)
-    )
-
-
-@pytest.mark.django_db
-def test_check_existing_public_dashboards(db_session, mock_app_get_ps_db):
-    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
-
-    result = check_existing_public_dashboards(db_session, "some_new_public_name")
-    assert result is None
-
-
-@pytest.mark.django_db
-def test_check_existing_public_dashboards_failed_name(
-    public_dashboard, db_session, mock_app_get_ps_db
-):
-    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
-    with pytest.raises(Exception) as excinfo:
-        check_existing_public_dashboards(db_session, public_dashboard.name)
-
-    assert (
-        f"A dashboard with the name {public_dashboard.name} is already public. Change the name before attempting again."  # noqa: E501
-        in str(excinfo.value)
-    )
 
 
 @pytest.mark.django_db
@@ -558,18 +611,22 @@ def test_copy_named_dashboard(
 
     # Add rows/cells and update dashboards
     new_dashboard_id, copied_dashboard_uuid = copy_named_dashboard(
-        dashboard.owner, dashboard.id, new_dashboard_name, "123456789"
+        "some new user", dashboard.id, new_dashboard_name, "123456789"
     )
 
     assert copied_dashboard_uuid == "some_user_dashboard_uuid"
     copied_dashboard = (
         db_session.query(Dashboard).filter(Dashboard.id == new_dashboard_id).first()
     )
+
+    assert copied_dashboard.uuid == "123456789"
+    assert copied_dashboard.description == new_description
     assert copied_dashboard.name == new_dashboard_name
     assert copied_dashboard.notes == dashboard.notes
-    assert copied_dashboard.description == new_description
-    assert copied_dashboard.access_groups == dashboard.access_groups
-    assert copied_dashboard.uuid == "123456789"
+    assert copied_dashboard.public == dashboard.public
+    assert copied_dashboard.owner == "some new user"
+    assert copied_dashboard.unrestricted_placement == dashboard.unrestricted_placement
+
     assert len(copied_dashboard.grid_items) == len(dashboard.grid_items) == 1
     assert dashboard.grid_items[0].dashboard_id == dashboard.id
     assert copied_dashboard.grid_items[0].dashboard_id == copied_dashboard.id
@@ -577,43 +634,61 @@ def test_copy_named_dashboard(
 
 @pytest.mark.django_db
 def test_parse_db_dashboard_landing_page_view(
-    dashboard, mock_app_get_ps_db, mocker, tmp_path
+    dashboard, mock_app_get_ps_db, mocker, tmp_path, db_session, permission_group
 ):
     mock_app_get_ps_db("tethysapp.tethysdash.model.App")
     mock_get_app_media = mocker.patch("tethysapp.tethysdash.model.get_app_media")
     mock_get_app_media.return_value = MagicMock(path=tmp_path)
 
-    existing_dashboard = parse_db_dashboard([dashboard], dashboard_view=False)
+    existing_dashboard = parse_db_dashboard(
+        db_session, [dashboard], dashboard.owner, dashboard_view=False
+    )
     assert existing_dashboard[0] == {
         "id": dashboard.id,
         "uuid": dashboard.uuid,
         "name": dashboard.name,
         "description": dashboard.description,
-        "accessGroups": [],
         "image": "/static/tethysdash/images/dashboard_thumbnail.png",
         "unrestrictedPlacement": False,
+        "owner": dashboard.owner,
+        "permissions": [
+            {"permission": "admin", "username": dashboard.owner},
+            {"permission": "editor", "username": "editor"},
+            {"permission": "viewer", "group": permission_group["name"]},
+        ],
+        "publicDashboard": False,
+        "userPermission": "admin",
     }
 
 
 @pytest.mark.django_db
 def test_parse_db_dashboard_dashboard_view(
-    dashboard, mock_app_get_ps_db, mocker, tmp_path
+    dashboard, mock_app_get_ps_db, mocker, tmp_path, db_session, permission_group
 ):
     mock_app_get_ps_db("tethysapp.tethysdash.model.App")
     mock_get_app_media = mocker.patch("tethysapp.tethysdash.model.get_app_media")
     mock_get_app_media.return_value = MagicMock(path=tmp_path)
 
-    existing_dashboard = parse_db_dashboard([dashboard], dashboard_view=True)
+    existing_dashboard = parse_db_dashboard(
+        db_session, [dashboard], dashboard.owner, dashboard_view=True
+    )
     assert existing_dashboard[0] == {
         "id": dashboard.id,
         "uuid": dashboard.uuid,
         "name": dashboard.name,
         "description": dashboard.description,
-        "accessGroups": [],
         "image": "/static/tethysdash/images/dashboard_thumbnail.png",
         "notes": dashboard.notes,
         "gridItems": [],
         "unrestrictedPlacement": False,
+        "owner": dashboard.owner,
+        "permissions": [
+            {"permission": "admin", "username": dashboard.owner},
+            {"permission": "editor", "username": "editor"},
+            {"permission": "viewer", "group": permission_group["name"]},
+        ],
+        "publicDashboard": False,
+        "userPermission": "admin",
     }
 
 
@@ -777,3 +852,396 @@ def test_init_primary_db_raises_unexpected_error(mocker, mock_alembic):
         init_primary_db(engine=mocker.Mock(), first_time=True)
 
     mock_alembic.stamp.assert_not_called()
+
+
+def test_get_dashboard_user_permission(dashboard, db_session):
+    user_permission = get_dashboard_user_permission(
+        db_session, dashboard, dashboard.owner
+    )
+    assert user_permission == DashboardPermissionLevel.admin
+
+    user_permission = get_dashboard_user_permission(db_session, dashboard, "editor")
+    assert user_permission == DashboardPermissionLevel.editor
+
+    user_permission = get_dashboard_user_permission(
+        db_session, dashboard, "member_user"
+    )
+    assert user_permission == DashboardPermissionLevel.viewer
+
+    user_permission = get_dashboard_user_permission(db_session, dashboard, "bad_user")
+    assert user_permission is None
+
+
+def test_update_dashboard_permissions(dashboard, db_session, permission_group):
+    updated_permissions = [
+        {"username": "admin", "permission": DashboardPermissionLevel.admin.value},
+        {"username": "editor", "permission": DashboardPermissionLevel.viewer.value},
+        {"username": "newuser", "permission": DashboardPermissionLevel.viewer.value},
+        {
+            "group": permission_group["name"],
+            "permission": DashboardPermissionLevel.editor.value,
+        },
+        {"group": "newgroup", "permission": DashboardPermissionLevel.editor.value},
+    ]
+
+    assert len(dashboard.permissions) == 3
+    assert dashboard.permissions[0].username == "admin"
+    assert dashboard.permissions[0].permission == DashboardPermissionLevel.admin
+
+    assert dashboard.permissions[1].username == "editor"
+    assert dashboard.permissions[1].permission == DashboardPermissionLevel.editor
+
+    assert dashboard.permissions[2].group == permission_group["name"]
+    assert dashboard.permissions[2].permission == DashboardPermissionLevel.viewer
+
+    update_dashboard_permissions(
+        db_session,
+        dashboard,
+        "admin",
+        updated_permissions,
+    )
+
+    permissions = (
+        db_session.query(DashboardPermission).filter_by(dashboard_id=dashboard.id).all()
+    )
+
+    assert permissions[0].username == "admin"
+    assert permissions[0].permission == DashboardPermissionLevel.admin
+
+    assert permissions[1].username == "editor"
+    assert permissions[1].permission == DashboardPermissionLevel.viewer
+
+    assert permissions[2].group == permission_group["name"]
+    assert permissions[2].permission == DashboardPermissionLevel.editor
+
+    assert permissions[3].username == "newuser"
+    assert permissions[3].permission == DashboardPermissionLevel.viewer
+
+    assert permissions[4].group == "newgroup"
+    assert permissions[4].permission == DashboardPermissionLevel.editor
+
+
+def test_update_dashboard_permissions_not_admin(dashboard, db_session):
+
+    with pytest.raises(Exception) as excinfo:
+        update_dashboard_permissions(db_session, dashboard, "editor", [])
+    assert (
+        "User does not have admin permission to change the permissions of the dashboard."  # noqa: E501
+        in str(excinfo.value)
+    )
+
+
+@pytest.mark.django_db
+def test_get_user_permission_groups(
+    mock_app_get_ps_db, permission_group, permission_group_table
+):
+    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
+    permission_groups = get_user_permission_groups(
+        "member_user",
+    )
+
+    assert len(permission_groups) == 1
+    assert permission_groups[0]["name"] == permission_group["name"]
+    assert permission_groups[0]["description"] == permission_group["description"]
+    assert permission_groups[0]["owner"] == permission_group["owner"]
+    assert permission_groups[0]["user_permission"] == GroupPermissionLevel.member.value
+    assert permission_groups[0]["members"][0]["username"] == "owner_user"
+    assert (
+        permission_groups[0]["members"][0]["permission"]
+        == GroupPermissionLevel.admin.value
+    )
+
+    assert permission_groups[0]["members"][1]["username"] == "admin_user"
+    assert (
+        permission_groups[0]["members"][1]["permission"]
+        == GroupPermissionLevel.admin.value
+    )
+
+    assert permission_groups[0]["members"][2]["username"] == "member_user"
+    assert (
+        permission_groups[0]["members"][2]["permission"]
+        == GroupPermissionLevel.member.value
+    )
+
+    permission_groups = get_user_permission_groups(
+        "bad_user",
+    )
+
+    assert len(permission_groups) == 0
+
+
+@pytest.mark.django_db
+def test_update_permission_group(
+    mock_app_get_ps_db, permission_group, permission_group_table
+):
+    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
+    updated_members = [
+        {"username": "owner_user", "permission": GroupPermissionLevel.admin.value},
+        {"username": "editor", "permission": GroupPermissionLevel.member.value},
+        {"username": "viewer", "permission": GroupPermissionLevel.admin.value},
+    ]
+    updated_permission_group = permission_group
+    updated_permission_group["members"] = updated_members
+    updated_permission_group["description"] = "some new description"
+    updated_permission_group["id"] = permission_group_table.id
+
+    assert len(permission_group_table.members) == 3
+    assert permission_group_table.members[0].username == "owner_user"
+    assert permission_group_table.members[0].permission == GroupPermissionLevel.admin
+
+    assert permission_group_table.members[1].username == "admin_user"
+    assert permission_group_table.members[1].permission == GroupPermissionLevel.admin
+
+    assert permission_group_table.members[2].username == "member_user"
+    assert permission_group_table.members[2].permission == GroupPermissionLevel.member
+
+    permission_group_dict = update_permission_groups(
+        "owner_user",
+        updated_permission_group,
+    )
+
+    assert permission_group_dict["description"] == "some new description"
+    assert permission_group_dict["members"][0]["username"] == "owner_user"
+    assert (
+        permission_group_dict["members"][0]["permission"]
+        == GroupPermissionLevel.admin.value
+    )
+
+    assert permission_group_dict["members"][1]["username"] == "editor"
+    assert (
+        permission_group_dict["members"][1]["permission"]
+        == GroupPermissionLevel.member.value
+    )
+
+    assert permission_group_dict["members"][2]["username"] == "viewer"
+    assert (
+        permission_group_dict["members"][2]["permission"]
+        == GroupPermissionLevel.admin.value
+    )
+
+
+@pytest.mark.django_db
+def test_update_permission_group_but_group_doesnt_exist(
+    mock_app_get_ps_db, permission_group
+):
+    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
+    permission_group = {
+        "name": "new group",
+        "id": 100000000000000000000,
+    }
+
+    permission_group_dict = update_permission_groups(
+        "admin",
+        permission_group,
+    )
+
+    assert permission_group_dict["status"] == "error"
+    assert permission_group_dict["message"] == "Group not found"
+
+
+@pytest.mark.django_db
+def test_update_permission_group_but_not_admin(
+    mock_app_get_ps_db, permission_group, permission_group_table
+):
+    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
+    updated_permission_group = permission_group
+    updated_permission_group["id"] = permission_group_table.id
+
+    permission_group_dict = update_permission_groups(
+        "viewer",
+        updated_permission_group,
+    )
+
+    assert permission_group_dict["status"] == "error"
+    assert permission_group_dict["message"] == "User is not owner or admin in group"
+
+
+@pytest.mark.django_db
+def test_update_permission_group_but_new_name_already_exists(
+    mock_app_get_ps_db, db_session, permission_group, permission_group_table
+):
+    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
+
+    group = PermissionGroup(
+        name="new_group",
+        description="",
+        owner="admin",
+    )
+    db_session.add(group)
+    db_session.flush()
+
+    updated_permission_group = {
+        "name": permission_group["name"],
+        "id": group.id,
+    }
+
+    permission_group_dict = update_permission_groups(
+        "admin",
+        updated_permission_group,
+    )
+
+    assert permission_group_dict["status"] == "error"
+    assert (
+        permission_group_dict["message"]
+        == f"The group name {permission_group['name']} already exists"
+    )
+
+
+@pytest.mark.django_db
+def test_create_permission_group_then_update(mock_app_get_ps_db):
+    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
+    permission_group = {
+        "name": "new group",
+        "description": "a new group description",
+        "members": [
+            {
+                "username": "admin",
+                "permission": "admin",
+            },
+            {
+                "username": "viewer",
+                "permission": "admin",
+            },
+        ],
+    }
+
+    permission_group_dict = update_permission_groups(
+        "admin",
+        permission_group,
+    )
+
+    assert permission_group_dict["name"] == permission_group["name"]
+    assert permission_group_dict["description"] == permission_group["description"]
+    assert permission_group_dict["owner"] == "admin"
+    assert permission_group_dict["user_permission"] == GroupPermissionLevel.admin.value
+    assert (
+        permission_group_dict["members"][0]["username"]
+        == permission_group["members"][0]["username"]
+    )
+    assert (
+        permission_group_dict["members"][0]["permission"]
+        == GroupPermissionLevel.admin.value
+    )
+
+    assert (
+        permission_group_dict["members"][1]["username"]
+        == permission_group["members"][1]["username"]
+    )
+    assert (
+        permission_group_dict["members"][1]["permission"]
+        == GroupPermissionLevel.admin.value
+    )
+
+    updated_permission_group = {
+        "name": "some new group",
+        "description": "some new group description",
+        "members": [
+            {
+                "username": "admin",
+                "permission": "admin",
+            },
+            {
+                "username": "viewer",
+                "permission": "admin",
+            },
+            {
+                "username": "new_user",
+                "permission": "member",
+            },
+        ],
+    }
+    updated_permission_group["id"] = permission_group_dict["id"]
+
+    permission_group_dict = update_permission_groups(
+        "viewer",
+        updated_permission_group,
+    )
+
+    assert permission_group_dict["name"] == updated_permission_group["name"]
+    assert (
+        permission_group_dict["description"] == updated_permission_group["description"]
+    )
+    assert permission_group_dict["owner"] == "admin"
+    assert permission_group_dict["user_permission"] == GroupPermissionLevel.admin.value
+    assert (
+        permission_group_dict["members"][0]["username"]
+        == updated_permission_group["members"][0]["username"]
+    )
+    assert (
+        permission_group_dict["members"][0]["permission"]
+        == GroupPermissionLevel.admin.value
+    )
+
+    assert permission_group_dict["members"][1]["username"] == "viewer"
+    assert (
+        permission_group_dict["members"][1]["permission"]
+        == GroupPermissionLevel.admin.value
+    )
+
+
+@pytest.mark.django_db
+def test_create_permission_group_but_names_already_exists(
+    mock_app_get_ps_db, permission_group, permission_group_table
+):
+    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
+    permission_group_dict = update_permission_groups(
+        "admin_user",
+        permission_group,
+    )
+
+    assert permission_group_dict["status"] == "error"
+    assert permission_group["name"] == permission_group_table.name
+    assert (
+        permission_group_dict["message"]
+        == f"The group name {permission_group['name']} already exists"
+    )
+
+
+@pytest.mark.django_db
+def test_delete_permission_groups(
+    mock_app_get_ps_db, db_session, permission_group_table
+):
+    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
+    group_id = permission_group_table.id
+    delete_status = delete_permission_groups("owner_user", group_id)
+
+    db_session.expire_all()
+    assert delete_status["status"] == "deleted"
+    db_perm_group = db_session.query(PermissionGroup).get(group_id)
+    assert db_perm_group is None
+
+
+@pytest.mark.django_db
+def test_delete_permission_groups_by_admin_access(
+    mock_app_get_ps_db, db_session, permission_group_table
+):
+    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
+    group_id = permission_group_table.id
+    delete_status = delete_permission_groups("admin_user", group_id)
+
+    db_session.expire_all()
+    assert delete_status["status"] == "deleted"
+    db_perm_group = db_session.query(PermissionGroup).get(group_id)
+    assert db_perm_group is None
+
+
+@pytest.mark.django_db
+def test_delete_permission_groups_failed_by_member_access(
+    mock_app_get_ps_db, db_session, permission_group_table
+):
+    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
+    group_id = permission_group_table.id
+    delete_status = delete_permission_groups("member_user", group_id)
+
+    assert delete_status["status"] == "error"
+    assert delete_status["message"] == "User is not owner or admin in group"
+
+
+@pytest.mark.django_db
+def test_delete_permission_groups_id_not_found(mock_app_get_ps_db, db_session):
+    mock_app_get_ps_db("tethysapp.tethysdash.model.App")
+    delete_status = delete_permission_groups("owner_user", 100000000000000000000)
+
+    db_session.expire_all()
+    assert delete_status["status"] == "error"
+    assert delete_status["message"] == "Group not found"

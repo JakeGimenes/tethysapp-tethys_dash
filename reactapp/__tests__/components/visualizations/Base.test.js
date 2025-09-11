@@ -14,7 +14,7 @@ import {
   mockedCustomData,
   mockedTextVariable,
   mockedUnknownBase,
-  mockedDashboards,
+  userDashboard,
   mockedMapBase,
 } from "__tests__/utilities/constants";
 import BaseVisualization from "components/visualizations/Base";
@@ -203,7 +203,7 @@ it("Creates an Base Item with a Map", async () => {
 });
 
 it("Creates an Base Item with a variable input text box", async () => {
-  const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const dashboard = JSON.parse(JSON.stringify(userDashboard));
   dashboard.gridItems = [mockedTextVariable];
   const user = userEvent.setup();
 
@@ -219,7 +219,7 @@ it("Creates an Base Item with a variable input text box", async () => {
           <InputVariablePComponent />
         </>
       ),
-      options: { dashboards: { user: [dashboard], public: [] } },
+      options: { dashboards: { dashboards: [dashboard] } },
     })
   );
 
@@ -577,8 +577,7 @@ it("Base - update variable input", async () => {
   textVariable.args_string = JSON.stringify({
     initial_value: "https://www.aquaveo.com/images/aquaveo_logo.svg",
     variable_name: "Test Variable",
-    variable_options_source: "text", // TODO Change this to be an empty string or null
-    variable_input_type: "text",
+    variable_options_source: "text",
   });
 
   const mockedDashboard = {
@@ -587,10 +586,10 @@ it("Base - update variable input", async () => {
     label: "test_label",
     notes: "test_notes",
     editable: true,
-    accessGroups: [],
+    publicDashboard: false,
     gridItems: [textVariable, apiImageBase],
   };
-  const dashboards = { user: [mockedDashboard], public: [] };
+  const dashboards = { dashboards: [mockedDashboard] };
 
   server.use(
     rest.get("http://api.test/apps/tethysdash/data", (req, res, ctx) => {

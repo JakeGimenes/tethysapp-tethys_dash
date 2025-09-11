@@ -139,7 +139,6 @@ test("DashboardImportModal Landing Page with griditems", async () => {
           initial_value: "",
           variable_name: "Test Variable",
           variable_options_source: "text",
-          variable_input_type: "text",
         },
         metadata_string: {
           refreshRate: 0,
@@ -148,7 +147,7 @@ test("DashboardImportModal Landing Page with griditems", async () => {
     ],
   };
   const mockAddDashboard = jest.fn();
-  appAPI.addDashboard = mockAddDashboard;
+  jest.spyOn(appAPI, "addDashboard").mockImplementation(mockAddDashboard);
   mockAddDashboard.mockResolvedValue({
     success: true,
     new_dashboard: importedDashboard,
@@ -314,7 +313,6 @@ test("DashboardImportModal Dashboard View", async () => {
       initial_value: "",
       variable_name: "Test Variable",
       variable_options_source: "text",
-      variable_input_type: "text",
     },
     metadata_string: {
       refreshRate: 0,

@@ -13,7 +13,7 @@ export const mockedLandingPageDashboards = {
       uuid: "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
       name: "editable",
       description: "test_description",
-      accessGroups: [],
+      publicDashboard: false,
       image: "my_image.png",
     },
   ],
@@ -23,64 +23,209 @@ export const mockedLandingPageDashboards = {
       uuid: "acde070d-8c4c-4f0d-9d8a-162843c10333",
       name: "noneditable",
       description: "test_description2",
-      accessGroups: ["public"],
+      publicDashboard: true,
       image: "public_image.png",
     },
   ],
 };
 
+export const userDashboard = {
+  id: 1,
+  owner: "admin",
+  uuid: "user-uuid",
+  name: "User Dashboard",
+  description: "A dashboard for user",
+  publicDashboard: false,
+  permissions: [{ username: "admin", permission: "admin" }],
+  userPermission: "admin",
+  unrestrictedPlacement: false,
+  notes: "user_notes",
+  gridItems: [
+    {
+      i: "1",
+      x: 0,
+      y: 0,
+      w: 20,
+      h: 20,
+      source: "",
+      args_string: "{}",
+      metadata_string: JSON.stringify({
+        refreshRate: 0,
+      }),
+    },
+  ],
+};
+
+export const publicDashboard = {
+  id: 2,
+  owner: "admin",
+  uuid: "public-uuid",
+  name: "Public Dashboard",
+  description: "A dashboard for public",
+  publicDashboard: true,
+  permissions: [{ username: "admin", permission: "admin" }],
+  userPermission: null,
+  unrestrictedPlacement: false,
+  notes: "public_notes",
+  gridItems: [
+    {
+      i: "1",
+      x: 0,
+      y: 0,
+      w: 20,
+      h: 20,
+      source: "",
+      args_string: "{}",
+      metadata_string: JSON.stringify({
+        refreshRate: 0,
+      }),
+    },
+  ],
+};
+
+export const viewerDashboard = {
+  id: 3,
+  owner: "admin",
+  uuid: "viewer-uuid",
+  name: "Viewer Dashboard",
+  description: "A dashboard for viewers",
+  publicDashboard: false,
+  permissions: [
+    { username: "admin", permission: "admin" },
+    { username: "jsmith", permission: "viewer" },
+  ],
+  userPermission: "viewer",
+  unrestrictedPlacement: false,
+  notes: "viewer_notes",
+  gridItems: [
+    {
+      i: "1",
+      x: 0,
+      y: 0,
+      w: 20,
+      h: 20,
+      source: "",
+      args_string: "{}",
+      metadata_string: JSON.stringify({
+        refreshRate: 0,
+      }),
+    },
+  ],
+};
+
+export const editorDashboard = {
+  id: 4,
+  owner: "admin",
+  uuid: "editor-uuid",
+  name: "Editor Dashboard",
+  description: "A dashboard for editors",
+  publicDashboard: false,
+  permissions: [
+    { username: "admin", permission: "admin" },
+    { username: "jsmith", permission: "editor" },
+  ],
+  userPermission: "editor",
+  unrestrictedPlacement: false,
+  notes: "editor_notes",
+  gridItems: [
+    {
+      i: "1",
+      x: 0,
+      y: 0,
+      w: 20,
+      h: 20,
+      source: "",
+      args_string: "{}",
+      metadata_string: JSON.stringify({
+        refreshRate: 0,
+      }),
+    },
+  ],
+};
+
+export const adminDashboard = {
+  id: 5,
+  owner: "admin",
+  uuid: "admin-uuid",
+  name: "Admin Dashboard",
+  description: "A dashboard for admins",
+  publicDashboard: false,
+  permissions: [
+    { username: "admin", permission: "admin" },
+    { username: "jsmith", permission: "admin" },
+  ],
+  userPermission: "admin",
+  unrestrictedPlacement: false,
+  notes: "admin_notes",
+  gridItems: [
+    {
+      i: "1",
+      x: 0,
+      y: 0,
+      w: 20,
+      h: 20,
+      source: "",
+      args_string: "{}",
+      metadata_string: JSON.stringify({
+        refreshRate: 0,
+      }),
+    },
+  ],
+};
+
+export const permissionGroups = [
+  {
+    id: 1,
+    name: "solo admin group",
+    description: "",
+    owner: "jsmith",
+    members: [
+      {
+        username: "jsmith",
+        permission: "jsmith",
+      },
+    ],
+    user_permission: "admin",
+  },
+  {
+    id: 2,
+    name: "all admin group",
+    description: "",
+    owner: "jsmith",
+    members: [
+      {
+        username: "admin",
+        permission: "admin",
+      },
+      {
+        username: "jsmith",
+        permission: "admin",
+      },
+    ],
+    user_permission: "admin",
+  },
+  {
+    id: 3,
+    name: "mixed group",
+    description: "some description",
+    owner: "admin",
+    members: [
+      {
+        username: "admin",
+        permission: "admin",
+      },
+      {
+        username: "jsmith",
+        permission: "viewer",
+      },
+    ],
+    user_permission: "viewer",
+  },
+];
+
 export const mockedDashboards = {
-  user: [
-    {
-      id: 1,
-      uuid: "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
-      name: "editable",
-      description: "test_description",
-      accessGroups: [],
-      unrestrictedPlacement: false,
-      image: "my_image.png",
-      notes: "test_notes",
-      gridItems: [
-        {
-          i: "1",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "",
-          args_string: "{}",
-          metadata_string: JSON.stringify({
-            refreshRate: 0,
-          }),
-        },
-      ],
-    },
-  ],
-  public: [
-    {
-      id: 2,
-      uuid: "acde070d-8c4c-4f0d-9d8a-162843c10333",
-      name: "noneditable",
-      description: "test_description2",
-      accessGroups: ["public"],
-      image: "public_image.png",
-      notes: "test_notes2",
-      gridItems: [
-        {
-          i: "1",
-          x: 0,
-          y: 0,
-          w: 20,
-          h: 20,
-          source: "",
-          args_string: "{}",
-          metadata_string: JSON.stringify({
-            refreshRate: 0,
-          }),
-        },
-      ],
-    },
-  ],
+  dashboards: [userDashboard, publicDashboard],
+  permission_groups: permissionGroups,
 };
 
 export const mockedVisualizations = [
@@ -257,7 +402,7 @@ export const updatedDashboard = {
   label: "test_label_updated",
   notes: "test_notes",
   editable: true,
-  accessGroups: [],
+  publicDashboard: false,
   gridItems: [
     {
       id: 1,
@@ -281,7 +426,7 @@ export const newDashboard = {
   label: "test_label3",
   notes: "test_notes3",
   editable: true,
-  accessGroups: [],
+  publicDashboard: false,
   gridItems: [
     {
       id: 1,
@@ -305,7 +450,7 @@ export const copiedDashboard = {
   label: "test_label Copy",
   notes: "test_notes",
   editable: true,
-  accessGroups: [],
+  publicDashboard: false,
   gridItems: [
     {
       id: 1,
@@ -748,8 +893,7 @@ export const mockedTextVariable = {
   args_string: JSON.stringify({
     initial_value: "",
     variable_name: "Test Variable",
-    variable_options_source: "text", // TODO Change this to be an empty string or null
-    variable_input_type: "text",
+    variable_options_source: "text",
   }),
   metadata_string: JSON.stringify({
     refreshRate: 0,
@@ -766,8 +910,7 @@ export const mockedNumberVariable = {
   args_string: JSON.stringify({
     initial_value: 0,
     variable_name: "Test Variable",
-    variable_options_source: "number", // TODO Change this to be an empty string or null
-    variable_input_type: "number",
+    variable_options_source: "number",
   }),
   metadata_string: JSON.stringify({
     refreshRate: 0,
@@ -784,8 +927,7 @@ export const mockedCheckboxVariable = {
   args_string: JSON.stringify({
     initial_value: true,
     variable_name: "Test Variable",
-    variable_options_source: "checkbox", // TODO Change this to be an empty string or null
-    variable_input_type: "number",
+    variable_options_source: "checkbox",
   }),
   metadata_string: JSON.stringify({
     refreshRate: 0,
@@ -802,8 +944,7 @@ export const mockedNullCheckboxVariable = {
   args_string: JSON.stringify({
     initial_value: null,
     variable_name: "Test Variable",
-    variable_options_source: "checkbox", // TODO Change this to be an empty string or null
-    variable_input_type: "number",
+    variable_options_source: "checkbox",
   }),
   metadata_string: JSON.stringify({
     refreshRate: 0,
@@ -822,7 +963,6 @@ export const mockedDropdownVariable = {
     variable_name: "Test Variable",
     variable_options_source:
       "Some Visualization Group Name: Some Visualization Name - Some Visualization Arg",
-    variable_input_type: "dropdown",
   }),
   metadata_string: JSON.stringify({
     refreshRate: 0,

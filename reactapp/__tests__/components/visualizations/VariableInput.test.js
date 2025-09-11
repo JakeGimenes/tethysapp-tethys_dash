@@ -9,7 +9,7 @@ import {
   mockedNumberVariable,
   mockedTextVariable,
   mockedDropdownVisualization,
-  mockedDashboards,
+  userDashboard,
   mockedSliderVariable,
   mockedDateHourVariable,
   mockedDateVariable,
@@ -28,7 +28,7 @@ const advanceTimers = async (ms) => {
 };
 
 it("Creates a Date Hour Input for a Variable Input", async () => {
-  const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const dashboard = JSON.parse(JSON.stringify(userDashboard));
   dashboard.gridItems = [mockedDateHourVariable];
   const handleChange = jest.fn();
   const varInputArgs = JSON.parse(mockedDateHourVariable.args_string);
@@ -46,7 +46,7 @@ it("Creates a Date Hour Input for a Variable Input", async () => {
           <InputVariablePComponent />
         </>
       ),
-      options: { dashboards: { user: [dashboard], public: [] } },
+      options: { dashboards: { dashboards: [dashboard] } },
     })
   );
 
@@ -96,7 +96,7 @@ it("Creates a Date Hour Input for a Variable Input", async () => {
 });
 
 it("Creates a Date Input for a Variable Input", async () => {
-  const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const dashboard = JSON.parse(JSON.stringify(userDashboard));
   dashboard.gridItems = [mockedDateVariable];
   const handleChange = jest.fn();
   const varInputArgs = JSON.parse(mockedDateVariable.args_string);
@@ -114,7 +114,7 @@ it("Creates a Date Input for a Variable Input", async () => {
           <InputVariablePComponent />
         </>
       ),
-      options: { dashboards: { user: [dashboard], public: [] } },
+      options: { dashboards: { dashboards: [dashboard] } },
     })
   );
 
@@ -163,7 +163,7 @@ it("Creates a Date Input for a Variable Input", async () => {
 
 it("Creates a Text Input for a Variable Input", async () => {
   const user = userEvent.setup();
-  const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const dashboard = JSON.parse(JSON.stringify(userDashboard));
   dashboard.gridItems = [mockedTextVariable];
   const handleChange = jest.fn();
   const varInputArgs = JSON.parse(mockedTextVariable.args_string);
@@ -181,7 +181,7 @@ it("Creates a Text Input for a Variable Input", async () => {
           <InputVariablePComponent />
         </>
       ),
-      options: { dashboards: { user: [dashboard], public: [] } },
+      options: { dashboards: { dashboards: [dashboard] } },
     })
   );
 
@@ -211,7 +211,7 @@ it("Creates a Text Input for a Variable Input", async () => {
 it("Creates a Slider Input for a Variable Input", async () => {
   jest.useFakeTimers();
 
-  const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const dashboard = JSON.parse(JSON.stringify(userDashboard));
   dashboard.gridItems = [mockedSliderVariable];
   const handleChange = jest.fn();
   const varInputArgs = JSON.parse(mockedSliderVariable.args_string);
@@ -230,7 +230,7 @@ it("Creates a Slider Input for a Variable Input", async () => {
           <InputVariablePComponent />
         </>
       ),
-      options: { dashboards: { user: [dashboard], public: [] } },
+      options: { dashboards: { dashboards: [dashboard] } },
     })
   );
 
@@ -256,7 +256,7 @@ it("Creates a Slider Input for a Variable Input", async () => {
 });
 
 it("Creates a Slider Input for a Variable Input, missing metadata", async () => {
-  const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const dashboard = JSON.parse(JSON.stringify(userDashboard));
   dashboard.gridItems = [mockedSliderVariable];
   const handleChange = jest.fn();
   const varInputArgs = JSON.parse(mockedSliderVariable.args_string);
@@ -274,7 +274,7 @@ it("Creates a Slider Input for a Variable Input, missing metadata", async () => 
           <InputVariablePComponent />
         </>
       ),
-      options: { dashboards: { user: [dashboard], public: [] } },
+      options: { dashboards: { dashboards: [dashboard] } },
     })
   );
 
@@ -285,7 +285,7 @@ it("Creates a Slider Input for a Variable Input, missing metadata", async () => 
 });
 
 it("Creates a Slider Input for a Variable Input, missing metadata key", async () => {
-  const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const dashboard = JSON.parse(JSON.stringify(userDashboard));
   dashboard.gridItems = [mockedSliderVariable];
   const handleChange = jest.fn();
   const varInputArgs = JSON.parse(mockedSliderVariable.args_string);
@@ -305,7 +305,7 @@ it("Creates a Slider Input for a Variable Input, missing metadata key", async ()
           <InputVariablePComponent />
         </>
       ),
-      options: { dashboards: { user: [dashboard], public: [] } },
+      options: { dashboards: { dashboards: [dashboard] } },
     })
   );
 
@@ -317,7 +317,7 @@ it("Creates a Slider Input for a Variable Input, missing metadata key", async ()
 
 it("Creates a Number Input for a Variable Input", async () => {
   const user = userEvent.setup();
-  const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const dashboard = JSON.parse(JSON.stringify(userDashboard));
   dashboard.gridItems = [mockedNumberVariable];
   const handleChange = jest.fn();
   const varInputArgs = JSON.parse(mockedNumberVariable.args_string);
@@ -335,7 +335,7 @@ it("Creates a Number Input for a Variable Input", async () => {
           <InputVariablePComponent />
         </>
       ),
-      options: { dashboards: { user: [dashboard], public: [] } },
+      options: { dashboards: { dashboards: [dashboard] } },
     })
   );
 
@@ -364,7 +364,7 @@ it("Creates a Number Input for a Variable Input", async () => {
 
 it("Creates a Checkbox Input for a Variable Input", async () => {
   const user = userEvent.setup();
-  const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const dashboard = JSON.parse(JSON.stringify(userDashboard));
   dashboard.gridItems = [mockedCheckboxVariable];
   const handleChange = jest.fn();
   const varInputArgs = JSON.parse(mockedCheckboxVariable.args_string);
@@ -382,7 +382,7 @@ it("Creates a Checkbox Input for a Variable Input", async () => {
           <InputVariablePComponent />
         </>
       ),
-      options: { dashboards: { user: [dashboard], public: [] } },
+      options: { dashboards: { dashboards: [dashboard] } },
     })
   );
 
@@ -401,7 +401,7 @@ it("Creates a Checkbox Input for a Variable Input", async () => {
 
 it("Creates a Checkbox Input for a Variable Input with a null value", async () => {
   const user = userEvent.setup();
-  const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const dashboard = JSON.parse(JSON.stringify(userDashboard));
   dashboard.gridItems = [mockedNullCheckboxVariable];
   const handleChange = jest.fn();
   const varInputArgs = JSON.parse(mockedNullCheckboxVariable.args_string);
@@ -419,7 +419,7 @@ it("Creates a Checkbox Input for a Variable Input with a null value", async () =
           <InputVariablePComponent />
         </>
       ),
-      options: { dashboards: { user: [dashboard], public: [] } },
+      options: { dashboards: { dashboards: [dashboard] } },
     })
   );
 
@@ -441,7 +441,7 @@ it("Creates a Checkbox Input for a Variable Input with a null value", async () =
 });
 
 it("Creates a Dropdown Input for a Variable Input", async () => {
-  const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const dashboard = JSON.parse(JSON.stringify(userDashboard));
   dashboard.gridItems = [mockedDropdownVariable];
   const handleChange = jest.fn();
   const varInputArgs = JSON.parse(mockedDropdownVariable.args_string);
@@ -460,7 +460,7 @@ it("Creates a Dropdown Input for a Variable Input", async () => {
         </>
       ),
       options: {
-        dashboards: { user: [dashboard], public: [] },
+        dashboards: { dashboards: [dashboard] },
         visualizations: mockedDropdownVisualization,
       },
     })
@@ -489,7 +489,7 @@ it("Creates a Dropdown Input for a Variable Input", async () => {
 });
 
 it("Creates a Dropdown Input for a Variable Input from array", async () => {
-  const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const dashboard = JSON.parse(JSON.stringify(userDashboard));
   const gridItem = {
     i: "1",
     x: 0,
@@ -527,7 +527,7 @@ it("Creates a Dropdown Input for a Variable Input from array", async () => {
         </>
       ),
       options: {
-        dashboards: { user: [dashboard], public: [] },
+        dashboards: { dashboards: [dashboard] },
       },
     })
   );
@@ -548,7 +548,7 @@ it("Creates a Dropdown Input for a Variable Input from array", async () => {
 });
 
 it("Creates a Dropdown Input for a Variable Input, not signed in", async () => {
-  const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const dashboard = JSON.parse(JSON.stringify(userDashboard));
   dashboard.gridItems = [mockedDropdownVariable];
   const handleChange = jest.fn();
   const varInputArgs = JSON.parse(mockedDropdownVariable.args_string);
@@ -567,7 +567,7 @@ it("Creates a Dropdown Input for a Variable Input, not signed in", async () => {
         </>
       ),
       options: {
-        dashboards: { user: [dashboard], public: [] },
+        dashboards: { dashboards: [dashboard] },
         visualizations: mockedDropdownVisualization,
         user: { username: null, isAuthenticated: true, isStaff: false },
       },
@@ -604,7 +604,7 @@ describe("When inDataViewerMode", () => {
   // The contextualized value won't be updated so the modal and the dashboard states can be kept separate.
   it("Creates a Text Input for a Variable Input", async () => {
     const user = userEvent.setup();
-    const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+    const dashboard = JSON.parse(JSON.stringify(userDashboard));
     dashboard.gridItems = [mockedTextVariable];
     const handleChange = jest.fn();
     const varInputArgs = JSON.parse(mockedTextVariable.args_string);
@@ -623,7 +623,7 @@ describe("When inDataViewerMode", () => {
           </>
         ),
         options: {
-          dashboards: { user: [dashboard], public: [] },
+          dashboards: { dashboards: [dashboard] },
           inDataViewerMode: true,
         },
       })
@@ -654,7 +654,7 @@ describe("When inDataViewerMode", () => {
 
   it("Creates a Number Input for a Variable Input", async () => {
     const user = userEvent.setup();
-    const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+    const dashboard = JSON.parse(JSON.stringify(userDashboard));
     dashboard.gridItems = [mockedNumberVariable];
     const handleChange = jest.fn();
     const varInputArgs = JSON.parse(mockedNumberVariable.args_string);
@@ -673,7 +673,7 @@ describe("When inDataViewerMode", () => {
           </>
         ),
         options: {
-          dashboards: { user: [dashboard], public: [] },
+          dashboards: { dashboards: [dashboard] },
           inDataViewerMode: true,
         },
       })
@@ -705,7 +705,7 @@ describe("When inDataViewerMode", () => {
 
   it("Creates a Checkbox Input for a Variable Input", async () => {
     const user = userEvent.setup();
-    const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+    const dashboard = JSON.parse(JSON.stringify(userDashboard));
     dashboard.gridItems = [mockedCheckboxVariable];
     const handleChange = jest.fn();
     const varInputArgs = JSON.parse(mockedCheckboxVariable.args_string);
@@ -724,7 +724,7 @@ describe("When inDataViewerMode", () => {
           </>
         ),
         options: {
-          dashboards: { user: [dashboard], public: [] },
+          dashboards: { dashboards: [dashboard] },
           inDataViewerMode: true,
         },
       })
@@ -753,7 +753,7 @@ describe("When inDataViewerMode", () => {
 
   it("Creates a Checkbox Input for a Variable Input with a null value", async () => {
     const user = userEvent.setup();
-    const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+    const dashboard = JSON.parse(JSON.stringify(userDashboard));
     dashboard.gridItems = [mockedNullCheckboxVariable];
     const handleChange = jest.fn();
     const varInputArgs = JSON.parse(mockedNullCheckboxVariable.args_string);
@@ -772,7 +772,7 @@ describe("When inDataViewerMode", () => {
           </>
         ),
         options: {
-          dashboards: { user: [dashboard], public: [] },
+          dashboards: { dashboards: [dashboard] },
           inDataViewerMode: true,
         },
       })
@@ -799,7 +799,7 @@ describe("When inDataViewerMode", () => {
   });
 
   it("Creates a Dropdown Input for a Variable Input", async () => {
-    const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+    const dashboard = JSON.parse(JSON.stringify(userDashboard));
     dashboard.gridItems = [mockedDropdownVariable];
     const handleChange = jest.fn();
     const varInputArgs = JSON.parse(mockedDropdownVariable.args_string);
@@ -818,7 +818,7 @@ describe("When inDataViewerMode", () => {
           </>
         ),
         options: {
-          dashboards: { user: [dashboard], public: [] },
+          dashboards: { dashboards: [dashboard] },
           inDataViewerMode: true,
           visualizations: mockedDropdownVisualization,
         },

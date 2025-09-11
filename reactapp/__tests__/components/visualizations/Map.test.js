@@ -18,7 +18,7 @@ import {
   mockedTextVariable,
   mockedDropdownVariable,
   mockedDropdownVisualization,
-  mockedDashboards,
+  userDashboard,
   layerConfigImageArcGISRest,
 } from "__tests__/utilities/constants";
 import MapContextProvider, {
@@ -218,7 +218,7 @@ test("Map default and update layers", async () => {
 
 test("Map GeoJSON with legend and style", async () => {
   const mockDownloadJSON = jest.fn();
-  appAPI.downloadJSON = mockDownloadJSON;
+  jest.spyOn(appAPI, "downloadJSON").mockImplementation(mockDownloadJSON);
   mockDownloadJSON.mockResolvedValueOnce({
     success: true,
     data: exampleStyle,
@@ -780,7 +780,7 @@ test("Map click attribute variables update text variable input", async () => {
   jest.spyOn(Overlay.prototype, "getRect").mockReturnValue([0, 0, 10, 10]);
   const popSetPosition = jest.spyOn(Overlay.prototype, "setPosition");
   const handleChange = jest.fn();
-  const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const dashboard = JSON.parse(JSON.stringify(userDashboard));
   dashboard.gridItems = [mockedTextVariable];
   const varInputArgs = JSON.parse(mockedTextVariable.args_string);
 
@@ -824,7 +824,7 @@ test("Map click attribute variables update text variable input", async () => {
         />
       </MapContextProvider>
     ),
-    options: { dashboards: { user: [dashboard], public: [] } },
+    options: { dashboards: { dashboards: [dashboard] } },
   });
   render(LoadedComponent);
 
@@ -868,7 +868,7 @@ test("Map click attribute variables update dropdown variable input", async () =>
   jest.spyOn(Overlay.prototype, "getRect").mockReturnValue([0, 0, 10, 10]);
   const popSetPosition = jest.spyOn(Overlay.prototype, "setPosition");
   const handleChange = jest.fn();
-  const dashboard = JSON.parse(JSON.stringify(mockedDashboards.user[0]));
+  const dashboard = JSON.parse(JSON.stringify(userDashboard));
   dashboard.gridItems = [mockedDropdownVariable];
   const varInputArgs = JSON.parse(mockedDropdownVariable.args_string);
 
@@ -913,7 +913,7 @@ test("Map click attribute variables update dropdown variable input", async () =>
       </MapContextProvider>
     ),
     options: {
-      dashboards: { user: [dashboard], public: [] },
+      dashboards: { dashboards: [dashboard] },
       visualizations: mockedDropdownVisualization,
     },
   });
@@ -1274,7 +1274,7 @@ test("Map bad basemap", async () => {
 
 test("Map bad GeoJSON", async () => {
   const mockDownloadJSON = jest.fn();
-  appAPI.downloadJSON = mockDownloadJSON;
+  jest.spyOn(appAPI, "downloadJSON").mockImplementation(mockDownloadJSON);
   mockDownloadJSON.mockResolvedValueOnce({
     success: false,
   });
@@ -1329,7 +1329,7 @@ test("Map bad GeoJSON", async () => {
 
 test("Map bad style", async () => {
   const mockDownloadJSON = jest.fn();
-  appAPI.downloadJSON = mockDownloadJSON;
+  jest.spyOn(appAPI, "downloadJSON").mockImplementation(mockDownloadJSON);
   mockDownloadJSON.mockResolvedValueOnce({
     success: false,
   });

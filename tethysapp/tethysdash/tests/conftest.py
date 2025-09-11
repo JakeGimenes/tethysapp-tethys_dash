@@ -1,11 +1,20 @@
 import pytest
 import json
+import uuid
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from tethysapp.tethysdash.tests.integrated_tests import TEST_DB_URL
 from django.http import HttpResponse
 from unittest.mock import MagicMock
-from tethysapp.tethysdash.model import init_primary_db, Dashboard
+from tethysapp.tethysdash.model import (
+    init_primary_db,
+    Dashboard,
+    DashboardPermission,
+    DashboardPermissionLevel,
+    PermissionGroup,
+    PermissionGroupUser,
+)
+from django.contrib.auth import get_user_model
 
 
 @pytest.fixture(scope="module")
@@ -68,6 +77,69 @@ def mock_app_get_ps_db(session_maker, mocker):
     return mock_app_factory
 
 
+@pytest.fixture
+def test_admin_user(db):
+    User = get_user_model()
+    user = User.objects.create_user(username="admin_user", password="password123")
+    return user
+
+
+@pytest.fixture(scope="function")
+def permission_group():
+    unique_name = f"{uuid.uuid4()}"
+    return {
+        "name": unique_name,
+        "description": "",
+        "owner": "owner_user",
+        "members": [
+            {
+                "username": "owner_user",
+                "permission": "admin",
+            },
+            {
+                "username": "admin_user",
+                "permission": "admin",
+            },
+            {
+                "username": "member_user",
+                "permission": "member",
+            },
+        ],
+        "user_permission": "admin",
+    }
+
+
+@pytest.fixture(scope="function")
+def permission_group_table(db_session, permission_group):
+    group = PermissionGroup(
+        name=permission_group["name"],
+        description=permission_group["description"],
+        owner=permission_group["owner"],
+    )
+    db_session.add(group)
+    db_session.flush()  # get group.id
+    group_id = group.id
+
+    # Add members
+    for member in permission_group["members"]:
+        db_session.add(
+            PermissionGroupUser(
+                username=member["username"],
+                group_id=group_id,
+                permission=member["permission"],
+            )
+        )
+    db_session.commit()
+
+    yield group
+
+    # Clean up: delete group if it still exists
+    refreshed_group = db_session.get(PermissionGroup, group_id)
+    if refreshed_group:
+        db_session.delete(refreshed_group)
+        db_session.commit()
+
+
 @pytest.fixture(scope="function")
 def dashboard_data():
     return {
@@ -76,7 +148,7 @@ def dashboard_data():
         "uuid": "some_user_dashboard_uuid",
         "notes": "some notes",
         "owner": "admin",
-        "access_groups": [],
+        "public": False,
         "unrestricted_placement": False,
     }
 
@@ -89,7 +161,7 @@ def public_dashboard_data():
         "uuid": "some_public_dashboard_uuid",
         "notes": "some notes",
         "owner": "public_user",
-        "access_groups": ["public"],
+        "public": True,
         "unrestricted_placement": False,
     }
 
@@ -111,14 +183,52 @@ def grid_item():
 
 
 @pytest.fixture(scope="function")
-def dashboard(db_session, dashboard_data):
+def dashboard(db_session, dashboard_data, permission_group_table):
     dashboard = Dashboard(**dashboard_data)
     db_session.add(dashboard)
+    db_session.commit()
+    db_session.refresh(dashboard)
+    dashboard_id = dashboard.id
+
+    owner_permission = DashboardPermission(
+        dashboard_id=dashboard_id,
+        username=dashboard.owner,
+        permission=DashboardPermissionLevel.admin,
+    )
+    db_session.add(owner_permission)
+    db_session.commit()
+
+    editor_permission = DashboardPermission(
+        dashboard_id=dashboard_id,
+        username="editor",
+        permission=DashboardPermissionLevel.editor,
+    )
+    db_session.add(editor_permission)
+    db_session.commit()
+
+    viewer_permission = DashboardPermission(
+        dashboard_id=dashboard_id,
+        group=permission_group_table.name,
+        permission=DashboardPermissionLevel.viewer,
+    )
+    db_session.add(viewer_permission)
     db_session.commit()
 
     yield dashboard
 
-    db_session.delete(dashboard)
+    # Only delete if dashboard still exists
+    refreshed_dashboard = db_session.get(Dashboard, dashboard.id)
+    if refreshed_dashboard:
+        db_session.delete(refreshed_dashboard)
+
+    refreshed_owner_permission = (
+        db_session.query(DashboardPermission)
+        .filter_by(dashboard_id=dashboard.id, username=dashboard.owner)
+        .first()
+    )
+    if refreshed_owner_permission:
+        db_session.delete(refreshed_owner_permission)
+
     db_session.commit()
 
 
@@ -127,10 +237,31 @@ def public_dashboard(db_session, public_dashboard_data):
     dashboard = Dashboard(**public_dashboard_data)
     db_session.add(dashboard)
     db_session.commit()
+    db_session.refresh(dashboard)
+    dashboard_id = dashboard.id
+
+    owner_permission = DashboardPermission(
+        dashboard_id=dashboard_id,
+        username=dashboard.owner,
+        permission=DashboardPermissionLevel.admin,
+    )
+    db_session.add(owner_permission)
+    db_session.commit()
 
     yield dashboard
 
-    db_session.delete(dashboard)
+    # Only delete if dashboard still exists
+    refreshed_dashboard = db_session.get(Dashboard, dashboard.id)
+    if refreshed_dashboard:
+        db_session.delete(refreshed_dashboard)
+
+    refreshed_owner_permission = (
+        db_session.query(DashboardPermission)
+        .filter_by(dashboard_id=dashboard.id, username=dashboard.owner)
+        .first()
+    )
+    if refreshed_owner_permission:
+        db_session.delete(refreshed_owner_permission)
     db_session.commit()
 
 

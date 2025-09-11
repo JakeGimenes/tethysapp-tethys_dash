@@ -1,7 +1,5 @@
 import PropTypes from "prop-types";
-import { useState, useEffect, useRef } from "react";
-import Form from "react-bootstrap/Form";
-import { useIdleTimer } from "react-idle-timer";
+import { useState, useEffect, memo } from "react";
 import { spaceAndCapitalize } from "components/modals/utilities";
 import {
   nonDropDownVariableInputTypes,
@@ -14,24 +12,21 @@ import LoadingAnimation from "components/loader/LoadingAnimation";
 import {
   AppContext,
   AvailableDashboardsContext,
+  PermissionGroupContext,
 } from "components/contexts/Contexts";
 import { Route } from "react-router-dom";
 import NotFound from "components/error/NotFound";
 import DashboardView from "views/Dashboard";
 import LandingPage from "views/LandingPage";
 import AppTourContextProvider from "components/contexts/AppTourContext";
-import { Confirmation } from "components/inputs/Confirmation";
-import { getTethysPortalHost } from "services/utilities";
 import {
   handleGridItemExport,
   handleGridItemImport,
 } from "components/dashboard/DashboardItem";
+import IdleTimerManager from "components/loader/IdleTimerManager";
 
 const APP_ID = process.env.TETHYS_APP_ID;
 const LOADER_DELAY = process.env.TETHYS_LOADER_DELAY;
-
-// This controls how often the API is called for activity
-const SESSION_PING_FREQUENCY = process.env.REACT_SESSION_PING_FREQUENCY;
 
 function setupRoutes(dashboards) {
   const PATH_HOME = "/";
@@ -45,32 +40,12 @@ function setupRoutes(dashboards) {
   ];
 
   const dashboardRoutes = [];
-  for (const dashboardMetadata of dashboards.user) {
+  for (const dashboard of dashboards) {
     dashboardRoutes.push(
       <Route
-        path={`/dashboard/user/${dashboardMetadata.name}`}
-        element={<DashboardView editable={true} {...dashboardMetadata} />}
-        key={`route-user-${dashboardMetadata.name}`}
-      />
-    );
-
-    if (dashboardMetadata.accessGroups.includes("public")) {
-      dashboardRoutes.push(
-        <Route
-          path={`/dashboard/public/${dashboardMetadata.name}`}
-          element={<DashboardView editable={false} {...dashboardMetadata} />}
-          key={`route-public-${dashboardMetadata.name}`}
-        />
-      );
-    }
-  }
-
-  for (const dashboardMetadata of dashboards.public) {
-    dashboardRoutes.push(
-      <Route
-        path={`/dashboard/public/${dashboardMetadata.name}`}
-        element={<DashboardView editable={false} {...dashboardMetadata} />}
-        key={`route-public-${dashboardMetadata.name}`}
+        path={`/dashboard/${dashboard.uuid}`}
+        element={<DashboardView {...dashboard} />}
+        key={`route-${dashboard.uuid}`}
       />
     );
   }
@@ -80,137 +55,11 @@ function setupRoutes(dashboards) {
 }
 
 function Loader({ children }) {
-  const dontShowPublicLoginOnStart = localStorage.getItem(
-    "dontShowPublicLoginOnStart"
-  );
   const [error, setError] = useState(null);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [showRedirectPublicUserModal, setShowRedirectPublicUserModal] =
-    useState(false);
-  const [checked, setChecked] = useState(false);
   const [appContext, setAppContext] = useState(null);
-  const [availableDashboards, setAvailableDashboards] = useState(null);
-  const [isTimerEnabled, setIsTimerEnabled] = useState(true);
-  const [sessionState, setSessionState] = useState("Active");
-  const [count, setCount] = useState(0);
-  const [sessionSecurityWarn, setSessionSecurityWarn] = useState(540);
-  const [sessionSecurityExpire, setSessionSecurityExpire] = useState(600);
-  const [remaining, setRemaining] = useState(1000 * sessionSecurityWarn);
-  const [showActivePrompt, setShowActivePrompt] = useState(false);
-  const lastCountRef = useRef(0);
-  const renderedOnce = useRef(false);
-  const TETHYS_PORTAL_HOST = getTethysPortalHost();
-
-  const onAction = (event) => {
-    setCount((prevCount) => {
-      return prevCount + 1;
-    });
-  };
-
-  const onIdle = () => {
-    setSessionState("Idle");
-    // TODO Figure out how to forcefully log out
-    window.location.assign(
-      `${TETHYS_PORTAL_HOST}/accounts/login?next=${window.location.pathname}`
-    );
-    setShowActivePrompt(false);
-  };
-
-  const onActive = () => {
-    setSessionState("Active");
-    setShowActivePrompt(false);
-  };
-
-  const onPrompt = () => {
-    setSessionState("Prompted");
-    setCount(0);
-    setShowActivePrompt(true);
-  };
-
-  const { getRemainingTime, activate, pause } = useIdleTimer({
-    disabled: !isTimerEnabled,
-    onActive,
-    onAction,
-    onIdle,
-    onPrompt,
-    timeout: 1000 * sessionSecurityExpire,
-    throttle: 1000 * SESSION_PING_FREQUENCY, // This controls how often the API is called for activity
-    promptBeforeIdle: 1000 * (sessionSecurityExpire - sessionSecurityWarn),
-  });
-
-  useEffect(() => {
-    if (!isTimerEnabled) return;
-
-    const interval = setInterval(() => {
-      setRemaining(Math.ceil(getRemainingTime() / 1000));
-    }, 500);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [getRemainingTime, isTimerEnabled]);
-
-  useEffect(() => {
-    if (
-      sessionState === "Active" ||
-      (sessionState === "Active" && count > lastCountRef.current)
-    ) {
-      lastCountRef.current = count;
-      const callAPI = async () => {
-        try {
-          const idleFor = 0;
-          const response = await appAPI.getActivityData({ idleFor });
-
-          if (response.status === -2) {
-            // The user has been signed out
-            window.location.assign(
-              `${TETHYS_PORTAL_HOST}/accounts/login?next=${window.location.pathname}`
-            );
-          } else if (response.status === 2 || response.status === -1) {
-            // (2) Pause the IdleTimer as it's not going to do anything for a public user
-            // (-1) Also pauses if the user doesn't have a session security in the first place
-            // aka django-session-security not being installed.
-            pause();
-          }
-          if (!renderedOnce.current) {
-            renderedOnce.current = true;
-            if (parseInt(response.EXPIRE_AFTER) === 0) {
-              setIsTimerEnabled(false);
-            } else {
-              setSessionSecurityExpire(response.EXPIRE_AFTER);
-              setSessionSecurityWarn(response.WARN_AFTER);
-            }
-          }
-        } catch (error) {
-          console.error("API call failed:", error);
-        }
-      };
-
-      callAPI();
-    }
-  }, [TETHYS_PORTAL_HOST, sessionState, count, pause]);
-
-  const handleStillHere = (active) => {
-    if (active) {
-      onActive();
-      activate();
-    }
-  };
-
-  const handlePublicUser = (confirmation) => {
-    if (!confirmation) {
-      window.location.assign(
-        `${TETHYS_PORTAL_HOST}/accounts/login?next=${window.location.pathname}`
-      );
-      return;
-    }
-    setShowRedirectPublicUserModal(false);
-  };
-
-  const handleDontShow = (e) => {
-    setChecked(e.target.checked);
-    localStorage.setItem("dontShowPublicLoginOnStart", e.target.checked);
-  };
+  const [availableDashboards, setAvailableDashboards] = useState([]);
+  const [permissionGroups, setPermissionGroups] = useState([]);
 
   const handleError = (error) => {
     setTimeout(() => {
@@ -219,7 +68,7 @@ function Loader({ children }) {
   };
 
   useEffect(() => {
-    if (availableDashboards) {
+    if (availableDashboards.length > 0) {
       setAppContext((existingAppContext) => ({
         ...existingAppContext,
         routes: setupRoutes(availableDashboards),
@@ -250,14 +99,7 @@ function Loader({ children }) {
       try {
         tethysSession = await tethysAPI.getSession();
       } catch (error) {
-        if (error.response.status === 401) {
-          if (
-            dontShowPublicLoginOnStart === "false" ||
-            !dontShowPublicLoginOnStart
-          ) {
-            setShowRedirectPublicUserModal(true);
-          }
-        } else {
+        if (error.response.status !== 401) {
           handleError(error);
           return;
         }
@@ -402,12 +244,13 @@ function Loader({ children }) {
         tethysApp,
         user,
         csrf,
-        routes: setupRoutes(dashboards),
+        routes: setupRoutes(dashboards.dashboards),
         visualizations: allVisualizations,
         mapLayerTemplates,
         visualizationArgs,
       });
-      setAvailableDashboards(dashboards);
+      setPermissionGroups(dashboards.permission_groups);
+      setAvailableDashboards(dashboards.dashboards);
 
       // Allow for minimum delay to display loader
       setTimeout(() => {
@@ -420,52 +263,15 @@ function Loader({ children }) {
     // eslint-disable-next-line
   }, []);
 
-  function getUniqueDashboardName(name) {
-    const existingNames = availableDashboards.user.map((obj) => obj.name);
-    if (!existingNames.includes(name)) {
-      return name;
-    }
-
-    let newName = `${name} - Copy`;
-    let count = 2;
-    while (existingNames.includes(newName)) {
-      newName = `${name} - Copy (${count})`;
-      count++;
-    }
-
-    return newName;
-  }
-
-  function removeDashboardById({ id, replacementDashboard }) {
-    // Reconstruct the object while replacing the matching dashboard
-    const newUserDashboards = [];
-    for (const dashboard of availableDashboards.user) {
-      if (dashboard.id === id) {
-        if (replacementDashboard) {
-          newUserDashboards.push(replacementDashboard); // Replace with new object
-        }
-      } else {
-        newUserDashboards.push(dashboard); // Keep existing
-      }
-    }
-
-    return newUserDashboards;
-  }
-
   async function copyDashboard(id, name) {
-    const newName = getUniqueDashboardName(name);
-
+    // let the user input a new name
     const apiResponse = await appAPI.copyDashboard(
-      { id, newName },
+      { id, newName: `${name} - Copy` },
       appContext.csrf
     );
     if (apiResponse.success) {
-      const newDashboard = apiResponse["new_dashboard"];
-      let newAvailableDashboards = JSON.parse(
-        JSON.stringify(availableDashboards)
-      );
-      newAvailableDashboards["user"].push(newDashboard);
-      setAvailableDashboards(newAvailableDashboards);
+      const newDashboard = apiResponse.new_dashboard;
+      setAvailableDashboards([...availableDashboards, newDashboard]);
     }
     return apiResponse;
   }
@@ -476,12 +282,8 @@ function Loader({ children }) {
       appContext.csrf
     );
     if (apiResponse.success) {
-      const newDashboard = apiResponse["new_dashboard"];
-      let newAvailableDashboards = JSON.parse(
-        JSON.stringify(availableDashboards)
-      );
-      newAvailableDashboards["user"].unshift(newDashboard);
-      setAvailableDashboards(newAvailableDashboards);
+      const newDashboard = apiResponse.new_dashboard;
+      setAvailableDashboards([...availableDashboards, newDashboard]);
     }
     return apiResponse;
   }
@@ -489,8 +291,7 @@ function Loader({ children }) {
   async function deleteDashboard(id) {
     const apiResponse = await appAPI.deleteDashboard({ id }, appContext.csrf);
     if (apiResponse["success"]) {
-      const userDashboards = removeDashboardById({ id });
-      setAvailableDashboards({ ...availableDashboards, user: userDashboards });
+      setAvailableDashboards(availableDashboards.filter((d) => d.id !== id));
     }
     return apiResponse;
   }
@@ -499,8 +300,6 @@ function Loader({ children }) {
     if (!("name" in dashboardContext)) {
       return { success: false, message: "Dashboards must include a name" };
     }
-    const newName = getUniqueDashboardName(dashboardContext.name);
-    dashboardContext.name = newName;
 
     if (dashboardContext.gridItems && dashboardContext.gridItems.length > 0) {
       const updatedGridItems = [];
@@ -553,13 +352,45 @@ function Loader({ children }) {
       appContext.csrf
     );
     if (apiResponse.success) {
-      const updatedDashboard = apiResponse["updated_dashboard"];
-      const userDashboards = removeDashboardById({
-        id,
-        replacementDashboard: updatedDashboard,
-      });
+      const updatedDashboard = apiResponse.updated_dashboard;
+      setAvailableDashboards(
+        availableDashboards.map((d) =>
+          d.id === updatedDashboard.id ? updatedDashboard : d
+        )
+      );
+    }
+    return apiResponse;
+  }
 
-      setAvailableDashboards({ ...availableDashboards, user: userDashboards });
+  async function updatePermissionGroup(updatedPermissionGroup) {
+    const apiResponse = await appAPI.updatePermissionGroup(
+      updatedPermissionGroup,
+      appContext.csrf
+    );
+    if (apiResponse.success) {
+      const responsePermissionGroup = apiResponse.updated_permission_group;
+      setPermissionGroups((existingPermissionGroups) => {
+        if (updatedPermissionGroup.id) {
+          return existingPermissionGroups.map((g) =>
+            g.id === responsePermissionGroup.id ? responsePermissionGroup : g
+          );
+        } else {
+          return [...existingPermissionGroups, responsePermissionGroup];
+        }
+      });
+    }
+    return apiResponse;
+  }
+
+  async function deletePermissionGroup(id) {
+    const apiResponse = await appAPI.deletePermissionGroup(
+      { id },
+      appContext.csrf
+    );
+    if (apiResponse.success) {
+      setPermissionGroups((existingPermissionGroups) =>
+        existingPermissionGroups.filter((g) => g.id !== id)
+      );
     }
     return apiResponse;
   }
@@ -569,74 +400,35 @@ function Loader({ children }) {
     throw error;
   } else if (!isLoaded) {
     return <LoadingAnimation />;
-  } else if (showRedirectPublicUserModal) {
-    return (
-      <Confirmation
-        show={showRedirectPublicUserModal}
-        okLabel="Proceed Without Signing in"
-        cancelLabel="Sign in"
-        title="Public User Login"
-        confirmation={
-          <>
-            <div>
-              You are not signed in. Sign in to create and update dashboards.
-            </div>
-            <div style={{ marginTop: ".75rem" }}>
-              If you'd like to continue, you will only have access to public
-              dashboards
-            </div>
-            <Form.Check
-              onChange={handleDontShow}
-              type="checkbox"
-              label="Don't show on startup"
-              checked={checked}
-              aria-label="dont-show-public-user-on-startup"
-              style={{ marginTop: ".75rem" }}
-            />
-          </>
-        }
-        proceed={handlePublicUser}
-        backdrop={"static"}
-      />
-    );
   } else {
     return (
       <>
         <AppContext.Provider value={appContext}>
-          <AvailableDashboardsContext.Provider
+          <PermissionGroupContext.Provider
             value={{
-              availableDashboards,
-              setAvailableDashboards,
-              addDashboard,
-              deleteDashboard,
-              copyDashboard,
-              updateDashboard,
-              exportDashboard,
-              importDashboard,
+              permissionGroups,
+              updatePermissionGroup,
+              deletePermissionGroup,
             }}
           >
-            <AppTourContextProvider>
-              {children}
-              <Confirmation
-                show={showActivePrompt}
-                okLabel="Stay Signed In"
-                cancelLabel="Sign out"
-                title="Are you still here?"
-                confirmation={
-                  <>
-                    <div style={{ marginTop: ".75rem" }}>
-                      {/* remaining - 1 to kinda fake the timer
-                      since there's a race condition with the backend logout */}
-                      Logging out in {remaining - 1} seconds.
-                    </div>
-                  </>
-                }
-                proceed={handleStillHere}
-                backdrop={"static"}
-                noCancel
-              />
-            </AppTourContextProvider>
-          </AvailableDashboardsContext.Provider>
+            <AvailableDashboardsContext.Provider
+              value={{
+                availableDashboards,
+                setAvailableDashboards,
+                addDashboard,
+                deleteDashboard,
+                copyDashboard,
+                updateDashboard,
+                exportDashboard,
+                importDashboard,
+              }}
+            >
+              <AppTourContextProvider>
+                {children}
+                <IdleTimerManager />
+              </AppTourContextProvider>
+            </AvailableDashboardsContext.Provider>
+          </PermissionGroupContext.Provider>
         </AppContext.Provider>
       </>
     );
@@ -644,7 +436,7 @@ function Loader({ children }) {
 }
 
 Loader.propTypes = {
-  children: PropTypes.arrayOf(PropTypes.object),
+  children: PropTypes.node,
 };
 
-export default Loader;
+export default memo(Loader);
