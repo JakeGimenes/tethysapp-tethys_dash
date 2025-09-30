@@ -133,7 +133,7 @@ export const LandingPageHeader = () => {
                     aria-label="manageVisualizationPermissionsButton"
                   >
                     <img
-                      src={`${staticBasePath}tethysdash/images/visualization_settings.png`}
+                      src={`${staticBasePath}visualization_settings.png`}
                       alt="Visualization Settings"
                       style={{ height: "1.5rem" }}
                     />
