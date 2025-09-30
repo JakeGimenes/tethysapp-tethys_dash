@@ -6,6 +6,12 @@ import {
   mockVisualizationPermissions,
 } from "__tests__/utilities/constants";
 
+const prefixUrlSegment = (process.env.TETHYS_PREFIX_URL || "").replace(
+  /(^\/+|\/+?$)/g,
+  ""
+);
+const staticBasePath = `${prefixUrlSegment ? `/${prefixUrlSegment}` : ""}/static/tethysdash/images/`;
+
 const handlers = [
   rest.get("http://api.test/api/apps/tethysdash/", (req, res, ctx) => {
     return res(
@@ -17,7 +23,7 @@ const handlers = [
         package: "tethysdash",
         urlNamespace: "tethysdash",
         color: "",
-        icon: "/static/tethysdash/images/tethys_dash.png",
+        icon: `${staticBasePath}tethys_dash.png`,
         exitUrl: "/apps/",
         rootUrl: "/apps/tethysdash/",
         settingsUrl: "/admin/tethys_apps/tethysapp/999/change/",
