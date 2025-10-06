@@ -1,11 +1,12 @@
 import { parse, format } from "date-fns";
-import { useState, useRef, memo } from "react";
+import { useState, useRef, memo, useContext, useEffect } from "react";
 import PropTypes from "prop-types";
 import ReactDatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { FaRegCalendarAlt } from "react-icons/fa";
 import "components/inputs/DatePicker.css";
 import styled from "styled-components";
+import { DataViewerModeContext } from "components/contexts/Contexts";
 
 const Wrapper = styled.div`
   position: relative;
@@ -27,6 +28,9 @@ const StyledButton = styled.button`
   cursor: pointer;
   padding: 0;
 `;
+
+export const dateHourFormat = "MM/dd/yyyy h:mm aa";
+export const dateFormat = "MM/dd/yyyy";
 
 // Relative date parser
 export const parseDateMath = ({ value, type }) => {
@@ -84,24 +88,33 @@ export const parseDateMath = ({ value, type }) => {
 
   // Return formatted string without any Z / timezone offset
   return type === "date"
-    ? format(date, "MM/dd/yyyy")
-    : format(date, "MM/dd/yyyy h:mm aa");
+    ? format(date, dateFormat)
+    : format(date, dateHourFormat);
 };
 
 const DatePicker = ({ label, value, onChange, type, divProps }) => {
+  const { inDataViewerMode } = useContext(DataViewerModeContext);
+
   const [selectedDate, setSelectedDate] = useState(() => {
     if (checkForVariable(value)) return null;
     const parsed = parseDateMath({ value, type });
     return parsed
       ? parse(
           parsed,
-          type === "date-hour" ? "MM/dd/yyyy h:mm aa" : "MM/dd/yyyy",
+          type === "date-hour" ? dateHourFormat : dateFormat,
           new Date()
         )
       : null;
   });
   const datePickerRef = useRef(null);
   const [inputValue, setInputValue] = useState(value);
+
+  useEffect(() => {
+    if (value !== inputValue && value !== parseDateMath({ value, type })) {
+      onRawChange(value);
+    }
+    // eslint-disable-next-line
+  }, [value]);
 
   function checkForVariable(val) {
     return typeof val === "string" && /\$\{[^}]+\}/.test(val);
@@ -118,7 +131,11 @@ const DatePicker = ({ label, value, onChange, type, divProps }) => {
     // Try relative date parsing
     const parsedDate = parseDateMath({ value: val, type });
     if (parsedDate) {
-      onChange(parsedDate);
+      if (inDataViewerMode) {
+        onChange(val);
+      } else {
+        onChange(parsedDate);
+      }
       setSelectedDate(parsedDate);
       return;
     }
@@ -131,9 +148,7 @@ const DatePicker = ({ label, value, onChange, type, divProps }) => {
   const handleSelect = (date) => {
     setSelectedDate(date);
     const formattedDate =
-      type === "date"
-        ? format(date, "MM/dd/yyyy")
-        : format(date, "MM/dd/yyyy h:mm aa");
+      type === "date" ? format(date, dateFormat) : format(date, dateHourFormat);
     onChange(formattedDate);
     setInputValue(formattedDate);
   };
@@ -170,9 +185,7 @@ const DatePicker = ({ label, value, onChange, type, divProps }) => {
             selected={selectedDate}
             onChange={handleSelect}
             showTimeInput={type === "date-hour"}
-            dateFormat={
-              type === "date-hour" ? "MM/dd/yyyy h:mm aa" : "MM/dd/yyyy"
-            }
+            dateFormat={type === "date-hour" ? dateHourFormat : dateFormat}
             timeInputLabel="Time:"
             showYearDropdown
             showMonthDropdown
