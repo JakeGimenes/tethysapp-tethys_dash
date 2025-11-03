@@ -83,6 +83,27 @@ class Dashboard(Base):
         cascade="all, delete-orphan",
         order_by="GridItem.order",
     )
+    tabs = relationship(
+        "DashboardTab",
+        back_populates="dashboard",
+        cascade="all, delete-orphan",
+        order_by="DashboardTab.tab_order",
+    )
+
+
+class DashboardTab(Base):
+    __tablename__ = "dashboard_tabs"
+
+    id = Column(Integer, primary_key=True)
+    dashboard_id = Column(Integer, ForeignKey("dashboards.id"), nullable=False)
+    name = Column(String, nullable=False)  # Tab display name
+    tab_order = Column(Integer, default=0)  # Order of tabs
+
+    # Relationships
+    dashboard = relationship("Dashboard", back_populates="tabs")
+    grid_items = relationship(
+        "GridItem", back_populates="tab", cascade="all, delete-orphan"
+    )
 
 
 class GridItem(Base):
@@ -123,6 +144,12 @@ class GridItem(Base):
     metadata_string = Column(String)
     order = Column(Integer)
     __table_args__ = (UniqueConstraint("dashboard_id", "i", name="_dashboard_i"),)
+
+    # relationships
+    tab_id = Column(
+        Integer, ForeignKey("dashboard_tabs.id"), nullable=True
+    )  # Nullable for backward compatibility
+    tab = relationship("DashboardTab", back_populates="grid_items")
 
 
 class DashboardPermissionLevel(enum.Enum):
@@ -341,6 +368,9 @@ def add_new_dashboard(
         session.add(owner_permission)
         session.commit()
 
+        # Create default "Main" tab
+        default_tab = add_new_dashboard_tab(session, new_dashboard_id, "Main", 0)
+
         if grid_items:
             for index, grid_item in enumerate(grid_items):
                 grid_item_i = grid_item["i"]
@@ -369,10 +399,22 @@ def add_new_dashboard(
                     grid_item_args_string,
                     grid_item_metadata_string,
                     index,
+                    tab_id=default_tab.id,
                 )
         else:
             add_new_grid_item(
-                session, new_dashboard_id, "1", 0, 0, 20, 20, "", "{}", "{}", 0
+                session,
+                new_dashboard_id,
+                "1",
+                0,
+                0,
+                20,
+                20,
+                "",
+                "{}",
+                "{}",
+                0,
+                tab_id=default_tab.id,
             )
 
         # Commit the session and close the connection
@@ -395,6 +437,7 @@ def add_new_grid_item(
     grid_item_args_string,
     grid_item_metadata_string,
     grid_item_order,
+    tab_id=None,
 ):
     """
     Add a new grid item to a dashboard.
@@ -414,12 +457,14 @@ def add_new_grid_item(
         grid_item_args_string (str): JSON string with visualization arguments
         grid_item_metadata_string (str): JSON string with component metadata
         grid_item_order (int): Display order within dashboard
+        tab_id (int, optional): ID of the parent tab
 
     Returns:
         GridItem: The newly created grid item object
     """
     new_grid_item = GridItem(
         dashboard_id=dashboard_id,
+        tab_id=tab_id,
         i=grid_item_i,
         x=grid_item_x,
         y=grid_item_y,
@@ -458,6 +503,33 @@ def delete_grid_item(session, dashboard_id, i):
     session.commit()
 
     return
+
+
+def add_new_dashboard_tab(session, dashboard_id, name, tab_order=0):
+    """
+    Add a new tab to a dashboard.
+
+    Creates and persists a new dashboard tab with the specified name and order.
+
+    Args:
+        session: SQLAlchemy database session
+        dashboard_id (int): ID of the parent dashboard
+        name (str): Display name of the tab
+        tab_order (int): Order position of the tab (default: 0)
+
+    Returns:
+        DashboardTab: The newly created dashboard tab object
+    """
+    new_tab = DashboardTab(
+        dashboard_id=dashboard_id,
+        name=name,
+        tab_order=tab_order,
+    )
+    session.add(new_tab)
+    session.commit()
+    session.refresh(new_tab)
+
+    return new_tab
 
 
 def copy_named_dashboard(user, id, new_name, dashboard_uuid):
@@ -502,9 +574,25 @@ def copy_named_dashboard(user, id, new_name, dashboard_uuid):
         session.flush()  # Ensure new_dashboard gets an ID before copying grid_items
         new_dashboard_id = new_dashboard.id
 
-        # Copy GridItems and explicitly add them to the session
+        # Copy Tabs and their GridItems
+        tab_id_mapping = {}  # Map original tab IDs to new tab IDs
+
+        for tab in original_dashboard.tabs:
+            new_tab = DashboardTab(
+                dashboard_id=new_dashboard.id,
+                name=tab.name,
+                tab_order=tab.tab_order,
+            )
+            session.add(new_tab)
+            session.flush()  # Get new tab ID
+            tab_id_mapping[tab.id] = new_tab.id
+
+        # Copy GridItems and link them to appropriate tabs
         new_grid_items = []
         for index, grid_item in enumerate(original_dashboard.grid_items):
+            # Determine which tab this grid item should belong to
+            new_tab_id = tab_id_mapping.get(grid_item.tab_id, tab_id_mapping.get(None))
+
             new_item = GridItem(
                 i=grid_item.i,
                 x=grid_item.x,
@@ -514,13 +602,14 @@ def copy_named_dashboard(user, id, new_name, dashboard_uuid):
                 source=grid_item.source,
                 args_string=grid_item.args_string,
                 metadata_string=grid_item.metadata_string,
-                dashboard_id=new_dashboard.id,  # Explicitly link to new dashboard
+                dashboard_id=new_dashboard.id,
+                tab_id=new_tab_id,
                 order=index,
             )
-            session.add(new_item)  # Explicitly add to session
+            session.add(new_item)
             new_grid_items.append(new_item)
 
-        new_dashboard.grid_items = new_grid_items  # Assign the new items
+        new_dashboard.grid_items = new_grid_items
 
         # Only add admin permission for the user
         admin_permission = DashboardPermission(
@@ -659,69 +748,93 @@ def update_named_dashboard(user, id, dashboard_updates):
                 session, db_dashboard, user, dashboard_updates["permissions"]
             )
 
-        if "gridItems" in dashboard_updates:
-            updated_grid_items = dashboard_updates["gridItems"]
-            existing_db_grid_items_ids = [
-                grid_item.i for grid_item in db_dashboard.grid_items
-            ]
-            grid_items_ids = [grid_item["i"] for grid_item in updated_grid_items]
-            grid_items_to_delete = [
-                i for i in existing_db_grid_items_ids if i not in grid_items_ids
-            ]
-            grid_items_to_add = [
-                grid_item
-                for grid_item in updated_grid_items
-                if grid_item["i"] not in existing_db_grid_items_ids
-            ]
+        if "tabs" in dashboard_updates:
+            updated_tabs = dashboard_updates["tabs"]
+            # Build a mapping of existing tabs by id
+            existing_tabs_by_id = {tab.id: tab for tab in db_dashboard.tabs}
+            updated_tab_ids = [tab.get("id") for tab in updated_tabs if tab.get("id")]
+            existing_tab_ids = set(existing_tabs_by_id.keys())
 
-            for grid_item_id in grid_items_to_delete:
-                delete_grid_item(session, db_dashboard.id, grid_item_id)
+            # Delete tabs not present in update
+            for tab_id in existing_tab_ids - set(updated_tab_ids):
+                db_tab = session.get(DashboardTab, tab_id)
+                if db_tab:
+                    session.delete(db_tab)
 
-            for index, grid_item in enumerate(updated_grid_items):
-                grid_item_i = grid_item["i"]
-                grid_item_x = int(grid_item["x"])
-                grid_item_y = int(grid_item["y"])
-                grid_item_w = int(grid_item["w"])
-                grid_item_h = int(grid_item["h"])
-                grid_item_source = grid_item["source"]
-                grid_item_args_string = grid_item["args_string"]
-                grid_item_metadata_string = grid_item["metadata_string"]
-                if grid_item_source == "Text":
-                    clean_text = sanitize_html(
-                        json.loads(grid_item_args_string)["text"]
-                    )
-                    grid_item_args_string = json.dumps({"text": clean_text})
+            # Process tabs in order
+            for tab_order, updated_tab in enumerate(updated_tabs):
+                tab_id = updated_tab.get("id")
+                tab_name = updated_tab.get("name")
+                tab_grid_items = updated_tab.get("gridItems", [])
 
-                if grid_item in grid_items_to_add:
-                    db_grid_item = add_new_grid_item(
-                        session,
-                        db_dashboard.id,
-                        grid_item_i,
-                        grid_item_x,
-                        grid_item_y,
-                        grid_item_w,
-                        grid_item_h,
-                        grid_item_source,
-                        grid_item_args_string,
-                        grid_item_metadata_string,
-                        index,
-                    )
+                if tab_id and tab_id in existing_tabs_by_id:
+                    db_tab = existing_tabs_by_id[tab_id]
+                    db_tab.name = tab_name
+                    db_tab.tab_order = tab_order
                 else:
-                    db_grid_item = (
-                        session.query(GridItem)
-                        .filter(GridItem.dashboard_id == db_dashboard.id)
-                        .filter(GridItem.i == grid_item_i)
-                        .first()
+                    db_tab = DashboardTab(
+                        dashboard_id=db_dashboard.id,
+                        name=tab_name,
+                        tab_order=tab_order,
                     )
-                    db_grid_item.i = grid_item_i
-                    db_grid_item.x = grid_item_x
-                    db_grid_item.y = grid_item_y
-                    db_grid_item.w = grid_item_w
-                    db_grid_item.h = grid_item_h
-                    db_grid_item.source = grid_item_source
-                    db_grid_item.args_string = grid_item_args_string
-                    db_grid_item.metadata_string = grid_item_metadata_string
-                    db_grid_item.order = index
+                    session.add(db_tab)
+                    session.flush()  # Get new tab id
+                    tab_id = db_tab.id
+
+                # Build mapping of existing grid items by id for this tab
+                existing_grid_items_by_id = {
+                    item.id: item for item in db_tab.grid_items
+                }
+                updated_grid_item_ids = [
+                    item.get("id") for item in tab_grid_items if item.get("id")
+                ]
+                existing_grid_item_ids = set(existing_grid_items_by_id.keys())
+
+                # Delete grid items not present in update
+                for grid_item_id in existing_grid_item_ids - set(updated_grid_item_ids):
+                    db_grid_item = session.get(GridItem, grid_item_id)
+                    if db_grid_item:
+                        session.delete(db_grid_item)
+
+                # Process grid items in order
+                for grid_item_order, grid_item in enumerate(tab_grid_items):
+                    grid_item_id = grid_item.get("id")
+                    grid_item_source = grid_item["source"]
+                    grid_item_args_string = grid_item["args_string"]
+
+                    # Sanitize text content
+                    if grid_item_source == "Text":
+                        clean_text = sanitize_html(
+                            json.loads(grid_item_args_string)["text"]
+                        )
+                        grid_item_args_string = json.dumps({"text": clean_text})
+
+                    if grid_item_id and grid_item_id in existing_grid_items_by_id:
+                        db_grid_item = existing_grid_items_by_id[grid_item_id]
+                        db_grid_item.x = grid_item["x"]
+                        db_grid_item.y = grid_item["y"]
+                        db_grid_item.w = grid_item["w"]
+                        db_grid_item.h = grid_item["h"]
+                        db_grid_item.source = grid_item_source
+                        db_grid_item.args_string = grid_item_args_string
+                        db_grid_item.metadata_string = grid_item["metadata_string"]
+                        db_grid_item.order = grid_item_order
+                        db_grid_item.tab_id = tab_id
+                    else:
+                        new_grid_item = GridItem(
+                            dashboard_id=db_dashboard.id,
+                            tab_id=tab_id,
+                            i=grid_item["i"],
+                            x=int(grid_item["x"]),
+                            y=int(grid_item["y"]),
+                            w=int(grid_item["w"]),
+                            h=int(grid_item["h"]),
+                            source=grid_item_source,
+                            args_string=grid_item_args_string,
+                            metadata_string=grid_item["metadata_string"],
+                            order=grid_item_order,
+                        )
+                        session.add(new_grid_item)
 
         db_dashboard.last_updated = datetime.now(timezone.utc)
 
@@ -1496,22 +1609,31 @@ def parse_db_dashboard(session, dashboards, user, dashboard_view):
         if dashboard_view:
             dashboard_dict.update({"notes": dashboard.notes})
 
-            griditems = []
-            for griditem in dashboard.grid_items:
-                griditem_data = {
-                    "id": griditem.id,
-                    "i": griditem.i,
-                    "x": griditem.x,
-                    "y": griditem.y,
-                    "w": griditem.w,
-                    "h": griditem.h,
-                    "source": griditem.source,
-                    "args_string": griditem.args_string,
-                    "metadata_string": griditem.metadata_string,
-                }
-                griditems.append(griditem_data)
+            tabs = []
+            for tab in dashboard.tabs:
+                griditems = []
+                for griditem in tab.grid_items:
+                    griditem_data = {
+                        "id": griditem.id,
+                        "i": griditem.i,
+                        "x": griditem.x,
+                        "y": griditem.y,
+                        "w": griditem.w,
+                        "h": griditem.h,
+                        "source": griditem.source,
+                        "args_string": griditem.args_string,
+                        "metadata_string": griditem.metadata_string,
+                    }
+                    griditems.append(griditem_data)
 
-            dashboard_dict["gridItems"] = griditems
+                tab_data = {
+                    "id": tab.id,
+                    "name": tab.name,
+                    "gridItems": griditems,
+                }
+                tabs.append(tab_data)
+
+            dashboard_dict["tabs"] = tabs
 
         dashboard_list.append(dashboard_dict)
 
@@ -1587,6 +1709,41 @@ def get_dashboards(user, dashboard_view=False, id=None):
         session.close()
 
 
+def upload_json_to_workspace(
+    user, dashboard_folder, filename, clean_data, dashboard_uuid
+):
+    Session = App.get_persistent_store_database("primary_db", as_sessionmaker=True)
+    session = Session()
+    saved = False
+
+    try:
+        db_dashboard = (
+            session.query(Dashboard).filter(Dashboard.uuid == dashboard_uuid).first()
+        )
+        if not db_dashboard:
+            raise Exception("This dashboard does not exist for this user")
+        user_permission = get_dashboard_user_permission(session, db_dashboard, user)
+
+        # Check if user has editor or admin permission
+        if (
+            user_permission != DashboardPermissionLevel.editor
+            and user_permission != DashboardPermissionLevel.admin
+        ):
+            raise Exception(
+                "User does not have admin or editor permissions to update the dashboard."  # noqa: E501
+            )
+
+        dashboard_file = os.path.join(dashboard_folder, filename)
+        with open(dashboard_file, "w") as outfile:
+            outfile.write(clean_data)
+
+        saved = True
+    finally:
+        session.close()
+
+    return saved
+
+
 def clean_up_jsons(user):
     """
     Remove unused JSON files from the workspace.
@@ -1598,54 +1755,96 @@ def clean_up_jsons(user):
     Args:
         user: User object to clean up files for
     """
+
     print("Checking to see if there are any unused json files to remove")
     Session = App.get_persistent_store_database("primary_db", as_sessionmaker=True)
     session = Session()
-    user_dashboards = (
-        session.query(Dashboard).filter(Dashboard.owner == user.username).all()
-    )
-    in_use_jsons = []
-    for user_dashboard in user_dashboards:
-        maps_grid_items_layers = flatten(
-            [
-                json.loads(grid_item.args_string)["layers"]
-                for grid_item in user_dashboard.grid_items
-                if grid_item.source == "Map"
-            ]
+    try:
+        # Get all dashboards the user can edit (editor or admin permission)
+        user_dashboards = (
+            session.query(Dashboard)
+            .join(DashboardPermission)
+            .filter(
+                (DashboardPermission.username == user.username)
+                & (
+                    DashboardPermission.permission.in_(
+                        [
+                            DashboardPermissionLevel.admin,
+                            DashboardPermissionLevel.editor,
+                        ]
+                    )
+                )
+            )
+            .all()
         )
-        if maps_grid_items_layers:
-            json_files = [
-                maps_grid_items_layer["configuration"]["props"]["source"]["geojson"]
-                for maps_grid_items_layer in maps_grid_items_layers
-                if maps_grid_items_layer["configuration"]["props"]["source"]["type"]
-                == "GeoJSON"
-            ]
-            in_use_jsons.append(json_files)
+        # Also include dashboards where user is in a group with editor/admin permission
+        user_groups = (
+            session.query(PermissionGroup.id)
+            .join(
+                PermissionGroupUser, PermissionGroup.id == PermissionGroupUser.group_id
+            )
+            .filter(PermissionGroupUser.username == user.username)
+            .all()
+        )
+        user_group_ids = [g[0] for g in user_groups]
+        group_dashboards = (
+            session.query(Dashboard)
+            .join(DashboardPermission)
+            .filter(
+                (DashboardPermission.group_id.in_(user_group_ids))
+                & (
+                    DashboardPermission.permission.in_(
+                        [
+                            DashboardPermissionLevel.admin,
+                            DashboardPermissionLevel.editor,
+                        ]
+                    )
+                )
+            )
+            .all()
+        )
+        # Combine and deduplicate dashboards
+        all_dashboards = {d.id: d for d in user_dashboards + group_dashboards}.values()
 
-            stylejson_files = [
-                maps_grid_items_layer["configuration"]["style"]
-                for maps_grid_items_layer in maps_grid_items_layers
-                if "style" in maps_grid_items_layer["configuration"]
-            ]
-            in_use_jsons.append(stylejson_files)
+        app_workspace = get_app_workspace(App)
+        for dashboard in all_dashboards:
+            dashboard_uuid = dashboard.uuid
+            dashboard_folder = os.path.join(app_workspace.path, dashboard_uuid)
+            if not os.path.exists(dashboard_folder):
+                continue
+            # Collect all in-use jsons for this dashboard
+            in_use_jsons = []
+            maps_grid_items_layers = flatten(
+                [
+                    json.loads(grid_item.args_string)["layers"]
+                    for grid_item in dashboard.grid_items
+                    if grid_item.source == "Map"
+                ]
+            )
+            if maps_grid_items_layers:
+                json_files = [
+                    maps_grid_items_layer["configuration"]["props"]["source"]["geojson"]
+                    for maps_grid_items_layer in maps_grid_items_layers
+                    if maps_grid_items_layer["configuration"]["props"]["source"]["type"]
+                    == "GeoJSON"
+                ]
+                in_use_jsons.extend(json_files)
 
-    in_use_jsons = flatten(in_use_jsons)
+                stylejson_files = [
+                    maps_grid_items_layer["configuration"]["style"]
+                    for maps_grid_items_layer in maps_grid_items_layers
+                    if "style" in maps_grid_items_layer["configuration"]
+                ]
+                in_use_jsons.extend(stylejson_files)
 
-    app_workspace = get_app_workspace(App)
-    json_folder = os.path.join(app_workspace.path, "json")
-    json_user_folder = os.path.join(json_folder, str(user))
-    if not os.path.exists(json_user_folder):
-        os.makedirs(json_user_folder)
-    existing_json_user_files = os.listdir(json_user_folder)
-
-    unused_files = [
-        file for file in existing_json_user_files if file not in in_use_jsons
-    ]
-
-    for unused_file in unused_files:
-        print(f"Removing the {unused_file} file")
-        os.remove(os.path.join(json_folder, str(user), unused_file))
-        os.remove(os.path.join(json_folder, unused_file))
+            # Remove unused files in dashboard folder
+            existing_files = os.listdir(dashboard_folder)
+            unused_files = [f for f in existing_files if f not in in_use_jsons]
+            for unused_file in unused_files:
+                print(f"Removing the {unused_file} file from {dashboard_folder}")
+                os.remove(os.path.join(dashboard_folder, unused_file))
+    finally:
+        session.close()
 
     return
 

@@ -11,7 +11,7 @@ import DataViewerModal from "components/modals/DataViewer/DataViewer";
 import { mockedDashboards, userDashboard } from "__tests__/utilities/constants";
 import createLoadedComponent, {
   InputVariablePComponent,
-  ContextLayoutPComponent,
+  TabsPComponent,
 } from "__tests__/utilities/customRender";
 import selectEvent from "react-select-event";
 
@@ -33,7 +33,7 @@ afterEach(() => {
 
 test("Dashboard Viewer Modal Custom Image", async () => {
   const mockedDashboard = JSON.parse(JSON.stringify(userDashboard));
-  const gridItem = mockedDashboard.gridItems[0];
+  const gridItem = mockedDashboard.tabs[0].gridItems[0];
   const mockhandleModalClose = jest.fn();
   const mocksetGridItemMessage = jest.fn();
   const mocksetShowGridItemMessage = jest.fn();
@@ -98,7 +98,7 @@ test("Dashboard Viewer Modal Custom Image", async () => {
 
 test("Dashboard Viewer Modal Text", async () => {
   const mockedDashboard = JSON.parse(JSON.stringify(userDashboard));
-  const gridItem = mockedDashboard.gridItems[0];
+  const gridItem = mockedDashboard.tabs[0].gridItems[0];
   const mockhandleModalClose = jest.fn();
   const mocksetGridItemMessage = jest.fn();
   const mocksetShowGridItemMessage = jest.fn();
@@ -172,7 +172,7 @@ test("Dashboard Viewer Modal Text", async () => {
 
 test("Dashboard Viewer Modal Variable Input", async () => {
   const mockedDashboard = JSON.parse(JSON.stringify(userDashboard));
-  const gridItem = mockedDashboard.gridItems[0];
+  const gridItem = mockedDashboard.tabs[0].gridItems[0];
   const mockhandleModalClose = jest.fn();
   const mocksetGridItemMessage = jest.fn();
   const mocksetShowGridItemMessage = jest.fn();
@@ -251,7 +251,7 @@ test("Dashboard Viewer Modal Variable Input", async () => {
 test("Dashboard Viewer Modal Variable Input already exists", async () => {
   const updatedMockedDashboards = JSON.parse(JSON.stringify(mockedDashboards));
   const mockedDashboard = updatedMockedDashboards.dashboards[0];
-  mockedDashboard.gridItems = [
+  mockedDashboard.tabs[0].gridItems = [
     {
       i: "1",
       x: 0,
@@ -281,7 +281,7 @@ test("Dashboard Viewer Modal Variable Input already exists", async () => {
       }),
     },
   ];
-  const gridItem = mockedDashboard.gridItems[0];
+  const gridItem = mockedDashboard.tabs[0].gridItems[0];
   const mockhandleModalClose = jest.fn();
   const mocksetGridItemMessage = jest.fn();
   const mocksetShowGridItemMessage = jest.fn();
@@ -367,7 +367,7 @@ test("Dashboard Viewer Modal Variable Input already exists", async () => {
 test("Dashboard Viewer Modal Update Existing Variable Input", async () => {
   const updatedMockedDashboards = JSON.parse(JSON.stringify(mockedDashboards));
   const mockedDashboard = updatedMockedDashboards.dashboards[0];
-  mockedDashboard.gridItems = [
+  mockedDashboard.tabs[0].gridItems = [
     {
       i: "1",
       x: 0,
@@ -414,7 +414,7 @@ test("Dashboard Viewer Modal Update Existing Variable Input", async () => {
       }),
     },
   ];
-  const gridItem = mockedDashboard.gridItems[1];
+  const gridItem = mockedDashboard.tabs[0].gridItems[1];
   const mockhandleModalClose = jest.fn();
   const mocksetGridItemMessage = jest.fn();
   const mocksetShowGridItemMessage = jest.fn();
@@ -472,7 +472,7 @@ test("Dashboard Viewer Modal Update Existing Variable Input", async () => {
 
 test("Dashboard Viewer Modal Switch tabs", async () => {
   const mockedDashboard = JSON.parse(JSON.stringify(userDashboard));
-  const gridItem = mockedDashboard.gridItems[0];
+  const gridItem = mockedDashboard.tabs[0].gridItems[0];
   const mockhandleModalClose = jest.fn();
   const mocksetGridItemMessage = jest.fn();
   const mocksetShowGridItemMessage = jest.fn();
@@ -518,7 +518,7 @@ test("Dashboard Viewer Modal Switch tabs", async () => {
 
 test("Dashboard Viewer Modal Map False layer control", async () => {
   const mockedDashboard = JSON.parse(JSON.stringify(userDashboard));
-  const gridItem = mockedDashboard.gridItems[0];
+  const gridItem = mockedDashboard.tabs[0].gridItems[0];
   const mockhandleModalClose = jest.fn();
   const mocksetGridItemMessage = jest.fn();
   const mocksetShowGridItemMessage = jest.fn();
@@ -538,7 +538,7 @@ test("Dashboard Viewer Modal Map False layer control", async () => {
             setGridItemMessage={mocksetGridItemMessage}
             setShowGridItemMessage={mocksetShowGridItemMessage}
           />
-          <ContextLayoutPComponent />
+          <TabsPComponent />
         </>
       ),
       options: { initialDashboard: userDashboard },
@@ -580,8 +580,8 @@ test("Dashboard Viewer Modal Map False layer control", async () => {
   fireEvent.click(dataviewerSaveButton);
 
   const updatedDashboard = JSON.parse(JSON.stringify(userDashboard));
-  updatedDashboard.gridItems[0].source = "Map";
-  updatedDashboard.gridItems[0].args_string = JSON.stringify({
+  updatedDashboard.tabs[0].gridItems[0].source = "Map";
+  updatedDashboard.tabs[0].gridItems[0].args_string = JSON.stringify({
     baseMap:
       "https://server.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer",
     layerControl: false,
@@ -589,15 +589,19 @@ test("Dashboard Viewer Modal Map False layer control", async () => {
     map_extent: { extent: "-10686671.12,4721671.57,4.5" },
     mapDrawing: {},
   });
-  updatedDashboard.gridItems[0].metadata_string = "{}";
-  expect(await screen.findByTestId("layout-context")).toHaveTextContent(
-    JSON.stringify({ ...updatedDashboard, editable: true })
+  updatedDashboard.tabs[0].gridItems[0].metadata_string = "{}";
+
+  expect(await screen.findByTestId("tabs-context")).toHaveTextContent(
+    JSON.stringify({
+      tabs: updatedDashboard.tabs,
+      activeTabId: updatedDashboard.tabs[0].id,
+    })
   );
 });
 
 test("Dashboard Viewer Modal Text Options", async () => {
   const mockedDashboard = JSON.parse(JSON.stringify(userDashboard));
-  const gridItem = mockedDashboard.gridItems[0];
+  const gridItem = mockedDashboard.tabs[0].gridItems[0];
   const mockhandleModalClose = jest.fn();
   const mocksetGridItemMessage = jest.fn();
   const mocksetShowGridItemMessage = jest.fn();

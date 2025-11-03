@@ -1,11 +1,20 @@
-import { useState, useEffect, useCallback, useRef, useContext } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useContext,
+  memo,
+} from "react";
 import RGL, { WidthProvider } from "react-grid-layout";
 import {
   LayoutContext,
   EditingContext,
   DisabledEditingMovementContext,
+  TabContext,
 } from "components/contexts/Contexts";
 import DashboardItem from "components/dashboard/DashboardItem";
+import PropTypes from "prop-types";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
@@ -14,9 +23,9 @@ const ReactGridLayout = WidthProvider(RGL);
 const colCount = 100;
 const rowHeight = window.innerWidth / colCount - 10;
 
-const DashboardLayout = () => {
-  const { updateGridItems, gridItems, unrestrictedPlacement } =
-    useContext(LayoutContext);
+const DashboardLayout = ({ tabId, gridItems }) => {
+  const { unrestrictedPlacement } = useContext(LayoutContext);
+  const { updateTab } = useContext(TabContext);
   const { isEditing } = useContext(EditingContext);
   const { disabledEditingMovement } = useContext(
     DisabledEditingMovementContext
@@ -88,7 +97,7 @@ const DashboardLayout = () => {
       });
     }
 
-    updateGridItems(updatedGridItems);
+    updateTab(tabId, { gridItems: updatedGridItems });
     updateGridEditing(updatedGridItems);
   }
 
@@ -136,5 +145,20 @@ const DashboardLayout = () => {
     </ReactGridLayout>
   );
 };
+DashboardLayout.propTypes = {
+  tabId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  gridItems: PropTypes.arrayOf(
+    PropTypes.shape({
+      i: PropTypes.string.isRequired,
+      x: PropTypes.number.isRequired,
+      y: PropTypes.number.isRequired,
+      w: PropTypes.number.isRequired,
+      h: PropTypes.number.isRequired,
+      source: PropTypes.string.isRequired,
+      args_string: PropTypes.string.isRequired,
+      metadata_string: PropTypes.string.isRequired,
+    })
+  ).isRequired,
+};
 
-export default DashboardLayout;
+export default memo(DashboardLayout);

@@ -4,11 +4,12 @@ import Container from "react-bootstrap/Container";
 import { memo, useState, useContext, useEffect } from "react";
 import { BsInfoCircle } from "react-icons/bs";
 import {
-  LayoutContext,
   EditingContext,
   VariableInputsContext,
   DataViewerModeContext,
   AppContext,
+  LayoutContext,
+  TabContext,
 } from "components/contexts/Contexts";
 import { useAppTourContext } from "components/contexts/AppTourContext";
 import DataViewerModal from "components/modals/DataViewer/DataViewer";
@@ -108,7 +109,7 @@ export const requiredGridItemKeys = [
   "metadata_string",
 ];
 
-export const handleGridItemExport = async (gridItem) => {
+export const handleGridItemExport = async (gridItem, dashboard_uuid) => {
   const { id, ...exportedGridItem } = gridItem;
   exportedGridItem.metadata_string = JSON.parse(
     exportedGridItem.metadata_string
@@ -119,7 +120,11 @@ export const handleGridItemExport = async (gridItem) => {
   if (exportedGridItem.source === "Map") {
     if ("layers" in gridItemArgs && gridItemArgs["layers"].length > 0) {
       for (const mapLayer of gridItemArgs["layers"]) {
-        const apiResponse = await loadLayerJSONs(mapLayer, true);
+        const apiResponse = await loadLayerJSONs(
+          mapLayer,
+          dashboard_uuid,
+          true
+        );
         if (!apiResponse.success) {
           return apiResponse;
         }
@@ -220,12 +225,13 @@ const DashboardItem = ({
   const [gridItemStyling, setGridItemStyling] = useState(
     JSON.parse(gridItemMetadataString)
   );
-  const { updateGridItems, gridItems } = useContext(LayoutContext);
+  const { getActiveTab, updateTab } = useContext(TabContext);
   const { variableInputValues, setVariableInputValues } = useContext(
     VariableInputsContext
   );
   const { setInDataViewerMode } = useContext(DataViewerModeContext);
   const { visualizations } = useContext(AppContext);
+  const { uuid } = useContext(LayoutContext);
   const { setAppTourStep, activeAppTour } = useAppTourContext();
   const [attribution, setAttribution] = useState(
     findVisualizationBySource(visualizations, gridItemSource)?.attribution
@@ -246,10 +252,11 @@ const DashboardItem = ({
 
   async function deleteGridItem(e) {
     if (await confirm("Are you sure you want to delete the item?")) {
+      const { gridItems, id: activeTabId } = getActiveTab();
       const updated_grid_items = JSON.parse(JSON.stringify(gridItems));
       updated_grid_items.splice(gridItemIndex, 1);
 
-      updateGridItems(updated_grid_items);
+      updateTab(activeTabId, { gridItems: updated_grid_items });
       setIsEditing(true);
     }
   }
@@ -264,13 +271,15 @@ const DashboardItem = ({
   }
 
   function updateGridItemOrder(newIndex) {
+    const { gridItems, id: activeTabId } = getActiveTab();
     const updatedGridItems = [...gridItems];
     const [movingGridItem] = updatedGridItems.splice(gridItemIndex, 1);
     updatedGridItems.splice(newIndex, 0, movingGridItem);
-    updateGridItems(updatedGridItems);
+    updateTab(activeTabId, { gridItems: updatedGridItems });
   }
 
   function bringGridItemtoFront() {
+    const { gridItems } = getActiveTab();
     const newIndex = gridItems.length - 1;
     updateGridItemOrder(newIndex);
   }
@@ -291,9 +300,10 @@ const DashboardItem = ({
   }
 
   async function exportGridItem() {
+    const { gridItems } = getActiveTab();
     const gridItem = JSON.parse(JSON.stringify(gridItems[gridItemIndex]));
 
-    const exportedGridItem = await handleGridItemExport(gridItem);
+    const exportedGridItem = await handleGridItemExport(gridItem, uuid);
 
     try {
       downloadJSONFile(exportedGridItem, "TethysDashGridItem.json");
@@ -304,6 +314,7 @@ const DashboardItem = ({
   }
 
   function copyGridItem() {
+    const { gridItems, id: activeTabId } = getActiveTab();
     let maxGridItemI = gridItems.reduce((acc, value) => {
       return (acc = acc > parseInt(value.i) ? acc : parseInt(value.i));
     }, 0);
@@ -331,7 +342,7 @@ const DashboardItem = ({
       setVariableInputValues(variableInputValues);
     }
     const updatedGridItems = JSON.parse(JSON.stringify(gridItems));
-    updateGridItems([...updatedGridItems, newGridItem]);
+    updateTab(activeTabId, { gridItems: [...updatedGridItems, newGridItem] });
     setIsEditing(true);
   }
 

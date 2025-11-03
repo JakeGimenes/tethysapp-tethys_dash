@@ -1,4 +1,4 @@
-import DashboardLayout from "components/dashboard/DashboardLayout";
+import DashboardTabs from "components/dashboard/DashboardTabs";
 import DashboardLayoutAlerts from "components/dashboard/DashboardLayoutAlerts";
 import LayoutAlertContextProvider from "components/contexts/LayoutAlertContext";
 import { DashboardHeader } from "components/layout/Header";
@@ -7,13 +7,15 @@ import DashboardLoader from "components/loader/DashboardLoader";
 
 function DashboardView(dashboardProps) {
   return (
-    <DashboardLoader {...dashboardProps}>
-      <LayoutAlertContextProvider>
-        <DashboardHeader />
-        <DashboardLayoutAlerts />
-        <DashboardLayout />
-      </LayoutAlertContextProvider>
-    </DashboardLoader>
+    <div className="h-100" style={{ display: "flex", flexDirection: "column" }}>
+      <DashboardLoader {...dashboardProps}>
+        <LayoutAlertContextProvider>
+          <DashboardHeader />
+          <DashboardLayoutAlerts />
+          <DashboardTabs />
+        </LayoutAlertContextProvider>
+      </DashboardLoader>
+    </div>
   );
 }
 

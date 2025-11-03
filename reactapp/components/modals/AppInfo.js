@@ -7,8 +7,8 @@ import styled from "styled-components";
 import { useAppTourContext } from "components/contexts/AppTourContext";
 import {
   EditingContext,
-  LayoutContext,
   AppContext,
+  TabContext,
 } from "components/contexts/Contexts";
 import { confirm } from "components/inputs/DeleteConfirmation";
 import cw3eLogo from "assets/cw3e_logo.png";
@@ -55,7 +55,7 @@ const contactUsEmail = process.env.TETHYSDASH_SUPPORT_EMAIL;
 const contactUsGitHub = process.env.TETHYSDASH_SUPPORT_GITHUB;
 
 function AppInfoModal({ showModal, setShowModal, view }) {
-  const layoutContext = useContext(LayoutContext);
+  const tabContext = useContext(TabContext);
   const editingContext = useContext(EditingContext);
   const { user } = useContext(AppContext);
   const { setActiveAppTour, setAppTourStep } = useAppTourContext();
@@ -89,7 +89,7 @@ function AppInfoModal({ showModal, setShowModal, view }) {
         editingContext.setIsEditing(false);
       }
       setAppTourStep(17);
-      layoutContext.resetGridItems();
+      tabContext.resetTabs();
     } else {
       setAppTourStep(0);
     }
