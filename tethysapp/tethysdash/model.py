@@ -143,7 +143,6 @@ class GridItem(Base):
     args_string = Column(String)
     metadata_string = Column(String)
     order = Column(Integer)
-    __table_args__ = (UniqueConstraint("dashboard_id", "i", name="_dashboard_i"),)
 
     # relationships
     tab_id = Column(
