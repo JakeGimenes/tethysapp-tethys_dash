@@ -70,7 +70,7 @@ const VisualizationArguments = ({
       }
     }
 
-    return (
+    return ( // TODO
       <DataInput
         key={key}
         label={spaceAndCapitalize(obj.label)}
@@ -140,7 +140,7 @@ function VisualizationPane({
   const [vizArguments, setVizArguments] = useState([]);
   const [showVisualizationSelectorModal, setShowVisualizationSelectorModal] =
     useState(false);
-  const { visualizations } = useContext(AppContext);
+  const { csrf, visualizations } = useContext(AppContext);
   const { variableInputValues } = useContext(VariableInputsContext);
   const { activeAppTour } = useAppTourContext();
   const currentSelectedVizTypeOption = useRef(selectedVizTypeOption);
@@ -327,6 +327,7 @@ function VisualizationPane({
             itemData.args.initial_value = "0";
           }
         }
+        // TODO we update variable input here
         setVizType("variableInput");
         setVizData({
           variable_name: itemData.args.variable_name,
@@ -350,6 +351,7 @@ function VisualizationPane({
           metadataString: JSON.stringify(settings),
           variableInputValues,
           vizLoadingIcon: true,
+          csrf
         });
       }
     }

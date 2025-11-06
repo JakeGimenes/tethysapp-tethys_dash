@@ -14,6 +14,10 @@ const FileUpload = ({ label, onFileUpload, extensionsAllowed }) => {
   // On file select (from the pop up)
   const onFileChange = (event) => {
     const uploadedFile = event.target.files[0];
+    if (!uploadedFile) {
+      return;
+    }
+
     const uploadedFileName = uploadedFile.name;
     const extension = uploadedFileName.split(".").pop();
 
@@ -27,6 +31,8 @@ const FileUpload = ({ label, onFileUpload, extensionsAllowed }) => {
         const fileContent = e.target.result;
         // Do something with the file content
         onFileUpload({ uploadedFileName, fileContent });
+        // Reset input value to allow same file re-upload
+        e.target.value = null;
       };
 
       reader.readAsText(uploadedFile);
@@ -45,9 +51,9 @@ const FileUpload = ({ label, onFileUpload, extensionsAllowed }) => {
         </Alert>
       )}
       <Form.Group controlId="formFile">
-        <Form.Label className="no-caret">
-          <b>{label}</b>
-        </Form.Label>
+        {label && (
+          <Form.Label className="no-caret">{<b>{label}</b>}</Form.Label>
+        )}
         <Form.Control
           data-testid="file-input"
           type="file"

@@ -15,6 +15,7 @@ import {
 import TooltipButton from "components/buttons/TooltipButton";
 import { BsArrowClockwise } from "react-icons/bs";
 import Slider from "components/inputs/Slider";
+import CSVUploader from "components/inputs/CSVUploader";
 import {
   parseDateMath,
   dateFormat,
@@ -159,7 +160,12 @@ const VariableInput = ({
       setValue(inputValue);
       onChange(inputValue);
 
-      if (Array.isArray(type) || type === "checkbox" || type === "slider") {
+      if (
+        Array.isArray(type) ||
+        type === "checkbox" ||
+        type === "slider" ||
+        type === "csv-uploader"
+      ) {
         if (!inDataViewerMode) {
           updateVariableInputs(e.value ?? e);
         }
@@ -228,6 +234,25 @@ const VariableInput = ({
         />
       </StyledDiv>
     );
+  } else if (type === "csv-uploader") {
+    const requiredKeys = ["headers"];
+    const missingKeys = requiredKeys.filter((key) => metadata?.[key] == null);
+
+    if (!metadata || missingKeys.length > 0) {
+      return (
+        <div data-testid="csvuploader-missing-metadata">
+          Missing required metadata: {missingKeys}
+        </div>
+      );
+    }
+    return (
+      <StyledDiv>
+        <label>
+          <b>{label}</b>:
+        </label>
+        <CSVUploader headers={metadata.headers} onChange={handleInputChange} />
+      </StyledDiv>
+    );
   } else {
     return (
       <StyledDiv>
@@ -270,21 +295,22 @@ VariableInput.propTypes = {
       PropTypes.number,
       PropTypes.string,
       PropTypes.instanceOf(Date),
-    ]),
+    ]), // For slider metadata
     max: PropTypes.oneOfType([
       PropTypes.number,
       PropTypes.string,
       PropTypes.instanceOf(Date),
-    ]),
-    step: PropTypes.number,
-    dataType: PropTypes.string,
-    initialValue: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    ]), // For slider metadata
+    step: PropTypes.number, // For slider metadata
+    dataType: PropTypes.string, // For slider metadata
+    initialValue: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), // For slider metadata
     initialRange: PropTypes.arrayOf(
       PropTypes.oneOfType([PropTypes.number, PropTypes.string])
-    ),
-    rangeMode: PropTypes.string,
-    outputFormat: PropTypes.string,
+    ), // For slider metadata
+    rangeMode: PropTypes.string, // For slider metadata
+    outputFormat: PropTypes.string, // For slider metadata
     dateTimeDelta: PropTypes.string, // For slider metadata
+    headers: PropTypes.arrayOf(PropTypes.string), // For CSVUploader metadata
   }),
 };
 
