@@ -164,7 +164,7 @@ function VisualizationPane({
   const [vizArguments, setVizArguments] = useState([]);
   const [showVisualizationSelectorModal, setShowVisualizationSelectorModal] =
     useState(false);
-  const { csrf, visualizations } = useContext(AppContext);
+  const { visualizations } = useContext(AppContext);
   const { variableInputValues } = useContext(VariableInputsContext);
   const { activeAppTour } = useAppTourContext();
   const currentSelectedVizTypeOption = useRef(selectedVizTypeOption);
@@ -384,7 +384,6 @@ function VisualizationPane({
           metadataString: JSON.stringify(settings),
           variableInputValues,
           vizLoadingIcon: true,
-          csrf,
         });
       }
     }

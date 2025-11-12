@@ -20,7 +20,7 @@ jest.mock("components/visualizations/Map", () => {
 
 test("getVisualization bad response", async () => {
   server.use(
-    rest.post(
+    rest.get(
       "http://api.test/apps/tethysdash/visualizations/get/",
       (req, res, ctx) => {
         return res(
@@ -57,7 +57,7 @@ test("getVisualization bad response", async () => {
 
 test("getVisualization bad response with custom messaging", async () => {
   server.use(
-    rest.post(
+    rest.get(
       "http://api.test/apps/tethysdash/visualizations/get/",
       (req, res, ctx) => {
         return res(
@@ -98,7 +98,7 @@ test("getVisualization bad response with custom messaging", async () => {
 
 test("getVisualization bad type", async () => {
   server.use(
-    rest.post(
+    rest.get(
       "http://api.test/apps/tethysdash/visualizations/get/",
       (req, res, ctx) => {
         return res(
@@ -138,7 +138,7 @@ test("getVisualization bad type", async () => {
 test("getVisualization plotly", async () => {
   const plotData = { data: {}, layout: {} };
   server.use(
-    rest.post(
+    rest.get(
       "http://api.test/apps/tethysdash/visualizations/get/",
       (req, res, ctx) => {
         return res(
@@ -179,7 +179,7 @@ test("getVisualization plotly", async () => {
 
 test("getVisualization image", async () => {
   server.use(
-    rest.post(
+    rest.get(
       "http://api.test/apps/tethysdash/visualizations/get/",
       (req, res, ctx) => {
         return res(
@@ -220,7 +220,7 @@ test("getVisualization image", async () => {
 
 test("getVisualization, empty variable and no custom messaging", async () => {
   server.use(
-    rest.post(
+    rest.get(
       "http://api.test/apps/tethysdash/visualizations/get/",
       (req, res, ctx) => {
         return res(
@@ -259,7 +259,7 @@ test("getVisualization, empty variable and no custom messaging", async () => {
 
 test("getVisualization, empty variable and custom messaging", async () => {
   server.use(
-    rest.post(
+    rest.get(
       "http://api.test/apps/tethysdash/visualizations/get/",
       (req, res, ctx) => {
         return res(
@@ -307,7 +307,7 @@ test("getVisualization table", async () => {
     subtitle: "Some Subtitle",
   };
   server.use(
-    rest.post(
+    rest.get(
       "http://api.test/apps/tethysdash/visualizations/get/",
       (req, res, ctx) => {
         return res(
@@ -353,7 +353,7 @@ test("getVisualization card", async () => {
     description: "Some Description",
   };
   server.use(
-    rest.post(
+    rest.get(
       "http://api.test/apps/tethysdash/visualizations/get/",
       (req, res, ctx) => {
         return res(
@@ -400,7 +400,7 @@ test("getVisualization map", async () => {
     legend: [],
   };
   server.use(
-    rest.post(
+    rest.get(
       "http://api.test/apps/tethysdash/visualizations/get/",
       (req, res, ctx) => {
         return res(
@@ -448,7 +448,7 @@ test("getVisualization custom", async () => {
     props: {},
   };
   server.use(
-    rest.post(
+    rest.get(
       "http://api.test/apps/tethysdash/visualizations/get/",
       (req, res, ctx) => {
         return res(
@@ -490,7 +490,7 @@ test("getVisualization custom", async () => {
 
 test("getVisualization text", async () => {
   server.use(
-    rest.post(
+    rest.get(
       "http://api.test/apps/tethysdash/visualizations/get/",
       (req, res, ctx) => {
         return res(
@@ -529,7 +529,7 @@ test("getVisualization text", async () => {
 
 test("getVisualization variable input", async () => {
   server.use(
-    rest.post(
+    rest.get(
       "http://api.test/apps/tethysdash/visualizations/get/",
       (req, res, ctx) => {
         return res(
