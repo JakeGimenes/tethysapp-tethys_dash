@@ -76,6 +76,8 @@ export const valuesEqual = (a1, a2, visited = new WeakSet()) => {
     return a1 === a2;
   } else if (Array.isArray(a1) && Array.isArray(a2)) {
     return arraysEqual(a1, a2, visited);
+  } else if (a1 instanceof Date && a2 instanceof Date) {
+    return Math.floor(a1.getTime() / 1000) === Math.floor(a2.getTime() / 1000);
   } else if (typeof a1 === "object" && typeof a2 === "object") {
     return objectsEqual(a1, a2, visited);
   } else {
