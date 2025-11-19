@@ -12,6 +12,7 @@ import {
   getVisualization,
   updateObjectWithVariableInputs,
   findSelectOptionByValue,
+  getDependentVariableInputs,
 } from "components/visualizations/utilities";
 import {
   AppContext,
@@ -42,6 +43,11 @@ const StyledH2 = styled.h2`
   align-items: center;
   height: 100%;
   text-align: center;
+  word-wrap: break-word;
+  word-break: break-word;
+  white-space: pre-wrap;
+  overflow: auto;
+  padding: 1rem;
 `;
 
 export const Visualization = memo(
@@ -146,6 +152,100 @@ export const Visualization = memo(
   }
 );
 
+// Helper function to check if a value is a relative date
+const isRelativeDate = (val) => {
+  return typeof val === "string" && /^now([+-]\d+[YMWDHmS])*$/.test(val);
+};
+
+export function toLocalISO(d) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return (
+    d.getFullYear() +
+    "-" +
+    pad(d.getMonth() + 1) +
+    "-" +
+    pad(d.getDate()) +
+    "T" +
+    pad(d.getHours()) +
+    ":" +
+    pad(d.getMinutes()) +
+    ":" +
+    pad(d.getSeconds()) +
+    (d.getTimezoneOffset() > 0 ? "-" : "+") +
+    pad(Math.abs(d.getTimezoneOffset() / 60)) +
+    ":" +
+    pad(Math.abs(d.getTimezoneOffset() % 60))
+  );
+}
+
+// Helper function to convert Date objects to UTC strings recursively
+const convertDates = (obj) => {
+  if (obj instanceof Date) {
+    return toLocalISO(obj);
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(convertDates);
+  }
+
+  if (obj !== null && typeof obj === "object") {
+    const converted = {};
+    for (const [key, value] of Object.entries(obj)) {
+      converted[key] = convertDates(value);
+    }
+    return converted;
+  }
+
+  return obj;
+};
+
+// Helper function to compare only the keys that exist in filteredOriginalArgs
+export const compareFilteredArgs = (
+  currentArgs,
+  updatedArgs,
+  keysToCompare
+) => {
+  const filteredCurrent = {};
+  const filteredUpdated = {};
+
+  for (const key of Object.keys(keysToCompare)) {
+    if (currentArgs && currentArgs[key] !== undefined) {
+      filteredCurrent[key] = currentArgs[key];
+    }
+    if (updatedArgs && updatedArgs[key] !== undefined) {
+      filteredUpdated[key] = updatedArgs[key];
+    }
+  }
+
+  return valuesEqual(filteredCurrent, filteredUpdated);
+};
+
+// Filter function to exclude date/date-hour types and relative dates
+const filterNonRelativeDateArgs = (args, variableInputs, types) => {
+  const filtered = {};
+  for (const [key, value] of Object.entries(args)) {
+    const argType = types?.[key];
+    const dependentVariableInputs = getDependentVariableInputs(value);
+
+    let validFilter = true;
+    for (const input of dependentVariableInputs) {
+      // Skip if the argument type is date or date-hour and the value is a relative date
+      const variableInput = variableInputs?.[input];
+      if (
+        (argType === "date" || argType === "date-hour") &&
+        isRelativeDate(variableInput)
+      ) {
+        validFilter = false;
+      }
+    }
+
+    if (validFilter) {
+      filtered[key] = value;
+    }
+  }
+  return filtered;
+};
+
 const BaseVisualization = ({ source, argsString, metadataString }) => {
   const [vizType, setVizType] = useState("loader");
   const [vizData, setVizData] = useState({});
@@ -207,6 +307,7 @@ const BaseVisualization = ({ source, argsString, metadataString }) => {
   }, [metadataString, isEditing]);
 
   async function setVariableDependentVisualizations({ refresh }) {
+    const originalArgs = JSON.parse(argsString);
     const args = JSON.parse(argsString);
     const gridMetadata = JSON.parse(metadataString);
     const visualization = findSelectOptionByValue(
@@ -218,11 +319,10 @@ const BaseVisualization = ({ source, argsString, metadataString }) => {
     const argTypes = visualization.args;
 
     const itemData = { source: source, args: args };
-    const updatedGridItemArgs = updateObjectWithVariableInputs(
-      args,
-      variableInputValues,
-      argTypes
+    const updatedGridItemArgs = convertDates(
+      updateObjectWithVariableInputs(args, variableInputValues, argTypes)
     );
+
     const updatedGridItemMetadata = updateObjectWithVariableInputs(
       gridMetadata,
       variableInputValues,
@@ -230,12 +330,19 @@ const BaseVisualization = ({ source, argsString, metadataString }) => {
     );
     const customMessaging = gridMetadata.customMessaging;
 
+    const filteredOriginalArgs = filterNonRelativeDateArgs(
+      originalArgs,
+      variableInputValues,
+      argTypes
+    );
+
     if (
       refresh ||
       (source && argsString === "{}") ||
-      !valuesEqual(
+      !compareFilteredArgs(
         gridItemArgsWithVariableInputs.current,
-        updatedGridItemArgs
+        updatedGridItemArgs,
+        filteredOriginalArgs
       ) ||
       !valuesEqual(customMessages.current, customMessaging)
     ) {

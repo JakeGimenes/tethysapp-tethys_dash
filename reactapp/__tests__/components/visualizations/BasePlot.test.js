@@ -102,7 +102,12 @@ describe("addVerticalLine", () => {
     );
     const shapes = mockRelayout.mock.calls[0][1].shapes;
     expect(shapes[0].type).toBe("line");
-    expect(shapes[0].x0).toContain("2022-01-01T00:00:00.000Z");
+    // Test that the x0 value is a valid ISO string with Z suffix
+    expect(shapes[0].x0).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/);
+    // Test that the parsed date corresponds to the input (allowing for timezone conversion)
+    const inputDate = new Date("2022-01-01");
+    const resultDate = new Date(shapes[0].x0.replace("Z", ""));
+    expect(resultDate.getTime()).toBe(inputDate.getTime());
     expect(shapes[0].line.color).toBe("red");
   });
 
@@ -134,14 +139,23 @@ describe("addVerticalLine", () => {
     const plotRef = createMockPlotRef({ shapes: [] });
     addVerticalLine(plotRef, "2022-01-01 12:34");
     const shapes = mockRelayout.mock.calls[0][1].shapes;
-    expect(shapes[0].x0).toContain("2022-01-01T12:34:00.000Z");
+    // Test that the x0 value is a valid ISO string with Z suffix
+    expect(shapes[0].x0).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/);
+    // Test that the parsed date corresponds to the input (allowing for timezone conversion)
+    const inputDate = new Date("2022-01-01 12:34");
+    const resultDate = new Date(shapes[0].x0.replace("Z", ""));
+    expect(resultDate.getTime()).toBe(inputDate.getTime());
   });
 
   it("handles xValue as number", () => {
     const plotRef = createMockPlotRef({ shapes: [] });
     addVerticalLine(plotRef, 123);
     const shapes = mockRelayout.mock.calls[0][1].shapes;
-    expect(shapes[0].x0).toBe("1970-01-01T00:00:00.123Z");
+    // Test that the x0 value is a valid ISO string with Z suffix
+    expect(shapes[0].x0).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/);
+    // Test that it represents the correct timestamp (123ms after epoch)
+    const parsedDate = new Date(shapes[0].x0.replace("Z", ""));
+    expect(parsedDate.getTime()).toBe(123);
   });
 
   it("handles xValue as new format", () => {
@@ -177,5 +191,33 @@ describe("addVerticalLine", () => {
       "Failed to add vertical line:",
       expect.any(Error)
     );
+  });
+
+  it("handles date parsing errors and uses original value", () => {
+    const plotRef = createMockPlotRef({ shapes: [] });
+
+    // Mock Date constructor to throw an error for a specific value
+    const originalDate = global.Date;
+    global.Date = class extends originalDate {
+      constructor(...args) {
+        if (args.length === 1 && args[0] === "invalid-date-string") {
+          throw new Error("Invalid date");
+        }
+        return new originalDate(...args);
+      }
+    };
+
+    // Copy static methods
+    Object.setPrototypeOf(global.Date, originalDate);
+    Object.defineProperty(global.Date, "now", { value: originalDate.now });
+
+    addVerticalLine(plotRef, "invalid-date-string");
+
+    const shapes = mockRelayout.mock.calls[0][1].shapes;
+    expect(shapes[0].x0).toBe("invalid-date-string");
+    expect(shapes[0].x1).toBe("invalid-date-string");
+
+    // Restore original Date constructor
+    global.Date = originalDate;
   });
 });
