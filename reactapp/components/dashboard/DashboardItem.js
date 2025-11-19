@@ -171,7 +171,8 @@ export const handleGridItemImport = async (gridItem, csrf, dashboard_uuid) => {
 
         if (
           mapLayer.configuration.props.source.type === "GeoJSON" &&
-          mapLayer.configuration.props.source.geojson
+          mapLayer.configuration.props.source.geojson &&
+          typeof mapLayer.configuration.props.source.geojson === "object"
         ) {
           const apiResponse = await saveLayerJSON({
             stringJSON: JSON.stringify(

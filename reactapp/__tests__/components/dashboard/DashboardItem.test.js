@@ -1984,6 +1984,75 @@ test("handleGridItemImport with map geojson layer and no style", async () => {
   expect(mockUploadJSON).toHaveBeenCalledTimes(1);
 });
 
+test("handleGridItemImport with map geojson layer url", async () => {
+  const mockUploadJSON = jest.fn();
+  jest.spyOn(appAPI, "uploadJSON").mockImplementation(mockUploadJSON);
+
+  const gridItem = {
+    i: "1",
+    x: 0,
+    y: 0,
+    w: 20,
+    h: 20,
+    source: "Map",
+    args_string: {
+      layers: [
+        {
+          configuration: {
+            type: "VectorLayer",
+            props: {
+              name: "GeoJSON Layer",
+              source: {
+                type: "GeoJSON",
+                props: {},
+                geojson: "some/url/to/geojson.json",
+              },
+            },
+          },
+        },
+      ],
+    },
+    metadata_string: {
+      refreshRate: 0,
+    },
+  };
+
+  const response = await handleGridItemImport(gridItem, "123456789");
+
+  expect(response).toStrictEqual({
+    success: true,
+    importedGridItem: {
+      i: "1",
+      x: 0,
+      y: 0,
+      w: 20,
+      h: 20,
+      source: "Map",
+      args_string: JSON.stringify({
+        layers: [
+          {
+            configuration: {
+              type: "VectorLayer",
+              props: {
+                name: "GeoJSON Layer",
+                source: {
+                  type: "GeoJSON",
+                  props: {},
+                  geojson: "some/url/to/geojson.json",
+                },
+              },
+            },
+          },
+        ],
+      }),
+      metadata_string: JSON.stringify({
+        refreshRate: 0,
+      }),
+    },
+  });
+  expect(mockUploadJSON).toHaveBeenCalledTimes(0);
+});
+
 test("handleGridItemImport with map arcgis layer and no style", async () => {
   const mockUploadJSON = jest.fn();
   jest.spyOn(appAPI, "uploadJSON").mockImplementation(mockUploadJSON);
