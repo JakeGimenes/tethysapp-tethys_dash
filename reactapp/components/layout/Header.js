@@ -1,10 +1,11 @@
 import PropTypes from "prop-types";
-import { useContext, useState } from "react";
+import { useContext, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Container from "react-bootstrap/Container";
 import Navbar from "react-bootstrap/Navbar";
 import Spinner from "react-bootstrap/Spinner";
 import styled from "styled-components";
+import { useModalPriority } from "components/contexts/ModalPriorityContext";
 
 import {
   LayoutContext,
@@ -100,12 +101,17 @@ function LockedIcon({ locked }) {
 
 export const LandingPageHeader = () => {
   const { tethysApp, user, userAppPermissions } = useContext(AppContext);
+  const {
+    showingPublicUserModal,
+    publicUserModalChecked,
+    showingIdleTimeoutModal,
+    appInfoModalWasOpen,
+    setAppInfoModalWasOpen,
+  } = useModalPriority();
   const dontShowLandingPageInfoOnStart = localStorage.getItem(
     "dontShowLandingPageInfoOnStart"
   );
-  const [showInfoModal, setShowInfoModal] = useState(
-    dontShowLandingPageInfoOnStart !== "true"
-  );
+  const [showInfoModal, setShowInfoModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showPermissionGroupsModal, setShowPermissionGroupsModal] =
     useState(false);
@@ -116,6 +122,37 @@ export const LandingPageHeader = () => {
   const allowedToManageVisualizations =
     Array.isArray(userAppPermissions) &&
     userAppPermissions.includes("manage_visualizations");
+
+  // Only show AppInfoModal on startup after public user modal check is complete and modal is dismissed
+  useEffect(() => {
+    if (
+      publicUserModalChecked &&
+      !showingPublicUserModal &&
+      dontShowLandingPageInfoOnStart !== "true"
+    ) {
+      setShowInfoModal(true);
+    }
+  }, [
+    publicUserModalChecked,
+    showingPublicUserModal,
+    dontShowLandingPageInfoOnStart,
+  ]);
+
+  // Auto-close AppInfo when idle timeout modal appears, and reopen after
+  useEffect(() => {
+    if (showingIdleTimeoutModal && showInfoModal) {
+      setShowInfoModal(false);
+      setAppInfoModalWasOpen(true);
+    } else if (!showingIdleTimeoutModal && appInfoModalWasOpen) {
+      setShowInfoModal(true);
+      setAppInfoModalWasOpen(false);
+    }
+  }, [
+    showingIdleTimeoutModal,
+    showInfoModal,
+    appInfoModalWasOpen,
+    setAppInfoModalWasOpen,
+  ]);
 
   return (
     <>
@@ -231,12 +268,17 @@ export const LandingPageHeader = () => {
 
 export const DashboardHeader = () => {
   const [showEditCanvas, setShowEditCanvas] = useState(false);
+  const {
+    showingPublicUserModal,
+    publicUserModalChecked,
+    showingIdleTimeoutModal,
+    appInfoModalWasOpen,
+    setAppInfoModalWasOpen,
+  } = useModalPriority();
   const dontShowDashboardInfoOnStart = localStorage.getItem(
     "dontShowDashboardInfoOnStart"
   );
-  const [showInfoModal, setShowInfoModal] = useState(
-    dontShowDashboardInfoOnStart !== "true"
-  );
+  const [showInfoModal, setShowInfoModal] = useState(false);
   const { user } = useContext(AppContext);
   const { name, editable, saveLayoutContext, unrestrictedPlacement } =
     useContext(LayoutContext);
@@ -252,6 +294,52 @@ export const DashboardHeader = () => {
   const { setErrorMessage, setShowErrorMessage } = useLayoutErrorAlertContext();
   const [showImportModal, setShowImportModal] = useState(false);
   const navigate = useNavigate();
+
+  // Only show AppInfoModal on startup after public user modal check is complete and modal is dismissed
+  useEffect(() => {
+    if (
+      publicUserModalChecked &&
+      !showingPublicUserModal &&
+      dontShowDashboardInfoOnStart !== "true"
+    ) {
+      setShowInfoModal(true);
+    }
+  }, [
+    publicUserModalChecked,
+    showingPublicUserModal,
+    dontShowDashboardInfoOnStart,
+  ]);
+
+  // Auto-close AppInfo when idle timeout modal appears, and reopen after
+  useEffect(() => {
+    if (showingIdleTimeoutModal && showInfoModal) {
+      setShowInfoModal(false);
+      setAppInfoModalWasOpen(true);
+    } else if (!showingIdleTimeoutModal && appInfoModalWasOpen) {
+      setShowInfoModal(true);
+      setAppInfoModalWasOpen(false);
+    }
+  }, [
+    showingIdleTimeoutModal,
+    showInfoModal,
+    appInfoModalWasOpen,
+    setAppInfoModalWasOpen,
+  ]);
+
+  // Only show AppInfoModal on startup after public user modal check is complete and modal is dismissed
+  useEffect(() => {
+    if (
+      publicUserModalChecked &&
+      !showingPublicUserModal &&
+      dontShowDashboardInfoOnStart !== "true"
+    ) {
+      setShowInfoModal(true);
+    }
+  }, [
+    publicUserModalChecked,
+    showingPublicUserModal,
+    dontShowDashboardInfoOnStart,
+  ]);
 
   const showNav = () => {
     setShowEditCanvas(true);

@@ -6,12 +6,13 @@ import {
   AvailableDashboardsContext,
   PermissionGroupContext,
 } from "components/contexts/Contexts";
-import { mockedDashboards } from "__tests__/utilities/constants";
+import { mockedDashboards, userDashboard } from "__tests__/utilities/constants";
 import { server } from "__tests__/utilities/server";
 import { rest } from "msw";
 import { baseMapLayers } from "components/visualizations/utilities";
 import ErrorBoundary from "components/error/ErrorBoundary";
 import { nonDropDownVariableInputTypes } from "components/visualizations/utilities";
+import { ModalPriorityProvider } from "components/contexts/ModalPriorityContext";
 
 const TestingComponent = () => {
   const {
@@ -93,9 +94,11 @@ test("AppLoader", async () => {
   );
 
   render(
-    <Loader>
-      <TestingComponent />
-    </Loader>
+    <ModalPriorityProvider>
+      <Loader>
+        <TestingComponent />
+      </Loader>
+    </ModalPriorityProvider>
   );
 
   expect(await screen.findByTestId("tethysApp")).toHaveTextContent(
@@ -110,6 +113,10 @@ test("AppLoader", async () => {
       exitUrl: "/apps/",
       rootUrl: "/apps/tethysdash/",
       settingsUrl: "/admin/tethys_apps/tethysapp/999/change/",
+      customSettings: {
+        support_email: "env_support@tethys.org",
+        support_github: "https://github.com/tethysplatform/tethysdash",
+      },
     })
   );
 
@@ -277,9 +284,11 @@ test("AppLoader, load session error", async () => {
 
   render(
     <ErrorBoundary>
-      <Loader>
-        <TestingComponent />
-      </Loader>
+      <ModalPriorityProvider>
+        <Loader>
+          <TestingComponent />
+        </Loader>
+      </ModalPriorityProvider>
     </ErrorBoundary>
   );
 
@@ -304,13 +313,111 @@ test("AppLoader, load visualization error", async () => {
 
   render(
     <ErrorBoundary>
-      <Loader>
-        <TestingComponent />
-      </Loader>
+      <ModalPriorityProvider>
+        <Loader>
+          <TestingComponent />
+        </Loader>
+      </ModalPriorityProvider>
     </ErrorBoundary>
   );
 
   expect(
     await screen.findByText("AxiosError: Request failed with status code 500")
   ).toBeInTheDocument();
+});
+
+test("AppLoader, support info from dashboards.support_info", async () => {
+  // Mock dashboards with support_info override
+  const dashboardsWithSupportInfo = {
+    dashboards: [userDashboard],
+    permission_groups: [],
+    support_info: {
+      support_email: "override@tethys.org",
+      support_github: "https://github.com/override/tethysdash",
+    },
+  };
+
+  const availableVisualizations = [
+    {
+      label: "Other",
+      options: [
+        {
+          source: "plugin_source_checkbox",
+          value: "plugin_value_checkbox",
+          label: "plugin_label_checkbox",
+          args: { plugin_arg: "checkbox" },
+          type: "some type",
+          tags: [],
+          description: "",
+        },
+      ],
+    },
+    {
+      label: "Map Layers",
+      options: [
+        {
+          source: "plugin_source_map_layer",
+          value: "plugin_source_map_layer",
+          label: "plugin_source_map_layer",
+          args: {},
+          type: "map_layer",
+          tags: [],
+          description: "",
+        },
+      ],
+    },
+  ];
+
+  server.use(
+    rest.get(
+      "http://api.test/apps/tethysdash/visualizations/list/",
+      (req, res, ctx) => {
+        return res(
+          ctx.status(200),
+          ctx.json({
+            visualizations: availableVisualizations,
+          }),
+          ctx.set("Content-Type", "application/json")
+        );
+      }
+    ),
+    rest.get(
+      "http://api.test/apps/tethysdash/dashboards/list/",
+      (req, res, ctx) => {
+        return res(
+          ctx.status(200),
+          ctx.json(dashboardsWithSupportInfo),
+          ctx.set("Content-Type", "application/json")
+        );
+      }
+    )
+  );
+
+  // Render and check support info override
+  render(
+    <ModalPriorityProvider>
+      <Loader>
+        <TestingComponent />
+      </Loader>
+    </ModalPriorityProvider>
+  );
+
+  expect(await screen.findByTestId("tethysApp")).toHaveTextContent(
+    JSON.stringify({
+      title: "TethysDash",
+      description: "",
+      tags: "",
+      package: "tethysdash",
+      urlNamespace: "tethysdash",
+      color: "",
+      icon: "/static/tethysdash/images/tethys_dash.png",
+      exitUrl: "/apps/",
+      rootUrl: "/apps/tethysdash/",
+      settingsUrl: "/admin/tethys_apps/tethysapp/999/change/",
+      customSettings: {
+        support_email: "override@tethys.org",
+        support_github: "https://github.com/override/tethysdash",
+      },
+    })
+  );
 });

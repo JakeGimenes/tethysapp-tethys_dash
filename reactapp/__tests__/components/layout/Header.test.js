@@ -402,6 +402,110 @@ test("LandingPageHeader, no manage visualization permission", async () => {
   ).not.toBeInTheDocument();
 });
 
+test("LandingPageHeader Sign In shows first and then AppInfo after continue", async () => {
+  server.use(
+    rest.get("http://api.test/api/session/", (req, res, ctx) => {
+      return res(
+        ctx.status(401),
+        ctx.json({ error: "Internal Server Error" }),
+        ctx.set("Content-Type", "application/json")
+      );
+    }),
+    rest.get("http://api.test/apps/tethysdash/ping/", (req, res, ctx) => {
+      return res(
+        ctx.status(200),
+        ctx.json({
+          status: 1,
+          EXPIRE_AFTER: 10,
+          WARN_AFTER: 3,
+        }),
+        ctx.set("Content-Type", "application/json")
+      );
+    })
+  );
+
+  render(
+    createLoadedComponent({
+      children: (
+        <MemoryRouter initialEntries={["/"]}>
+          <LandingPageHeader />
+        </MemoryRouter>
+      ),
+    })
+  );
+
+  expect(
+    await screen.findByText(
+      "You are not signed in. Sign in to create and update dashboards."
+    )
+  ).toBeInTheDocument();
+
+  expect(screen.queryByText("TethysDash Landing Page")).not.toBeInTheDocument();
+
+  const continueButton = screen.getByRole("button", {
+    name: "Proceed Without Signing in",
+  });
+  fireEvent.click(continueButton);
+
+  expect(
+    await screen.findByText("TethysDash Landing Page")
+  ).toBeInTheDocument();
+
+  expect(
+    screen.queryByText(
+      "You are not signed in. Sign in to create and update dashboards."
+    )
+  ).not.toBeInTheDocument();
+});
+
+test("LandingPageHeader AppInfo disappears on idle and reappears on still signed in", async () => {
+  server.use(
+    rest.get("http://api.test/apps/tethysdash/ping/", (req, res, ctx) => {
+      return res(
+        ctx.status(200),
+        ctx.json({
+          status: 1,
+          EXPIRE_AFTER: 10,
+          WARN_AFTER: 3,
+        }),
+        ctx.set("Content-Type", "application/json")
+      );
+    })
+  );
+
+  render(
+    createLoadedComponent({
+      children: (
+        <MemoryRouter initialEntries={["/"]}>
+          <LandingPageHeader />
+        </MemoryRouter>
+      ),
+    })
+  );
+
+  expect(
+    await screen.findByText("TethysDash Landing Page")
+  ).toBeInTheDocument();
+  expect(screen.queryByText("Are you still here?")).not.toBeInTheDocument();
+
+  await sleep(6000);
+
+  expect(await screen.findByText("Are you still here?")).toBeInTheDocument();
+  expect(screen.queryByText("TethysDash Landing Page")).not.toBeInTheDocument();
+
+  const staySignedInButton = screen.getByRole("button", {
+    name: "Stay Signed In",
+  });
+  expect(staySignedInButton).toBeInTheDocument();
+
+  await userEvent.click(staySignedInButton);
+
+  expect(
+    await screen.findByText("TethysDash Landing Page")
+  ).toBeInTheDocument();
+  expect(screen.queryByText("Are you still here?")).not.toBeInTheDocument();
+});
+
 test("DashboardHeader, user and editable", async () => {
   render(
     createLoadedComponent({
@@ -1435,4 +1539,106 @@ test("DashboardHeader, editable, edit and save", async () => {
   expect(await screen.findByTestId("header-loading")).toBeInTheDocument();
 
   expect(screen.queryByTestId("Loading...")).not.toBeInTheDocument();
+});
+
+test("DashboardHeader Sign In shows first and then AppInfo after continue", async () => {
+  server.use(
+    rest.get("http://api.test/api/session/", (req, res, ctx) => {
+      return res(
+        ctx.status(401),
+        ctx.json({ error: "Internal Server Error" }),
+        ctx.set("Content-Type", "application/json")
+      );
+    }),
+    rest.get("http://api.test/apps/tethysdash/ping/", (req, res, ctx) => {
+      return res(
+        ctx.status(200),
+        ctx.json({
+          status: 1,
+          EXPIRE_AFTER: 10,
+          WARN_AFTER: 3,
+        }),
+        ctx.set("Content-Type", "application/json")
+      );
+    })
+  );
+
+  render(
+    createLoadedComponent({
+      children: (
+        <MemoryRouter initialEntries={["/"]}>
+          <LayoutAlertContextProvider>
+            <DashboardHeader />
+          </LayoutAlertContextProvider>
+        </MemoryRouter>
+      ),
+    })
+  );
+
+  expect(
+    await screen.findByText(
+      "You are not signed in. Sign in to create and update dashboards."
+    )
+  ).toBeInTheDocument();
+
+  expect(screen.queryByText("TethysDash Dashboards")).not.toBeInTheDocument();
+
+  const continueButton = screen.getByRole("button", {
+    name: "Proceed Without Signing in",
+  });
+  fireEvent.click(continueButton);
+
+  expect(await screen.findByText("TethysDash Dashboards")).toBeInTheDocument();
+
+  expect(
+    screen.queryByText(
+      "You are not signed in. Sign in to create and update dashboards."
+    )
+  ).not.toBeInTheDocument();
+});
+
+test("DashboardHeader AppInfo disappears on idle and reappears on still signed in", async () => {
+  server.use(
+    rest.get("http://api.test/apps/tethysdash/ping/", (req, res, ctx) => {
+      return res(
+        ctx.status(200),
+        ctx.json({
+          status: 1,
+          EXPIRE_AFTER: 10,
+          WARN_AFTER: 3,
+        }),
+        ctx.set("Content-Type", "application/json")
+      );
+    })
+  );
+
+  render(
+    createLoadedComponent({
+      children: (
+        <MemoryRouter initialEntries={["/"]}>
+          <LayoutAlertContextProvider>
+            <DashboardHeader />
+          </LayoutAlertContextProvider>
+        </MemoryRouter>
+      ),
+    })
+  );
+
+  expect(await screen.findByText("TethysDash Dashboards")).toBeInTheDocument();
+  expect(screen.queryByText("Are you still here?")).not.toBeInTheDocument();
+
+  await sleep(6000);
+
+  expect(await screen.findByText("Are you still here?")).toBeInTheDocument();
+  expect(screen.queryByText("TethysDash Dashboards")).not.toBeInTheDocument();
+
+  const staySignedInButton = screen.getByRole("button", {
+    name: "Stay Signed In",
+  });
+  expect(staySignedInButton).toBeInTheDocument();
+
+  await userEvent.click(staySignedInButton);
+
+  expect(await screen.findByText("TethysDash Dashboards")).toBeInTheDocument();
+  expect(screen.queryByText("Are you still here?")).not.toBeInTheDocument();
 });
