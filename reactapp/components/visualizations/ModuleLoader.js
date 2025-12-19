@@ -12,7 +12,7 @@ import LoadingAnimation from "components/loader/LoadingAnimation";
 import { VariableInputsContext } from "components/contexts/Contexts";
 import PropTypes from "prop-types";
 
-function loadComponent(scope, module) {
+export function loadComponent(scope, module) {
   return async () => {
     if (!window[scope] || !window[scope].initialized) {
       // Initializes the share scope. This fills it with known provided modules from this build and all remotes
@@ -79,7 +79,7 @@ function ModuleLoader(props) {
   return (
     <>
       {Component && (
-        <Suspense fallback={<LoadingAnimation />}>
+        <Suspense fallback={<LoadingAnimation text="Loading Module..." />}>
           <Component
             {...props.props}
             ref={props.visualizationRef}

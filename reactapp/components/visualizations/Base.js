@@ -23,6 +23,9 @@ import { valuesEqual } from "components/modals/utilities";
 import styled from "styled-components";
 import Spinner from "react-bootstrap/Spinner";
 import { addVerticalLine } from "components/visualizations/BasePlot";
+import { WebsocketContext } from "components/contexts/WebSocketContext";
+import { v4 as uuidv4 } from "uuid";
+import ProgressBar from "react-bootstrap/ProgressBar";
 
 const StyledSpinner = styled(Spinner)`
   margin: auto;
@@ -50,8 +53,44 @@ const StyledH2 = styled.h2`
   padding: 1rem;
 `;
 
+const CenteredContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 100%;
+  width: 100%;
+`;
+
 export const Visualization = memo(
-  ({ vizRef, vizType, vizData, dataviewerViz }) => {
+  ({ vizRef, vizType, vizData, progressMessage, dataviewerViz }) => {
+    if (progressMessage && vizType === "loader") {
+      const msgObj = JSON.parse(progressMessage);
+      const { message, step, totalSteps } = msgObj;
+      const percent =
+        step && totalSteps ? Math.round((step / totalSteps) * 100) : null;
+
+      return (
+        <CenteredContainer>
+          <StyledH2>{message}</StyledH2>
+          {percent !== null && (
+            <ProgressBar
+              now={percent}
+              label={`${step} / ${totalSteps} (${percent}%)`}
+              style={{ margin: "0 auto", width: "60%" }}
+            />
+          )}
+          <SpinnerContainer>
+            <StyledSpinner
+              data-testid="Progress Message Loading..."
+              animation="border"
+              variant="info"
+            />
+          </SpinnerContainer>
+        </CenteredContainer>
+      );
+    }
+
     switch (vizType) {
       case "unknown":
         return <div data-testid="Source_Unknown" />;
@@ -263,6 +302,8 @@ const BaseVisualization = ({
   const [refreshCount, setRefreshCount] = useState(0);
   const { isEditing } = useContext(EditingContext);
   const dashboardVizRef = useRef();
+  const { getMessageForRequest } = useContext(WebsocketContext);
+  const requestId = useRef(uuidv4());
 
   useEffect(() => {
     const args = JSON.parse(argsString);
@@ -353,6 +394,7 @@ const BaseVisualization = ({
       shouldLoad
     ) {
       itemData.args = updatedGridItemArgs;
+      itemData.requestId = requestId.current;
       gridItemArgsWithVariableInputs.current = updatedGridItemArgs;
       gridItemSource.current = source;
       customMessages.current = customMessaging;
@@ -415,6 +457,7 @@ const BaseVisualization = ({
       vizRef={dashboardVizRef}
       vizType={vizType}
       vizData={vizData}
+      progressMessage={getMessageForRequest(requestId.current)}
     />
   );
 };
@@ -434,6 +477,7 @@ Visualization.propTypes = {
   vizType: PropTypes.string, // determines the type of visualization to be displayed
   vizData: PropTypes.object, // contains information for the various visualization args
   dataviewerViz: PropTypes.bool, // determines if the visualization is in the dataviewer
+  progressMessage: PropTypes.string, // stringified object that contains message, step, and totalSteps
 };
 
 // Custom comparison function for BaseVisualization

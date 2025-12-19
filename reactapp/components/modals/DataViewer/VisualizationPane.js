@@ -44,7 +44,7 @@ const FlexDiv = styled.div`
   width: 100%;
 `;
 
-const VisualizationArguments = ({
+export const VisualizationArguments = ({
   selectedVizTypeOption,
   vizArguments,
   vizInputsValues,
@@ -75,7 +75,6 @@ const VisualizationArguments = ({
       }
 
       return (
-        // TODO
         <DataInput
           key={key}
           label={spaceAndCapitalize(obj.label)}
@@ -144,11 +143,11 @@ const MemoizedVisualizationArguments = memo(
 
 function VisualizationPane({
   gridItemIndex,
-  source,
-  argsString,
   setGridItemMessage,
   selectedVizTypeOption,
   setSelectVizTypeOption,
+  vizArguments,
+  setVizArguments,
   setVizType,
   setVizData,
   setVizMetadata,
@@ -160,8 +159,8 @@ function VisualizationPane({
   setSettings,
   visualizationRef,
   setShowingSubModal,
+  requestId,
 }) {
-  const [vizArguments, setVizArguments] = useState([]);
   const [showVisualizationSelectorModal, setShowVisualizationSelectorModal] =
     useState(false);
   const { visualizations } = useContext(AppContext);
@@ -175,46 +174,6 @@ function VisualizationPane({
   const customImageOption = defaultVisualizationOptions.options.find((obj) => {
     return obj.value === "Custom Image";
   });
-
-  useEffect(() => {
-    if (source) {
-      let selectedVizOptionGroupOption = null;
-      for (let vizOptionGroup of visualizations) {
-        for (let vizOptionGroupOption of vizOptionGroup.options) {
-          if (vizOptionGroupOption.source === source) {
-            selectedVizOptionGroupOption = vizOptionGroupOption;
-            break;
-          }
-        }
-      }
-
-      if (selectedVizOptionGroupOption) {
-        setSelectVizTypeOption(selectedVizOptionGroupOption);
-
-        let updatedVizArguments = [];
-
-        const existingArgs = JSON.parse(argsString);
-        if (source === "Variable Input") {
-          setVariableInputValue(existingArgs.initial_value);
-        }
-
-        for (let arg in selectedVizOptionGroupOption.args) {
-          let vizArgType = selectedVizOptionGroupOption.args[arg];
-          let existingArg = existingArgs[arg];
-          updatedVizArguments.push({
-            label: arg,
-            name: arg,
-            type: vizArgType,
-            value: existingArg,
-          });
-        }
-        setVizArguments(updatedVizArguments);
-        setVizInputsValues(existingArgs);
-        currentSelectedVizTypeOption.current = selectedVizOptionGroupOption;
-      }
-    }
-    // eslint-disable-next-line
-  }, []);
 
   useEffect(() => {
     if (
@@ -316,7 +275,7 @@ function VisualizationPane({
   );
 
   function checkAllInputs() {
-    if (selectedVizTypeOption !== null) {
+    if (selectedVizTypeOption) {
       if (
         Object.values(vizInputsValues).every(
           (value) => !["", null].includes(value)
@@ -332,60 +291,59 @@ function VisualizationPane({
   }
 
   async function previewVisualization() {
-    if (selectedVizTypeOption) {
-      const itemData = {
-        source: selectedVizTypeOption["source"],
-        args: Object.fromEntries(
-          Object.entries(vizInputsValues).map(([key, val]) => [
-            key,
-            val.value ?? val,
-          ])
-        ),
-      };
-      const sourceType = selectedVizTypeOption.type;
+    const itemData = {
+      source: selectedVizTypeOption["source"],
+      args: Object.fromEntries(
+        Object.entries(vizInputsValues).map(([key, val]) => [
+          key,
+          val.value ?? val,
+        ])
+      ),
+    };
+    const sourceType = selectedVizTypeOption.type;
 
-      setVizMetadata(itemData);
-      setGridItemMessage(
-        "Cell updated to show " + selectedVizTypeOption["label"]
-      );
-      if (selectedVizTypeOption.value === "Text") {
-        return;
-      } else if (selectedVizTypeOption.value === "Variable Input") {
-        itemData.args.initial_value = variableInputValue;
-        if (itemData.args.initial_value === null) {
-          if (itemData.args.variable_options_source === "text") {
-            itemData.args.initial_value = "";
-          } else if (itemData.args.variable_options_source === "number") {
-            itemData.args.initial_value = "0";
-          }
+    setVizMetadata(itemData);
+    setGridItemMessage(
+      "Cell updated to show " + selectedVizTypeOption["label"]
+    );
+    if (selectedVizTypeOption.value === "Text") {
+      return;
+    } else if (selectedVizTypeOption.value === "Variable Input") {
+      itemData.args.initial_value = variableInputValue;
+      if (itemData.args.initial_value === null) {
+        if (itemData.args.variable_options_source === "text") {
+          itemData.args.initial_value = "";
+        } else if (itemData.args.variable_options_source === "number") {
+          itemData.args.initial_value = "0";
         }
-        setVizType("variableInput");
-        setVizData({
-          variable_name: itemData.args.variable_name,
-          initial_value: itemData.args.initial_value,
-          variable_options_source: itemData.args.variable_options_source,
-          metadata: itemData.args["variable_options_source.metadata"],
-          onChange: (e) => setVariableInputValue(e),
-        });
-      } else {
-        const argTypes = selectedVizTypeOption.args;
-        const updatedGridItemArgs = updateObjectWithVariableInputs(
-          itemData.args,
-          variableInputValues,
-          argTypes
-        );
-        itemData.args = updatedGridItemArgs;
-        await getVisualization({
-          setVizType,
-          setVizData,
-          sourceType,
-          itemData,
-          argsString: JSON.stringify(vizInputsValues),
-          metadataString: JSON.stringify(settings),
-          variableInputValues,
-          vizLoadingIcon: true,
-        });
       }
+      setVizType("variableInput");
+      setVizData({
+        variable_name: itemData.args.variable_name,
+        initial_value: itemData.args.initial_value,
+        variable_options_source: itemData.args.variable_options_source,
+        metadata: itemData.args["variable_options_source.metadata"],
+        onChange: (e) => setVariableInputValue(e),
+      });
+    } else {
+      const argTypes = selectedVizTypeOption.args;
+      const updatedGridItemArgs = updateObjectWithVariableInputs(
+        itemData.args,
+        variableInputValues,
+        argTypes
+      );
+      itemData.args = updatedGridItemArgs;
+      itemData.requestId = requestId;
+      await getVisualization({
+        setVizType,
+        setVizData,
+        sourceType,
+        itemData,
+        argsString: JSON.stringify(vizInputsValues),
+        metadataString: JSON.stringify(settings),
+        variableInputValues,
+        vizLoadingIcon: true,
+      });
     }
   }
 
@@ -463,12 +421,11 @@ VisualizationArguments.propTypes = {
 
 VisualizationPane.propTypes = {
   gridItemIndex: PropTypes.number,
-  source: PropTypes.string,
-  argsString: PropTypes.string,
   setGridItemMessage: PropTypes.func,
   selectedVizTypeOption: PropTypes.object,
   setSelectVizTypeOption: PropTypes.func,
-  vizType: PropTypes.string,
+  vizArguments: PropTypes.arrayOf(PropTypes.object),
+  setVizArguments: PropTypes.func,
   setVizType: PropTypes.func,
   setVizData: PropTypes.func,
   setVizMetadata: PropTypes.func,
@@ -483,6 +440,7 @@ VisualizationPane.propTypes = {
     PropTypes.shape({ current: PropTypes.any }),
   ]),
   setShowingSubModal: PropTypes.func,
+  requestId: PropTypes.string,
 };
 
 export default memo(VisualizationPane);

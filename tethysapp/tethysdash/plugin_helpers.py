@@ -1,7 +1,51 @@
+"""
+Helpers for plugin management and WebSocket messaging in TethysDash.
+
+This module provides utility functions for sending messages via Django Channels
+and other plugin-related helpers.
+"""
+
 import requests
 import xmltodict
 import copy
 from datetime import datetime
+
+
+# General helper for sending messages via Django Channels
+def send_websocket_message(request_id, message, step=None, total_steps=None):
+    """
+    Send a message to a Django Channels group for WebSocket delivery.
+
+    Args:
+        request_id (str): The request identifier for the message.
+        message (str): The message content to send.
+        step (int, optional): Current step in a multi-step process.
+        total_steps (int, optional): Total steps in a multi-step process.
+
+    Example:
+        send_websocket_message('user_123', 'progress_message', 1, 2)
+    """
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+
+        websocket_message = {"message": message, "requestId": request_id}
+        if step is not None and total_steps is not None:
+            websocket_message["step"] = step
+            websocket_message["totalSteps"] = total_steps
+
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            "dashboard_updates",
+            {
+                "type": "send_message",
+                "message": websocket_message,
+            },
+        )
+    except Exception as e:
+        # Optionally log or handle errors here
+        print(f"WebSocket message send failed: {e}")
+
 
 available_source_properties = {
     "ESRI Image and Map Service": {

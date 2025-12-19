@@ -15,6 +15,10 @@ import createLoadedComponent, {
 } from "__tests__/utilities/customRender";
 import selectEvent from "react-select-event";
 
+jest.mock("uuid", () => ({
+  v4: () => 12345678,
+}));
+
 const { ResizeObserver } = window;
 
 beforeEach(() => {
@@ -168,6 +172,55 @@ test("Dashboard Viewer Modal Text", async () => {
 
   expect(mockhandleModalClose).toHaveBeenCalledTimes(1);
   expect(mocksetShowGridItemMessage).toHaveBeenCalledTimes(1);
+});
+
+test("Dashboard Viewer Modal Existing Text", async () => {
+  const mockedDashboard = JSON.parse(JSON.stringify(userDashboard));
+  mockedDashboard.tabs[0].gridItems = [
+    {
+      i: "2",
+      x: 0,
+      y: 0,
+      w: 20,
+      h: 20,
+      source: "Text",
+      args_string: JSON.stringify({
+        text: "Some text",
+      }),
+      metadata_string: JSON.stringify({
+        refreshRate: 0,
+      }),
+    },
+  ];
+  const gridItem = mockedDashboard.tabs[0].gridItems[0];
+  const mockhandleModalClose = jest.fn();
+  const mocksetGridItemMessage = jest.fn();
+  const mocksetShowGridItemMessage = jest.fn();
+
+  render(
+    createLoadedComponent({
+      children: (
+        <DataViewerModal
+          gridItemIndex={0}
+          source={gridItem.source}
+          argsString={gridItem.args_string}
+          metadataString={gridItem.metadata_string}
+          gridItemI={gridItem.i}
+          showModal={true}
+          handleModalClose={mockhandleModalClose}
+          setGridItemMessage={mocksetGridItemMessage}
+          setShowGridItemMessage={mocksetShowGridItemMessage}
+        />
+      ),
+      options: { initialDashboard: userDashboard },
+    })
+  );
+
+  expect(await screen.findByText("Edit Visualization")).toBeInTheDocument();
+  expect(await screen.findByText("Visualization")).toBeInTheDocument();
+  expect(await screen.findByText("Settings")).toBeInTheDocument();
+
+  expect(await screen.findByText("Some text")).toBeInTheDocument();
 });
 
 test("Dashboard Viewer Modal Variable Input", async () => {
@@ -615,7 +668,6 @@ test("Dashboard Viewer Modal Text Options", async () => {
             source={gridItem.source}
             argsString={gridItem.args_string}
             metadataString={gridItem.metadata_string}
-            gridItemI={gridItem.i}
             showModal={true}
             handleModalClose={mockhandleModalClose}
             setGridItemMessage={mocksetGridItemMessage}

@@ -78,6 +78,10 @@ jest.mock("date-fns", () => {
   };
 });
 
+jest.mock("uuid", () => ({
+  v4: () => 12345678,
+}));
+
 const { ResizeObserver } = window;
 
 beforeEach(() => {
@@ -111,13 +115,13 @@ it("Initializes a Base Item with an empty div", async () => {
   expect(await screen.findByTestId("Source_Unknown")).toBeInTheDocument();
 });
 
-it("Initializes a Base Item with an empty div and updates it with an image", async () => {
+it("Initializes a Base Item with an empty div and updates it with an image and progress message", async () => {
   server.use(
     rest.get(
       "http://api.test/apps/tethysdash/visualizations/get/",
       (req, res, ctx) => {
         return res(
-          ctx.delay(5),
+          ctx.delay(500),
           ctx.status(200),
           ctx.json({
             success: true,
@@ -143,8 +147,31 @@ it("Initializes a Base Item with an empty div and updates it with an image", asy
     })
   );
 
-  const spinner = await screen.findByTestId("Loading...");
-  expect(spinner).toBeInTheDocument();
+  await waitFor(() => {
+    expect(global.__wsInstances[0]).toBeDefined();
+  });
+  const wsInstance = global.__wsInstances[0];
+  wsInstance.mockMessage({
+    requestId: 12345678,
+    message: "Progress Bar Testing...",
+  });
+
+  const progressMessage = await screen.findByText("Progress Bar Testing...");
+  expect(progressMessage).toBeInTheDocument();
+
+  wsInstance.mockMessage({
+    requestId: 12345678,
+    message: "Progress Bar Testing With Percent...",
+    step: 1,
+    totalSteps: 2,
+  });
+
+  const progressMessage2 = await screen.findByText(
+    "Progress Bar Testing With Percent..."
+  );
+  expect(progressMessage2).toBeInTheDocument();
+  expect(screen.getByRole("progressbar")).toBeInTheDocument();
+  expect(screen.getByText("1 / 2 (50%)")).toBeInTheDocument();
 
   const image = await screen.findByAltText(mockedApiImageBase.source);
   expect(image.src).toBe(
@@ -949,6 +976,7 @@ it("Base - update date variable input", async () => {
           args: {
             plugin_arg: "2025-01-01T00:00:00-06:00",
           },
+          requestId: 12345678,
           source: "plugin_source",
         },
         metadataString: '{"refreshRate":0}',
@@ -987,6 +1015,7 @@ it("Base - update date variable input", async () => {
           args: {
             plugin_arg: "2020-01-01T00:00:00-06:00",
           },
+          requestId: 12345678,
           source: "plugin_source",
         },
         metadataString: '{"refreshRate":0}',
@@ -1034,6 +1063,7 @@ it("Base - update date variable input", async () => {
           args: {
             plugin_arg: expectedDateString,
           },
+          requestId: 12345678,
           source: "plugin_source",
         },
         metadataString: '{"refreshRate":0}',
@@ -1086,6 +1116,7 @@ it("Base - update date variable input", async () => {
           args: {
             plugin_arg: expectedDateString,
           },
+          requestId: 12345678,
           source: "plugin_source",
         },
         metadataString: '{"refreshRate":0}',
@@ -1246,6 +1277,7 @@ it("Base - initial relative date variable input", async () => {
           args: {
             plugin_arg: expectedDateString,
           },
+          requestId: 12345678,
           source: "plugin_source",
         },
         metadataString: '{"refreshRate":0}',
@@ -1298,6 +1330,7 @@ it("Base - initial relative date variable input", async () => {
           args: {
             plugin_arg: expectedDateString,
           },
+          requestId: 12345678,
           source: "plugin_source",
         },
         metadataString: '{"refreshRate":0}',

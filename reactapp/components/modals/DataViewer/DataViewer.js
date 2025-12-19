@@ -21,6 +21,8 @@ import TextEditor from "components/inputs/TextEditor";
 import { Visualization } from "components/visualizations/Base";
 import MapContextProvider from "components/contexts/MapContext";
 import { findVisualizationBySource } from "components/visualizations/utilities";
+import { v4 as uuidv4 } from "uuid";
+import { WebsocketContext } from "components/contexts/WebSocketContext";
 import "components/modals/wideModal.css";
 import "components/modals/DataViewer/DataViewer.css";
 
@@ -67,14 +69,45 @@ function DataViewerModal({
 }) {
   const { visualizations } = useContext(AppContext);
   const { getActiveTab, updateTab } = useContext(TabContext);
-  const [selectedVizTypeOption, setSelectVizTypeOption] = useState(
-    findVisualizationBySource(visualizations, source)
+  // --- Initialization logic for visualization states ---
+  let initialSelectedVizTypeOption = findVisualizationBySource(
+    visualizations,
+    source
   );
+  let initialVizArguments = [];
+  let initialVizInputsValues = {};
+  let initialVariableInputValue = null;
+  if (initialSelectedVizTypeOption) {
+    const existingArgs = JSON.parse(argsString);
+    if (source === "Variable Input") {
+      initialVariableInputValue = existingArgs.initial_value;
+    }
+    for (let arg in initialSelectedVizTypeOption.args) {
+      let vizArgType = initialSelectedVizTypeOption.args[arg];
+      let existingArg = existingArgs[arg];
+      initialVizArguments.push({
+        label: arg,
+        name: arg,
+        type: vizArgType,
+        value: existingArg,
+      });
+    }
+    initialVizInputsValues = existingArgs;
+  }
+
+  const [selectedVizTypeOption, setSelectVizTypeOption] = useState(
+    initialSelectedVizTypeOption
+  );
+  const [vizArguments, setVizArguments] = useState(initialVizArguments);
+  const [vizInputsValues, setVizInputsValues] = useState(
+    initialVizInputsValues
+  );
+  const [variableInputValue, setVariableInputValue] = useState(
+    initialVariableInputValue
+  );
+  const [vizMetdata, setVizMetadata] = useState(null);
   const [vizType, setVizType] = useState("unknown");
   const [vizData, setVizData] = useState({});
-  const [vizInputsValues, setVizInputsValues] = useState({});
-  const [variableInputValue, setVariableInputValue] = useState(null);
-  const [vizMetdata, setVizMetadata] = useState(null);
   const [alertMessage, setAlertMessage] = useState("");
   const [showAlert, setShowAlert] = useState(false);
   const { variableInputValues, setVariableInputValues } = useContext(
@@ -82,11 +115,13 @@ function DataViewerModal({
   );
   const [showingSubModal, setShowingSubModal] = useState(false);
   const { setAppTourStep, activeAppTour } = useAppTourContext();
+  const { getMessageForRequest } = useContext(WebsocketContext);
 
   const gridMetadata = JSON.parse(metadataString);
   const visualizationRef = useRef();
   const [settings, setSettings] = useState(gridMetadata);
   const [tabKey, setTabKey] = useState("visualization");
+  const requestId = useRef(uuidv4());
 
   function saveChanges(e) {
     e.preventDefault();
@@ -121,7 +156,7 @@ function DataViewerModal({
       if (
         Object.values(vizInputsValues).every(
           (value) => ![null, ""].includes(value)
-        )  // TODO for csv-uploader, it's ok if data is empty
+        ) // TODO for csv-uploader, it's ok if data is empty
       ) {
         const { gridItems, id: activeTabId } = getActiveTab();
         let updatedGridItems = JSON.parse(JSON.stringify(gridItems));
@@ -233,12 +268,12 @@ function DataViewerModal({
                     >
                       <VisualizationPane
                         gridItemIndex={gridItemIndex}
-                        source={source}
-                        argsString={argsString}
                         metadataString={metadataString}
                         setGridItemMessage={setGridItemMessage}
                         selectedVizTypeOption={selectedVizTypeOption}
                         setSelectVizTypeOption={setSelectVizTypeOption}
+                        vizArguments={vizArguments}
+                        setVizArguments={setVizArguments}
                         vizType={vizType}
                         setVizType={setVizType}
                         setVizData={setVizData}
@@ -251,6 +286,7 @@ function DataViewerModal({
                         setSettings={setSettings}
                         visualizationRef={visualizationRef}
                         setShowingSubModal={setShowingSubModal}
+                        requestId={requestId.current}
                       />
                     </Tab>
                     <Tab
@@ -286,6 +322,7 @@ function DataViewerModal({
                     vizType={vizType}
                     vizData={vizData}
                     dataviewerViz={true}
+                    progressMessage={getMessageForRequest(requestId.current)}
                   />
                 )}
               </StyledVizCol>
