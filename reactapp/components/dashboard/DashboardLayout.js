@@ -1,11 +1,4 @@
-import {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  useContext,
-  memo,
-} from "react";
+import { useCallback, useRef, useContext, memo, useMemo } from "react";
 import RGL, { WidthProvider } from "react-grid-layout";
 import {
   LayoutContext,
@@ -17,6 +10,7 @@ import DashboardItem from "components/dashboard/DashboardItem";
 import PropTypes from "prop-types";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
+import { valuesEqual } from "components/modals/utilities";
 
 const ReactGridLayout = WidthProvider(RGL);
 
@@ -30,43 +24,14 @@ const DashboardLayout = ({ tabId, gridItems, shouldLoad }) => {
   const { disabledEditingMovement } = useContext(
     DisabledEditingMovementContext
   );
-  const [layout, setLayout] = useState([]);
-  const [items, setItems] = useState([]);
+
   const gridItemsUpdated = useRef();
+  gridItemsUpdated.current = gridItems;
 
-  useEffect(() => {
-    updateGridLayout();
-    gridItemsUpdated.current = gridItems;
-    // eslint-disable-next-line
-  }, [gridItems, shouldLoad]);
-
-  useEffect(() => {
-    updateGridEditing(gridItems);
-    // eslint-disable-next-line
-  }, [isEditing, disabledEditingMovement]);
-
-  function updateGridLayout() {
-    setItems(
-      gridItems.map((item, index) => (
-        <div key={item.i}>
-          <DashboardItem
-            gridItemSource={item.source}
-            gridItemI={item.i}
-            gridItemArgsString={item.args_string}
-            gridItemMetadataString={item.metadata_string}
-            gridItemIndex={index}
-            shouldLoad={shouldLoad}
-          />
-        </div>
-      ))
-    );
-    updateGridEditing(gridItems);
-  }
-
-  function updateGridEditing(griditems) {
-    const updatedGridItems = [];
-    for (let griditem of griditems) {
-      updatedGridItems.push({
+  // Memoize layout from gridItems
+  const layout = useMemo(
+    () =>
+      gridItems.map((griditem) => ({
         h: griditem.h,
         i: griditem.i,
         w: griditem.w,
@@ -74,10 +39,18 @@ const DashboardLayout = ({ tabId, gridItems, shouldLoad }) => {
         y: griditem.y,
         isDraggable: isEditing && !disabledEditingMovement,
         isResizable: isEditing && !disabledEditingMovement,
-      });
-    }
-    setLayout(updatedGridItems);
-  }
+      })),
+    [gridItems, isEditing, disabledEditingMovement]
+  );
+
+  // Memoize parsed grid items array at the top level
+  const parsedGridItems = useMemo(
+    () =>
+      gridItems.map((item) => ({
+        ...item,
+      })),
+    [gridItems]
+  );
 
   function updateLayout(newLayout) {
     const updatedGridItems = [];
@@ -95,11 +68,12 @@ const DashboardLayout = ({ tabId, gridItems, shouldLoad }) => {
         w: lay.w,
         x: lay.x,
         y: lay.y,
+        id: result.id,
+        uuid: result.uuid,
       });
     }
 
     updateTab(tabId, { gridItems: updatedGridItems });
-    updateGridEditing(updatedGridItems);
   }
 
   const handleResize = useCallback(
@@ -142,7 +116,19 @@ const DashboardLayout = ({ tabId, gridItems, shouldLoad }) => {
       allowOverlap={unrestrictedPlacement}
       useCSSTransforms={false}
     >
-      {items}
+      {parsedGridItems.map((item, index) => (
+        <div key={item.i}>
+          <DashboardItem
+            gridItemSource={item.source}
+            gridItemI={item.i}
+            gridItemArgsString={item.args_string}
+            gridItemMetadataString={item.metadata_string}
+            gridItemIndex={index}
+            gridItemUUID={item.uuid}
+            shouldLoad={shouldLoad}
+          />
+        </div>
+      ))}
     </ReactGridLayout>
   );
 };
@@ -163,4 +149,4 @@ DashboardLayout.propTypes = {
   shouldLoad: PropTypes.bool.isRequired,
 };
 
-export default memo(DashboardLayout);
+export default memo(DashboardLayout, valuesEqual);

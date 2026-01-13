@@ -18,6 +18,7 @@ import {
   mockedUnknownBase,
   userDashboard,
   mockedMapBase,
+  mockedLiveChatBase,
 } from "__tests__/utilities/constants";
 import BaseVisualization, {
   toLocalISO,
@@ -30,6 +31,10 @@ import { Map } from "ol";
 import * as utilities from "components/visualizations/utilities";
 import { server } from "__tests__/utilities/server";
 import { rest } from "msw";
+
+jest.mock("uuid", () => ({
+  v4: () => 12345678,
+}));
 
 jest.mock("components/visualizations/ModuleLoader", () => {
   const MockModuleLoader = () => <div>ModuleLoader Mock</div>;
@@ -78,10 +83,6 @@ jest.mock("date-fns", () => {
   };
 });
 
-jest.mock("uuid", () => ({
-  v4: () => 12345678,
-}));
-
 const { ResizeObserver } = window;
 
 beforeEach(() => {
@@ -106,6 +107,7 @@ it("Initializes a Base Item with an empty div", async () => {
           source={""}
           argsString={"{}"}
           metadataString={"{}"}
+          uuid={"12345678"}
           shouldLoad={true}
         />
       ),
@@ -116,6 +118,8 @@ it("Initializes a Base Item with an empty div", async () => {
 });
 
 it("Initializes a Base Item with an empty div and updates it with an image and progress message", async () => {
+  // Set REDIS_WS_URL so WebSocket logic is used
+  process.env.REDIS_WS_URL = "ws://localhost:1234";
   server.use(
     rest.get(
       "http://api.test/apps/tethysdash/visualizations/get/",
@@ -141,6 +145,7 @@ it("Initializes a Base Item with an empty div and updates it with an image and p
           source={mockedApiImageBase.source}
           argsString={mockedApiImageBase.args_string}
           metadataString={mockedApiImageBase.metadata_string}
+          uuid={"12345678"}
           shouldLoad={true}
         />
       ),
@@ -151,16 +156,16 @@ it("Initializes a Base Item with an empty div and updates it with an image and p
     expect(global.__wsInstances[0]).toBeDefined();
   });
   const wsInstance = global.__wsInstances[0];
-  wsInstance.mockMessage({
-    requestId: 12345678,
+  wsInstance.send({
+    requestId: "12345678",
     message: "Progress Bar Testing...",
   });
 
   const progressMessage = await screen.findByText("Progress Bar Testing...");
   expect(progressMessage).toBeInTheDocument();
 
-  wsInstance.mockMessage({
-    requestId: 12345678,
+  wsInstance.send({
+    requestId: "12345678",
     message: "Progress Bar Testing With Percent...",
     step: 1,
     totalSteps: 2,
@@ -207,6 +212,7 @@ it("Creates an Base Item with a Custom Image", async () => {
           source={mockedCustomImageBase.source}
           argsString={mockedCustomImageBase.args_string}
           metadataString={mockedCustomImageBase.metadata_string}
+          uuid={"12345678"}
           shouldLoad={true}
         />
       ),
@@ -228,6 +234,7 @@ it("Creates an Base Item with a Custom Image", async () => {
           source={mockedCustomImageBase.source}
           argsString={mockedCustomImageBase.args_string}
           metadataString={mockedCustomImageBase.metadata_string}
+          uuid={"12345678"}
           shouldLoad={true}
         />
       ),
@@ -250,6 +257,7 @@ it("Creates an Base Item with a Custom Image", async () => {
           source={mockedCustomImageBase.source}
           argsString={mockedCustomImageBase.args_string}
           metadataString={mockedCustomImageBase.metadata_string}
+          uuid={"12345678"}
           shouldLoad={true}
         />
       ),
@@ -267,6 +275,7 @@ it("Creates an Base Item with a Text Box", async () => {
           source={mockedTextBase.source}
           argsString={mockedTextBase.args_string}
           metadataString={mockedTextBase.metadata_string}
+          uuid={"12345678"}
           shouldLoad={true}
         />
       ),
@@ -288,6 +297,7 @@ it("Creates an Base Item with a Map", async () => {
             source={mockedMapBase.source}
             argsString={mockedMapBase.args_string}
             metadataString={mockedMapBase.metadata_string}
+            uuid={"12345678"}
             shouldLoad={true}
           />
         </div>
@@ -305,6 +315,58 @@ it("Creates an Base Item with a Map", async () => {
   ).toBeInTheDocument();
 });
 
+it("Creates an Base Item with a Live Chat", async () => {
+  const date = Date.now();
+  server.use(
+    rest.get(
+      "http://api.test/apps/tethysdash/visualizations/get/",
+      (req, res, ctx) => {
+        return res(
+          ctx.status(200),
+          ctx.json({
+            success: true,
+            data: {
+              chatHistory: [
+                {
+                  message: "Hello world!",
+                  sessionId: "session-1",
+                  sender: "Alice",
+                  timestamp: date,
+                  messageId: "msg-1",
+                  edited: false,
+                },
+              ],
+              requestId: "some-request-id",
+            },
+            viz_type: "Live Chat",
+          }),
+          ctx.set("Content-Type", "application/json")
+        );
+      }
+    )
+  );
+
+  render(
+    createLoadedComponent({
+      children: (
+        <div>
+          <BaseVisualization
+            source={mockedLiveChatBase.source}
+            argsString={mockedLiveChatBase.args_string}
+            metadataString={mockedLiveChatBase.metadata_string}
+            uuid={"12345678"}
+            shouldLoad={true}
+          />
+        </div>
+      ),
+    })
+  );
+
+  expect(await screen.findByLabelText("Change Username")).toBeInTheDocument();
+  expect(await screen.findByText("Hello world!")).toBeInTheDocument();
+  expect(await screen.findByText("Alice")).toBeInTheDocument();
+});
+
 it("Creates an Base Item with a variable input text box", async () => {
   const dashboard = JSON.parse(JSON.stringify(userDashboard));
   dashboard.tabs[0].gridItems = [mockedTextVariable];
@@ -318,6 +380,7 @@ it("Creates an Base Item with a variable input text box", async () => {
             source={mockedTextVariable.source}
             argsString={mockedTextVariable.args_string}
             metadataString={mockedTextVariable.metadata_string}
+            uuid={"12345678"}
             shouldLoad={true}
           />
           <InputVariablePComponent />
@@ -380,6 +443,7 @@ it("Creates an Base Item with an image obtained from the api, 1 min refresh rate
           source={apiImageBase.source}
           argsString={apiImageBase.args_string}
           metadataString={apiImageBase.metadata_string}
+          uuid={"12345678"}
           shouldLoad={true}
         />
       ),
@@ -443,6 +507,7 @@ it("Creates an Base Item with an image obtained from the api, no refresh when ed
           source={apiImageBase.source}
           argsString={apiImageBase.args_string}
           metadataString={apiImageBase.metadata_string}
+          uuid={"12345678"}
           shouldLoad={true}
         />
       ),
@@ -496,6 +561,7 @@ it("Creates an Base Item with a plot obtained from the api", async () => {
           source={mockedPlotBase.source}
           argsString={mockedPlotBase.args_string}
           metadataString={mockedPlotBase.metadata_string}
+          uuid={"12345678"}
           shouldLoad={true}
         />
       ),
@@ -535,6 +601,7 @@ it("Creates an Base Item with a custom module obtained from the api", async () =
           source={mockedTableBase.source}
           argsString={mockedTableBase.args_string}
           metadataString={mockedTableBase.metadata_string}
+          uuid={"12345678"}
           shouldLoad={true}
         />
       ),
@@ -574,6 +641,7 @@ it("Creates an Base Item with a table obtained from the api", async () => {
           source={mockedTableBase.source}
           argsString={mockedTableBase.args_string}
           metadataString={mockedTableBase.metadata_string}
+          uuid={"12345678"}
           shouldLoad={true}
         />
       ),
@@ -613,6 +681,7 @@ it("Creates an Base Item with a card obtained from the api", async () => {
           source={mockedCardBase.source}
           argsString={mockedCardBase.args_string}
           metadataString={mockedCardBase.metadata_string}
+          uuid={"12345678"}
           shouldLoad={true}
         />
       ),
@@ -652,6 +721,7 @@ it("Gives the user an error message if an unknown viz type is obtained from the 
           source={mockedUnknownBase.source}
           argsString={mockedUnknownBase.args_string}
           metadataString={mockedUnknownBase.metadata_string}
+          uuid={"12345678"}
           shouldLoad={true}
         />
       ),
@@ -710,6 +780,7 @@ it("Gives the user an error message if the api couldn't retrieve data", async ()
           source={mockedUnknownBase.source}
           argsString={mockedUnknownBase.args_string}
           metadataString={mockedUnknownBase.metadata_string}
+          uuid={"12345678"}
           shouldLoad={true}
         />
       ),
@@ -798,6 +869,7 @@ it("Base - update text variable input", async () => {
             metadataString={
               mockedDashboard.tabs[0].gridItems[0].metadata_string
             }
+            uuid={"12345678"}
             shouldLoad={true}
           />
           <BaseVisualization
@@ -806,6 +878,7 @@ it("Base - update text variable input", async () => {
             metadataString={
               mockedDashboard.tabs[0].gridItems[1].metadata_string
             }
+            uuid={"12345678"}
             shouldLoad={true}
           />
         </>
@@ -930,6 +1003,7 @@ it("Base - update date variable input", async () => {
             metadataString={
               mockedDashboard.tabs[0].gridItems[0].metadata_string
             }
+            uuid={"12345678"}
             shouldLoad={true}
           />
           <BaseVisualization
@@ -938,6 +1012,7 @@ it("Base - update date variable input", async () => {
             metadataString={
               mockedDashboard.tabs[0].gridItems[1].metadata_string
             }
+            uuid={"12345678"}
             shouldLoad={true}
           />
         </>
@@ -976,7 +1051,7 @@ it("Base - update date variable input", async () => {
           args: {
             plugin_arg: "2025-01-01T00:00:00-06:00",
           },
-          requestId: 12345678,
+          requestId: "12345678",
           source: "plugin_source",
         },
         metadataString: '{"refreshRate":0}',
@@ -1015,7 +1090,7 @@ it("Base - update date variable input", async () => {
           args: {
             plugin_arg: "2020-01-01T00:00:00-06:00",
           },
-          requestId: 12345678,
+          requestId: "12345678",
           source: "plugin_source",
         },
         metadataString: '{"refreshRate":0}',
@@ -1063,7 +1138,7 @@ it("Base - update date variable input", async () => {
           args: {
             plugin_arg: expectedDateString,
           },
-          requestId: 12345678,
+          requestId: "12345678",
           source: "plugin_source",
         },
         metadataString: '{"refreshRate":0}',
@@ -1116,7 +1191,7 @@ it("Base - update date variable input", async () => {
           args: {
             plugin_arg: expectedDateString,
           },
-          requestId: 12345678,
+          requestId: "12345678",
           source: "plugin_source",
         },
         metadataString: '{"refreshRate":0}',
@@ -1224,6 +1299,7 @@ it("Base - initial relative date variable input", async () => {
             metadataString={
               mockedDashboard.tabs[0].gridItems[0].metadata_string
             }
+            uuid={"12345678"}
             shouldLoad={true}
           />
           <BaseVisualization
@@ -1232,6 +1308,7 @@ it("Base - initial relative date variable input", async () => {
             metadataString={
               mockedDashboard.tabs[0].gridItems[1].metadata_string
             }
+            uuid={"12345678"}
             shouldLoad={true}
           />
         </>
@@ -1277,7 +1354,7 @@ it("Base - initial relative date variable input", async () => {
           args: {
             plugin_arg: expectedDateString,
           },
-          requestId: 12345678,
+          requestId: "12345678",
           source: "plugin_source",
         },
         metadataString: '{"refreshRate":0}',
@@ -1330,7 +1407,7 @@ it("Base - initial relative date variable input", async () => {
           args: {
             plugin_arg: expectedDateString,
           },
-          requestId: 12345678,
+          requestId: "12345678",
           source: "plugin_source",
         },
         metadataString: '{"refreshRate":0}',
@@ -1388,6 +1465,7 @@ it("Calls addVerticalLine for plotly visualizations with plotlyVerticalLine meta
           source={mockedPlotBase.source}
           argsString={mockedPlotBase.args_string}
           metadataString={mockedPlotBase.metadata_string}
+          uuid={"12345678"}
           shouldLoad={true}
         />
       ),

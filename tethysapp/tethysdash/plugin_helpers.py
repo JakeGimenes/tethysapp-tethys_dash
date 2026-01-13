@@ -12,7 +12,16 @@ from datetime import datetime
 
 
 # General helper for sending messages via Django Channels
-def send_websocket_message(request_id, message, step=None, total_steps=None):
+def send_websocket_message(
+    request_id,
+    message,
+    step=None,
+    total_steps=None,
+    sender=None,
+    sessionId=None,
+    timestamp=None,
+    messageId=None,
+):
     """
     Send a message to a Django Channels group for WebSocket delivery.
 
@@ -21,6 +30,9 @@ def send_websocket_message(request_id, message, step=None, total_steps=None):
         message (str): The message content to send.
         step (int, optional): Current step in a multi-step process.
         total_steps (int, optional): Total steps in a multi-step process.
+        sender (str, optional): Identifier for the message sender.
+        sessionId (str, optional): Session identifier for the message.
+        timestamp (str, optional): Timestamp of the message.
 
     Example:
         send_websocket_message('user_123', 'progress_message', 1, 2)
@@ -33,6 +45,18 @@ def send_websocket_message(request_id, message, step=None, total_steps=None):
         if step is not None and total_steps is not None:
             websocket_message["step"] = step
             websocket_message["totalSteps"] = total_steps
+
+        if sender:
+            websocket_message["sender"] = sender
+
+        if sessionId:
+            websocket_message["sessionId"] = sessionId
+
+        if timestamp:
+            websocket_message["timestamp"] = timestamp
+
+        if messageId:
+            websocket_message["messageId"] = messageId
 
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(

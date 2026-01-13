@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tethysapp-tethysdash"
-version = "0.15.1"
+version = "0.16.0"
 description = "A Tethys App for no code/low code web application development app"
 authors = [{ name = "Corey Krewson", email = "ckrewson@aquaveo.com" }]
 license = { text = "MIT" }
@@ -12,12 +12,16 @@ keywords = [""]
 dependencies = [
     "hjson==3.1",
     "nh3==0.2.21",
+    "better_profanity==0.7.0",
     "bleach==6.1.0",
     "bleach[css]",
+    "channels_redis==4.3.0",
+    "django-redis==6.0.0",
     "cssutils==2.11.1",
     "pytest-django",
     "pytest-mock",
     "pytest-cov",
+    "pytest-asyncio",
     "intake==2.0.7",
     "djangorestframework",
     "alembic==1.14.0",

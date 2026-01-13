@@ -21,7 +21,7 @@ import { server } from "__tests__/utilities/server";
 import { rest } from "msw";
 
 jest.mock("uuid", () => ({
-  v4: () => 12345678,
+  v4: () => "12345678",
 }));
 
 jest.mock("html2canvas");
@@ -154,7 +154,7 @@ test("LandingPageHeader, import dashboard with grid_items", async () => {
   const importedDashboard = {
     name: "Test",
     description: "this is a new description",
-    uuid: 12345678,
+    uuid: "12345678",
   };
   const mockAddDashboard = jest.fn();
   jest.spyOn(appAPI, "addDashboard").mockImplementation(mockAddDashboard);
@@ -221,7 +221,7 @@ test("LandingPageHeader, import dashboard with tabs", async () => {
   const importedDashboard = {
     name: "Test",
     description: "this is a new description",
-    uuid: 12345678,
+    uuid: "12345678",
   };
   const mockAddDashboard = jest.fn();
   jest.spyOn(appAPI, "addDashboard").mockImplementation(mockAddDashboard);
@@ -613,6 +613,8 @@ test("DashboardHeader, import gridItem", async () => {
   const mockedDashboard = updatedMockedDashboards.dashboards[0];
   mockedDashboard.tabs[0].gridItems = [
     {
+      id: 1,
+      uuid: "some-uuid-1",
       i: "1",
       x: 0,
       y: 0,
@@ -641,6 +643,8 @@ test("DashboardHeader, import gridItem", async () => {
           name: "Tab 1",
           gridItems: [
             {
+              id: 1,
+              uuid: "some-uuid-1",
               i: "1",
               x: 0,
               y: 0,
@@ -691,6 +695,8 @@ test("DashboardHeader, import gridItem", async () => {
   const file = new File(
     [
       JSON.stringify({
+        id: 5,
+        uuid: "some-uuid-5",
         i: "1",
         x: 0,
         y: 0,
@@ -730,6 +736,8 @@ test("DashboardHeader, import gridItem", async () => {
           {
             gridItems: [
               {
+                id: null,
+                uuid: "12345678",
                 i: "2",
                 x: 0,
                 y: 0,
@@ -746,6 +754,8 @@ test("DashboardHeader, import gridItem", async () => {
                 }),
               },
               {
+                id: 1,
+                uuid: "some-uuid-1",
                 i: "1",
                 x: 0,
                 y: 20,
@@ -1065,6 +1075,8 @@ test("DashboardHeader, editable, edit, save and error with unrestricted movement
             w: 20,
             x: 0,
             y: 0,
+            id: 1,
+            uuid: "some-uuid-1",
           },
           {
             args_string: "{}",
@@ -1075,6 +1087,8 @@ test("DashboardHeader, editable, edit, save and error with unrestricted movement
             w: 20,
             x: 0,
             y: 0,
+            id: null,
+            uuid: "12345678",
           },
         ],
         id: 1,
@@ -1236,6 +1250,8 @@ test("DashboardHeader, editable, edit, save and error", async () => {
             w: 20,
             x: 0,
             y: 0,
+            id: null,
+            uuid: "12345678",
           },
           {
             args_string: "{}",
@@ -1246,6 +1262,8 @@ test("DashboardHeader, editable, edit, save and error", async () => {
             w: 20,
             x: 0,
             y: 20,
+            id: 1,
+            uuid: "some-uuid-1",
           },
         ],
         id: 1,
@@ -1330,6 +1348,8 @@ test("DashboardHeader, editable, edit and save", async () => {
       metadata_string: JSON.stringify({
         refreshRate: 0,
       }),
+      id: 1,
+      uuid: "some-uuid-1",
     },
     {
       i: "3",
@@ -1342,6 +1362,8 @@ test("DashboardHeader, editable, edit and save", async () => {
       metadata_string: JSON.stringify({
         refreshRate: 0,
       }),
+      id: 3,
+      uuid: "some-uuid-3",
     },
     {
       i: "2",
@@ -1354,6 +1376,8 @@ test("DashboardHeader, editable, edit and save", async () => {
       metadata_string: JSON.stringify({
         refreshRate: 0,
       }),
+      id: 2,
+      uuid: "some-uuid-2",
     },
   ];
 
@@ -1374,6 +1398,8 @@ test("DashboardHeader, editable, edit and save", async () => {
             metadata_string: JSON.stringify({
               refreshRate: 0,
             }),
+            id: null,
+            uuid: "12345678",
           },
           {
             i: "1",
@@ -1386,6 +1412,8 @@ test("DashboardHeader, editable, edit and save", async () => {
             metadata_string: JSON.stringify({
               refreshRate: 0,
             }),
+            id: 1,
+            uuid: "some-uuid-1",
           },
           {
             i: "3",
@@ -1398,6 +1426,8 @@ test("DashboardHeader, editable, edit and save", async () => {
             metadata_string: JSON.stringify({
               refreshRate: 0,
             }),
+            id: 3,
+            uuid: "some-uuid-3",
           },
           {
             i: "2",
@@ -1410,6 +1440,8 @@ test("DashboardHeader, editable, edit and save", async () => {
             metadata_string: JSON.stringify({
               refreshRate: 0,
             }),
+            id: 2,
+            uuid: "some-uuid-2",
           },
         ],
       },

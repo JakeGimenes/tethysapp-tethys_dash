@@ -34,6 +34,9 @@ from tethysapp.tethysdash.utilities import sanitize_html
 from django.contrib.auth import get_user_model
 import shutil
 import filecmp
+import sqlalchemy
+from datetime import timedelta
+from uuid import uuid4
 
 Base = declarative_base()
 
@@ -119,6 +122,7 @@ class GridItem(Base):
         id (int): Primary key identifier
         dashboard_id (int): Foreign key to parent dashboard
         dashboard (relationship): Reference to parent dashboard
+        uuid (str): Unique identifier for the grid item
         i (str): Unique identifier within the dashboard grid
         x (int): Horizontal position in grid units
         y (int): Vertical position in grid units
@@ -136,6 +140,7 @@ class GridItem(Base):
     id = Column(Integer, primary_key=True)
     dashboard_id = Column(Integer, ForeignKey("dashboards.id"), nullable=False)
     dashboard = relationship("Dashboard", back_populates="grid_items")
+    uuid = Column(String, nullable=False, unique=True)
     i = Column(String, nullable=False)
     x = Column(Integer, nullable=False)
     y = Column(Integer, nullable=False)
@@ -144,7 +149,7 @@ class GridItem(Base):
     source = Column(String)
     args_string = Column(String)
     metadata_string = Column(String)
-    order = Column(Integer)
+    order = Column(Integer, default=0)
 
     # relationships
     tab_id = Column(
@@ -308,6 +313,37 @@ class PermissionGroupUser(Base):
     group = relationship("PermissionGroup", back_populates="members")
 
 
+class Message(Base):
+    """
+    SQLAlchemy model for chat messages (partitioned by day).
+
+    Attributes:
+        id (int): Primary key identifier
+        timestamp (datetime): Time the message was sent in UTC
+        request_id (str): Associated request/session identifier
+        session_id (str): Session ID of the sender
+        sender (str): Name or identifier of the sender
+        message (str): Message content
+    """
+
+    __tablename__ = "messages"
+    __table_args__ = {"postgresql_partition_by": "RANGE (timestamp)"}
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, nullable=False, index=True)
+    request_id = Column(
+        String,
+        ForeignKey("griditems.uuid", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    session_id = Column(String, nullable=False, index=True)
+    message_id = Column(String, nullable=False, index=True)
+    sender = Column(String, nullable=False)
+    message = Column(String, nullable=False)
+    edited = Column(Boolean, nullable=False, default=False)
+
+
 def add_new_dashboard(
     owner,
     uuid,
@@ -392,6 +428,7 @@ def add_new_dashboard(
                         grid_item_source = grid_item["source"]
                         grid_item_args_string = grid_item["args_string"]
                         grid_item_metadata_string = grid_item["metadata_string"]
+                        grid_item_uuid = str(uuid4())
                         if grid_item_source == "Text":
                             if type(grid_item_args_string) is not dict:
                                 grid_item_args_string = json.loads(
@@ -413,6 +450,7 @@ def add_new_dashboard(
                             grid_item_args_string,
                             grid_item_metadata_string,
                             index,
+                            grid_item_uuid,
                             tab_id=new_tab.id,
                         )
                         grid_item_i += 1
@@ -428,6 +466,7 @@ def add_new_dashboard(
                     grid_item_source = grid_item["source"]
                     grid_item_args_string = grid_item["args_string"]
                     grid_item_metadata_string = grid_item["metadata_string"]
+                    grid_item_uuid = str(uuid4())
                     if grid_item_source == "Text":
                         if type(grid_item_args_string) is not dict:
                             grid_item_args_string = json.loads(grid_item_args_string)
@@ -447,6 +486,7 @@ def add_new_dashboard(
                         grid_item_args_string,
                         grid_item_metadata_string,
                         index,
+                        grid_item_uuid,
                         tab_id=default_tab.id,
                     )
                     grid_item_i += 1
@@ -463,6 +503,7 @@ def add_new_dashboard(
                     "{}",
                     "{}",
                     0,
+                    str(uuid4()),
                     tab_id=default_tab.id,
                 )
 
@@ -486,6 +527,7 @@ def add_new_grid_item(
     grid_item_args_string,
     grid_item_metadata_string,
     grid_item_order,
+    grid_item_uuid,
     tab_id,
 ):
     """
@@ -506,6 +548,7 @@ def add_new_grid_item(
         grid_item_args_string (str): JSON string with visualization arguments
         grid_item_metadata_string (str): JSON string with component metadata
         grid_item_order (int): Display order within dashboard
+        grid_item_uuid (str): UUID of the grid item
         tab_id (int, optional): ID of the parent tab
 
     Returns:
@@ -529,6 +572,7 @@ def add_new_grid_item(
         args_string=grid_item_args_string,
         metadata_string=grid_item_metadata_string,
         order=grid_item_order,
+        uuid=grid_item_uuid,
     )
     session.add(new_grid_item)
     session.commit()
@@ -637,6 +681,7 @@ def copy_named_dashboard(user, id, new_name, dashboard_uuid):
                 dashboard_id=new_dashboard.id,
                 tab_id=new_tab_id,
                 order=index,
+                uuid=str(uuid4()),
             )
             session.add(new_item)
             new_grid_items.append(new_item)
@@ -844,6 +889,15 @@ def update_named_dashboard(user, id, dashboard_updates):
 
                     if grid_item_id and grid_item_id in existing_grid_items_by_id:
                         db_grid_item = existing_grid_items_by_id[grid_item_id]
+                        # If changing from 'Live Chat' to something else, delete associated messages  # noqa: E501
+                        if (
+                            db_grid_item.source == "Live Chat"
+                            and grid_item_source != "Live Chat"
+                        ):
+                            session.query(Message).filter(
+                                Message.request_id == db_grid_item.uuid
+                            ).delete(synchronize_session=False)
+
                         db_grid_item.i = str(grid_item_i)
                         db_grid_item.x = grid_item["x"]
                         db_grid_item.y = grid_item["y"]
@@ -867,6 +921,7 @@ def update_named_dashboard(user, id, dashboard_updates):
                             args_string=grid_item_args_string,
                             metadata_string=grid_item["metadata_string"],
                             order=grid_item_order,
+                            uuid=grid_item["uuid"],
                         )
                         session.add(new_grid_item)
 
@@ -1651,6 +1706,7 @@ def parse_db_dashboard(session, dashboards, user, dashboard_view):
                 for griditem in tab.grid_items:
                     griditem_data = {
                         "id": griditem.id,
+                        "uuid": griditem.uuid,
                         "i": griditem.i,
                         "x": griditem.x,
                         "y": griditem.y,
@@ -1885,58 +1941,71 @@ def get_user_app_permissions(user):
     return user_permissions
 
 
-def init_primary_db(engine, first_time):
+def check_for_liveChat(grid_item_uuid):
     """
-    Initialize and upgrade the primary database schema.
-
-    Sets up the database schema using Alembic migrations, handling both
-    initial setup and upgrades from existing versions. Manages migration
-    conflicts for existing installations.
+    Check if a grid item is a liveChat.
 
     Args:
-        engine: SQLAlchemy database engine
-        first_time (bool): Whether this is the first time setup
-
-    Raises:
-        ProgrammingError: If migration fails due to schema conflicts
-        OperationalError: If database operation fails
+        grid_item_uuid (str): UUID of the grid item to check
+    Returns:
+        bool: True if the grid item is a liveChat, False otherwise
     """
-    # Load Alembic configuration
-    tethysdash_directory = Path(__file__).resolve().parent
-    alembic_directory = str(tethysdash_directory / "alembic")
-    alembic_cfg = Config(tethysdash_directory / "alembic.ini")
-    alembic_cfg.set_main_option("script_location", alembic_directory)
-    script_directory = script.ScriptDirectory.from_config(alembic_cfg)
+    Session = App.get_persistent_store_database("primary_db", as_sessionmaker=True)
+    session = Session()
 
-    command.ensure_version(alembic_cfg)
+    try:
+        grid_item = (
+            session.query(GridItem).filter(GridItem.uuid == grid_item_uuid).first()
+        )
+        if grid_item and grid_item.source == "Live Chat":
+            return True
+        return False
+    finally:
+        session.close()
 
-    result = subprocess.run(
-        ["alembic", "current"], capture_output=True, text=True, cwd=tethysdash_directory
+
+def get_partition_name(ts):
+    return f"messages_{ts.strftime('%Y_%m_%d')}"
+
+
+def create_partition_for_date(connection, ts):
+    partition_name = get_partition_name(ts)
+    start = ts.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    sql = f"""
+        CREATE TABLE IF NOT EXISTS {partition_name} PARTITION OF messages
+        FOR VALUES FROM ('{start.isoformat()}') TO ('{end.isoformat()}');
+    """
+    print(f"Creating partition: {partition_name} for {start.date()} to {end.date()}")
+    connection.execute(sqlalchemy.text(sql))
+
+
+def create_message_partitions_for_rolling_window(days_past=7, days_future=7):
+    """
+    Create partitions for the Message table for a rolling window
+    (past 7 days and next 7 days). Intended to be called by a weekly cron job or
+    with `tethys syncstores tethysdash`.
+
+    Args:
+        days_past (int): Number of days in the past to create partitions for
+        days_future (int): Number of days in the future to create partitions for
+    """
+    print(
+        f"Creating message partitions for rolling window: past {days_past} days, future {days_future} days"  # noqa: E501
     )
-    current_revision = result.stdout.split(" ")[0]
+    engine = App.get_persistent_store_database("primary_db", as_sessionmaker=False)
+    connection = engine.connect()
+    try:
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        for offset in range(-days_past, days_future + 1):
+            day = today + timedelta(days=offset)
+            print(f"Ensuring partition exists for: {day.date()}")
+            create_partition_for_date(connection, day)
+    finally:
+        connection.close()
 
-    if current_revision:
-        print("Upgrading to head")
-        command.upgrade(alembic_cfg, "head")
-    else:
-        # Iterate over revisions in order
-        revisions = list(script_directory.walk_revisions(base="base", head="head"))
-        revisions.reverse()  # walk_revisions returns in reverse order (head -> base)
 
-        for rev in revisions:
-            try:
-                print(f"Attempting to upgrade to revision {rev.revision}")
-                command.upgrade(alembic_cfg, rev.revision)
-                print(f"Successfully upgraded to revision {rev.revision}")
-            except (ProgrammingError, OperationalError) as e:
-                if "already exists" in str(e):
-                    command.stamp(alembic_cfg, rev.revision)
-                    print(
-                        f"Stamped and Skipped revision {rev.revision} (column/table already exists)"  # noqa: E501
-                    )
-                else:
-                    raise  # Unknown error — don't skip
-
+def cleanup_old_jsons():
     # for moving json and geojson files from old structure to new structure (https://github.com/tethysplatform/tethysapp-tethys_dash/pull/35)  # noqa: E501
     app_workspace = get_app_workspace(App)
     json_root = os.path.join(app_workspace.path, "json")
@@ -2042,3 +2111,60 @@ def init_primary_db(engine, first_time):
         remove_empty_dirs(app_workspace.path)
     finally:
         session.close()
+
+
+def init_primary_db(engine, first_time):
+    """
+    Initialize and upgrade the primary database schema.
+
+    Sets up the database schema using Alembic migrations, handling both
+    initial setup and upgrades from existing versions. Manages migration
+    conflicts for existing installations.
+
+    Args:
+        engine: SQLAlchemy database engine
+        first_time (bool): Whether this is the first time setup
+
+    Raises:
+        ProgrammingError: If migration fails due to schema conflicts
+        OperationalError: If database operation fails
+    """
+    # Load Alembic configuration
+    tethysdash_directory = Path(__file__).resolve().parent
+    alembic_directory = str(tethysdash_directory / "alembic")
+    alembic_cfg = Config(tethysdash_directory / "alembic.ini")
+    alembic_cfg.set_main_option("script_location", alembic_directory)
+    script_directory = script.ScriptDirectory.from_config(alembic_cfg)
+
+    command.ensure_version(alembic_cfg)
+
+    result = subprocess.run(
+        ["alembic", "current"], capture_output=True, text=True, cwd=tethysdash_directory
+    )
+    current_revision = result.stdout.split(" ")[0]
+
+    if current_revision:
+        print("Upgrading to head")
+        command.upgrade(alembic_cfg, "head")
+    else:
+        # Iterate over revisions in order
+        revisions = list(script_directory.walk_revisions(base="base", head="head"))
+        revisions.reverse()  # walk_revisions returns in reverse order (head -> base)
+
+        for rev in revisions:
+            try:
+                print(f"Attempting to upgrade to revision {rev.revision}")
+                command.upgrade(alembic_cfg, rev.revision)
+                print(f"Successfully upgraded to revision {rev.revision}")
+            except (ProgrammingError, OperationalError) as e:
+                if "already exists" in str(e):
+                    command.stamp(alembic_cfg, rev.revision)
+                    print(
+                        f"Stamped and Skipped revision {rev.revision} (column/table already exists)"  # noqa: E501
+                    )
+                else:
+                    raise  # Unknown error — don't skip
+
+    cleanup_old_jsons()
+
+    create_message_partitions_for_rolling_window()

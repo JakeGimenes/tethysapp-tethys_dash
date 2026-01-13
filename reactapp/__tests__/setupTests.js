@@ -9,10 +9,14 @@ import { server } from "./utilities/server.js";
 // Mock `window.location` with Jest spies and extend expect
 import "jest-location-mock";
 import { createMocks } from "react-idle-timer";
+import { MockWebSocket } from "./utilities/mockWebSocket.js";
 
 // Make .env files accessible to tests (path relative to project root)
 const originalError = console.error.bind(console.error);
 const originalEnv = process.env;
+
+global.WebSocket = MockWebSocket;
+global.__wsInstances = [];
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -45,6 +49,7 @@ afterEach(() => {
   process.env = originalEnv;
   jest.clearAllMocks();
   jest.restoreAllMocks();
+  global.__wsInstances = [];
 });
 
 afterAll(() => {
@@ -76,27 +81,3 @@ HTMLCanvasElement.prototype.getContext = function () {
     clip: () => {},
   };
 };
-
-global.__wsInstances = []; // Track all instances
-
-class WebSocketMock {
-  constructor(url) {
-    this.url = url;
-    this.readyState = 1; // OPEN
-    this.send = jest.fn();
-    this.close = jest.fn(() => {
-      if (this.onclose) this.onclose();
-    });
-    setTimeout(() => {
-      if (this.onopen) this.onopen();
-    }, 0);
-    global.__wsInstances.push(this);
-  }
-  mockMessage(data) {
-    if (this.onmessage) {
-      this.onmessage({ data: JSON.stringify(data) });
-    }
-  }
-}
-
-global.WebSocket = WebSocketMock;

@@ -24,8 +24,8 @@ import styled from "styled-components";
 import Spinner from "react-bootstrap/Spinner";
 import { addVerticalLine } from "components/visualizations/BasePlot";
 import { WebsocketContext } from "components/contexts/WebSocketContext";
-import { v4 as uuidv4 } from "uuid";
 import ProgressBar from "react-bootstrap/ProgressBar";
+import LiveChat from "components/visualizations/LiveChat";
 
 const StyledSpinner = styled(Spinner)`
   margin: auto;
@@ -153,6 +153,13 @@ export const Visualization = memo(
             title={vizData.title}
             subtitle={vizData.subtitle}
             visualizationRef={vizRef}
+          />
+        );
+      case "liveChat":
+        return (
+          <LiveChat
+            requestId={vizData.requestId}
+            chatHistory={vizData.chatHistory}
           />
         );
       case "custom":
@@ -289,6 +296,7 @@ const BaseVisualization = ({
   source,
   argsString,
   metadataString,
+  uuid,
   shouldLoad,
 }) => {
   const [vizType, setVizType] = useState("loader");
@@ -303,7 +311,9 @@ const BaseVisualization = ({
   const { isEditing } = useContext(EditingContext);
   const dashboardVizRef = useRef();
   const { getMessageForRequest } = useContext(WebsocketContext);
-  const requestId = useRef(uuidv4());
+  const requestId = useRef(uuid);
+  // Ref to track if we've already loaded for this source with empty args
+  const loadedEmptyArgsForSource = useRef({});
 
   useEffect(() => {
     const args = JSON.parse(argsString);
@@ -382,17 +392,28 @@ const BaseVisualization = ({
       argTypes
     );
 
+    // Only allow the empty args load to run once per source unless refresh is true
+    const isEmptyArgs = source && Object.keys(args).length === 0;
+    const alreadyLoadedEmptyArgs = loadedEmptyArgsForSource.current[source];
+
     if (
       (refresh ||
-        (source && argsString === "{}") ||
-        !compareFilteredArgs(
-          gridItemArgsWithVariableInputs.current,
-          updatedGridItemArgs,
-          filteredOriginalArgs
-        ) ||
-        !valuesEqual(customMessages.current, customMessaging)) &&
+        (isEmptyArgs && !alreadyLoadedEmptyArgs) ||
+        (!isEmptyArgs &&
+          (!compareFilteredArgs(
+            gridItemArgsWithVariableInputs.current,
+            updatedGridItemArgs,
+            filteredOriginalArgs
+          ) ||
+            !valuesEqual(customMessages.current, customMessaging)))) &&
       shouldLoad
     ) {
+      if (isEmptyArgs) {
+        loadedEmptyArgsForSource.current[source] = true;
+      }
+      console.log(
+        `Loading visualization for source: ${source} with requestId: ${requestId.current}`
+      );
       itemData.args = updatedGridItemArgs;
       itemData.requestId = requestId.current;
       gridItemArgsWithVariableInputs.current = updatedGridItemArgs;
@@ -466,6 +487,7 @@ BaseVisualization.propTypes = {
   source: PropTypes.string,
   argsString: PropTypes.string,
   metadataString: PropTypes.string,
+  uuid: PropTypes.string,
   shouldLoad: PropTypes.bool,
 };
 
@@ -487,7 +509,8 @@ const areBasePropsEqual = (prevProps, nextProps) => {
     valuesEqual(prevProps.source, nextProps.source) &&
     valuesEqual(prevProps.argsString, nextProps.argsString) &&
     valuesEqual(prevProps.metadataString, nextProps.metadataString) &&
-    valuesEqual(prevProps.shouldLoad, nextProps.shouldLoad)
+    valuesEqual(prevProps.shouldLoad, nextProps.shouldLoad) &&
+    valuesEqual(prevProps.uuid, nextProps.uuid)
   );
 };
 

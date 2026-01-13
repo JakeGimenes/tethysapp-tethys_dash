@@ -24,6 +24,7 @@ import {
 import CustomAlert from "components/dashboard/CustomAlert";
 import { loadLayerJSONs, saveLayerJSON } from "components/map/utilities";
 import { valuesEqual } from "components/modals/utilities";
+import { v4 as uuidv4 } from "uuid";
 
 const StyledContainer = styled(Container)`
   position: relative;
@@ -111,7 +112,7 @@ export const requiredGridItemKeys = [
 ];
 
 export const handleGridItemExport = async (gridItem, dashboard_uuid) => {
-  const { id, ...exportedGridItem } = gridItem;
+  const { id, uuid, ...exportedGridItem } = gridItem;
   exportedGridItem.metadata_string = JSON.parse(
     exportedGridItem.metadata_string
   );
@@ -224,6 +225,7 @@ const DashboardItem = ({
   gridItemArgsString,
   gridItemMetadataString,
   gridItemIndex,
+  gridItemUUID,
   shouldLoad,
 }) => {
   const { isEditing, setIsEditing } = useContext(EditingContext);
@@ -331,6 +333,8 @@ const DashboardItem = ({
     const copiedGridItem = getGridItem(gridItems, gridItemI);
     const newGridItem = { ...copiedGridItem };
     newGridItem.i = `${parseInt(maxGridItemI) + 1}`;
+    newGridItem.id = null;
+    newGridItem.uuid = uuidv4();
     if (newGridItem.source === "Variable Input") {
       const newGridItemArgs = JSON.parse(newGridItem.args_string);
       let copiedVariableName = newGridItemArgs.variable_name;
@@ -439,6 +443,7 @@ const DashboardItem = ({
             source={gridItemSource}
             argsString={gridItemArgsString}
             metadataString={gridItemMetadataString}
+            uuid={gridItemUUID}
             shouldLoad={shouldLoad}
           />
         </StyledContainer>
@@ -480,6 +485,7 @@ DashboardItem.propTypes = {
   gridItemArgsString: PropTypes.string,
   gridItemMetadataString: PropTypes.string,
   gridItemIndex: PropTypes.number,
+  gridItemUUID: PropTypes.string,
   shouldLoad: PropTypes.bool,
 };
 

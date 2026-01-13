@@ -268,7 +268,6 @@ function DataViewerModal({
                     >
                       <VisualizationPane
                         gridItemIndex={gridItemIndex}
-                        metadataString={metadataString}
                         setGridItemMessage={setGridItemMessage}
                         selectedVizTypeOption={selectedVizTypeOption}
                         setSelectVizTypeOption={setSelectVizTypeOption}

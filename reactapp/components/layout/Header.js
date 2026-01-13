@@ -42,6 +42,7 @@ import { CiUndo } from "react-icons/ci";
 import { FaPlus } from "react-icons/fa6";
 import { FaExpandArrowsAlt, FaLock, FaUnlock } from "react-icons/fa";
 import "components/buttons/HeaderButton.css";
+import { v4 as uuidv4 } from "uuid";
 
 const TETHYS_PORTAL_BASE = getTethysPortalBase();
 
@@ -379,6 +380,8 @@ export const DashboardHeader = () => {
         }),
       };
     }
+    newGridItem.uuid = uuidv4();
+    newGridItem.id = null;
     newGridItem.i = `${parseInt(maxGridItemI) + 1}`;
     let updatedGridItems;
     if (unrestrictedPlacement) {

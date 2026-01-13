@@ -65,7 +65,6 @@ export async function getVisualization({
   variableInputValues,
   dashboardView,
   vizLoadingIcon = true,
-  requestId,
 }) {
   const metadata = JSON.parse(metadataString);
   const emptyVariableWarnings = checkForEmptyVariableInputs({
@@ -187,6 +186,12 @@ export async function getVisualization({
         initial_value: responseData.initial_value,
         variable_options_source: responseData.variable_options_source,
         metadata: responseData.metadata,
+      });
+    } else if (apiResponse.viz_type === "Live Chat") {
+      setVizType("liveChat");
+      setVizData({
+        requestId: itemData.requestId,
+        chatHistory: responseData.chatHistory,
       });
     } else {
       setVizType("vizWarning");

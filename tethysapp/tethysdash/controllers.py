@@ -25,15 +25,24 @@ from tethysapp.tethysdash.model import (
     get_visualization_permissions,
     get_user_app_permissions,
     update_visualization_permissions as update_viz_perms,
+    check_for_liveChat,
+    Message,
 )
+from django.core.cache import cache
 from tethysapp.tethysdash.visualizations import (
     get_available_visualizations,
     get_visualization,
     get_restricted_visualizations,
 )
 from tethysapp.tethysdash.exceptions import VisualizationError
+from tethysapp.tethysdash.plugin_helpers import send_websocket_message
 from channels.generic.websocket import AsyncWebsocketConsumer
 from tethys_sdk.routing import consumer
+from asgiref.sync import sync_to_async
+from better_profanity import profanity
+
+# Load the default wordlist
+profanity.load_censor_words()
 
 
 @controller(login_required=False)
@@ -133,7 +142,10 @@ def ping(request):
     except NameError:
         # This is caused by trying to use a function that doesn't exist
         # Useful for resetting a website that used to have the session security.
-        delattr(request, "session")
+        try:
+            del request.session
+        except AttributeError:
+            pass
         print(
             "Deleting session information due to django-session-security being uninstalled."  # noqa: E501
         )
@@ -247,16 +259,206 @@ def visualizations(request):
     name="visualization_notifications", url="tethysdash/visualizations/notifications/"
 )
 class VisualizationConsumer(AsyncWebsocketConsumer):
+    """
+    WebSocket consumer for real-time visualization notifications and chat.
+
+    Handles WebSocket connections for dashboard updates, chat messaging, and
+    rate limiting.
+    Messages are censored for profanity and persisted to the database. Supports
+    message editing and sender updates.
+    """
+
     async def connect(self):
+        """
+        Handles a new WebSocket connection.
+
+        Adds the connection to the 'dashboard_updates' group and accepts the connection.
+        """
         # Add to groups
         await self.channel_layer.group_add("dashboard_updates", self.channel_name)
 
         await self.accept()
 
     async def disconnect(self, code):
+        """
+        Handles WebSocket disconnection.
+
+        Removes the connection from the 'dashboard_updates' group.
+        Args:
+            code (int): The close code for the disconnect event.
+        """
         await self.channel_layer.group_discard("dashboard_updates", self.channel_name)
 
+    async def receive(self, text_data=None, bytes_data=None):
+        """
+        Handles incoming WebSocket messages.
+
+        Expects JSON-formatted messages with 'requestId', 'message', and optional
+        metadata.
+        Applies rate limiting, profanity filtering, and persists messages to the
+        database.
+        Broadcasts messages to the group and handles message edits.
+
+        Args:
+            text_data (str, optional): JSON string containing the message data.
+            bytes_data (bytes, optional): Not used.
+        """
+        print(text_data)
+        try:
+            data = json.loads(text_data)
+            request_id = data["requestId"]
+            message = data["message"]
+            session_id = data["sessionId"]
+            sender = data["sender"]
+        except Exception as e:
+            print(e)
+            await self.send(
+                json.dumps(
+                    {
+                        "error": "Invalid message format. requestId, message, sessionId, and sender required."  # noqa: E501
+                    }
+                )
+            )
+            return
+
+        valid_liveChat = await sync_to_async(check_for_liveChat)(request_id)
+        if not valid_liveChat:
+            await self.send(json.dumps({"error": "Invalid liveChat request ID."}))
+            return
+
+        messageId = data.get("messageId", None)
+        censored_message = profanity.censor(message)
+        timestamp = datetime.utcnow()
+
+        rate_key = f"chat_rate_{request_id}_{session_id}"
+        count = cache.get(rate_key, 0)
+        if count >= 5:
+            # Try to get the remaining time until the rate limit resets
+            retry_after = 10  # Default fallback
+            try:
+                # Django cache backends may support .ttl(), but not all do
+                retry_after = cache.ttl(rate_key)
+                if retry_after is None:
+                    retry_after = 10
+            except Exception:
+                retry_after = 10
+            await self.send(
+                json.dumps(
+                    {
+                        "error": f"Rate limit exceeded. Please wait {retry_after} seconds before sending more messages.",  # noqa: E501
+                        "requestId": request_id,
+                        "messageId": messageId,
+                    }
+                )
+            )
+            return
+
+        if count == 0:
+            cache.set(rate_key, 1, timeout=10)  # 10 seconds window
+        else:
+            cache.incr(rate_key)
+
+        try:
+            # Broadcast the message (include messageId)
+            await sync_to_async(send_websocket_message)(
+                request_id,
+                censored_message,
+                sender=sender,
+                sessionId=session_id,
+                timestamp=timestamp.isoformat() + "Z",
+                messageId=messageId,
+            )
+        except Exception as e:
+            print(e)
+            await self.send(
+                json.dumps(
+                    {
+                        "error": "Failed to broadcast message.",
+                        "requestId": request_id,
+                        "messageId": messageId,
+                    }
+                )
+            )
+            return
+
+        def save_message():
+            Session = App.get_persistent_store_database(
+                "primary_db", as_sessionmaker=True
+            )
+            db_session = Session()
+            try:
+                previous_messages = (
+                    db_session.query(Message)
+                    .filter_by(
+                        session_id=session_id,
+                        request_id=request_id,
+                    )
+                    .all()
+                )
+
+                # If any prev message has a different sender, update all to new sender
+                if previous_messages and any(
+                    m.sender != sender for m in previous_messages
+                ):
+                    for m in previous_messages:
+                        m.sender = sender
+
+                # If messageId is provided, try to update the existing message
+                if messageId:
+                    existing_message = (
+                        db_session.query(Message)
+                        .filter_by(
+                            message_id=messageId,
+                            request_id=request_id,
+                            session_id=session_id,
+                        )
+                        .first()
+                    )
+                    if existing_message:
+                        # Update the existing message
+                        existing_message.timestamp = timestamp
+                        existing_message.sender = sender
+                        existing_message.message = censored_message
+                        existing_message.edited = True
+                        db_session.commit()
+                        return
+
+                db_session.add(
+                    Message(
+                        timestamp=timestamp,
+                        request_id=request_id,
+                        session_id=session_id,
+                        sender=sender,
+                        message=censored_message,
+                        message_id=messageId,
+                    )
+                )
+                db_session.commit()
+            finally:
+                db_session.close()
+
+        try:
+            await sync_to_async(save_message)()
+        except Exception as e:
+            print(e)
+            await self.send(
+                json.dumps(
+                    {
+                        "error": "Failed to save message.",
+                        "requestId": request_id,
+                        "messageId": messageId,
+                    }
+                )
+            )
+            return
+
     async def send_message(self, event):
+        """
+        Sends a message to the WebSocket client.
+
+        Args:
+            event (dict): Event containing the message payload under the 'message' key.
+        """
         message = event["message"]
         await self.send(json.dumps(message))
 
@@ -307,7 +509,6 @@ def visualization_permissions(request):
     )
 
 
-@api_view(["POST"])
 @controller(url="tethysdash/visualizations/permissions/update", login_required=True)
 def update_visualization_permissions(request):
     """
