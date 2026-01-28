@@ -459,6 +459,7 @@ const Slider = ({
     : formatValue(values[currentIdx], outputFormat, isDateType);
 
   const showPlayControls = Array.isArray(speeds) && speeds.length > 0;
+  const showSpeedDropdown = Array.isArray(speeds) && speeds.length > 1;
 
   return (
     <>
@@ -493,21 +494,22 @@ const Slider = ({
                     ⏹️
                   </Button>
                 )}
-
-                {/* Speed selector */}
-                <Form.Select
-                  value={speed}
-                  onChange={(e) => setSpeed(Number(e.target.value))}
-                  disabled={playing}
-                  aria-label="Speed select"
-                  style={{ width: "auto", minWidth: "80px" }}
-                >
-                  {speeds.map(({ label, value }) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </Form.Select>
+                {/* Speed selector dropdown only if more than one speed */}
+                {showSpeedDropdown && (
+                  <Form.Select
+                    value={speed}
+                    onChange={(e) => setSpeed(Number(e.target.value))}
+                    disabled={playing}
+                    aria-label="Speed select"
+                    style={{ width: "auto", minWidth: "80px" }}
+                  >
+                    {speeds.map(({ label, value }) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </Form.Select>
+                )}
               </>
             )}
           </Col>

@@ -1358,6 +1358,44 @@ describe("Slider Component", () => {
     expect(select.children[2].textContent).toBe("Fast");
     expect(screen.getByText("Slow").selected).toBe(true);
   });
+
+  it("dont show speed selector when only one speed is provided", () => {
+    render(
+      <Slider
+        step={1}
+        min={0}
+        max={10}
+        initialValue={0}
+        outputFormat="{{n}}"
+        dataType="Number"
+        onChange={() => {}}
+        speeds={[{ label: "Only Speed", value: 500 }]}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /play/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/speed select/i)).not.toBeInTheDocument();
+  });
+
+  it("dont show play button when no speeds are provided", () => {
+    render(
+      <Slider
+        step={1}
+        min={0}
+        max={10}
+        initialValue={0}
+        outputFormat="{{n}}"
+        dataType="Number"
+        onChange={() => {}}
+        speeds={[]}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /play/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/speed select/i)).not.toBeInTheDocument();
+  });
 });
 
 test("calculateSliderValues returns correct values", () => {
