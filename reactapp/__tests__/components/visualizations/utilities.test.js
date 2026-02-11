@@ -28,10 +28,10 @@ test("getVisualization bad response", async () => {
           ctx.json({
             success: false,
           }),
-          ctx.set("Content-Type", "application/json")
+          ctx.set("Content-Type", "application/json"),
         );
-      }
-    )
+      },
+    ),
   );
 
   const mockSetVizType = jest.fn();
@@ -65,10 +65,10 @@ test("getVisualization bad response with custom messaging", async () => {
           ctx.json({
             success: false,
           }),
-          ctx.set("Content-Type", "application/json")
+          ctx.set("Content-Type", "application/json"),
         );
-      }
-    )
+      },
+    ),
   );
 
   const mockSetVizType = jest.fn();
@@ -108,10 +108,10 @@ test("getVisualization bad type", async () => {
             data: {},
             viz_type: "some random type",
           }),
-          ctx.set("Content-Type", "application/json")
+          ctx.set("Content-Type", "application/json"),
         );
-      }
-    )
+      },
+    ),
   );
 
   const mockSetVizType = jest.fn();
@@ -148,10 +148,10 @@ test("getVisualization plotly", async () => {
             viz_type: "plotly",
             data: plotData,
           }),
-          ctx.set("Content-Type", "application/json")
+          ctx.set("Content-Type", "application/json"),
         );
-      }
-    )
+      },
+    ),
   );
 
   const mockSetVizType = jest.fn();
@@ -189,10 +189,10 @@ test("getVisualization image", async () => {
             viz_type: "image",
             data: "some_path",
           }),
-          ctx.set("Content-Type", "application/json")
+          ctx.set("Content-Type", "application/json"),
         );
-      }
-    )
+      },
+    ),
   );
 
   const mockSetVizType = jest.fn();
@@ -230,10 +230,10 @@ test("getVisualization, empty variable and no custom messaging", async () => {
             viz_type: "image",
             data: "some_path",
           }),
-          ctx.set("Content-Type", "application/json")
+          ctx.set("Content-Type", "application/json"),
         );
-      }
-    )
+      },
+    ),
   );
 
   const mockSetVizType = jest.fn();
@@ -269,10 +269,10 @@ test("getVisualization, empty variable and custom messaging", async () => {
             viz_type: "image",
             data: "some_path",
           }),
-          ctx.set("Content-Type", "application/json")
+          ctx.set("Content-Type", "application/json"),
         );
-      }
-    )
+      },
+    ),
   );
 
   const mockSetVizType = jest.fn();
@@ -317,10 +317,10 @@ test("getVisualization table", async () => {
             viz_type: "table",
             data: tableData,
           }),
-          ctx.set("Content-Type", "application/json")
+          ctx.set("Content-Type", "application/json"),
         );
-      }
-    )
+      },
+    ),
   );
 
   const mockSetVizType = jest.fn();
@@ -363,10 +363,10 @@ test("getVisualization card", async () => {
             viz_type: "card",
             data: cardData,
           }),
-          ctx.set("Content-Type", "application/json")
+          ctx.set("Content-Type", "application/json"),
         );
-      }
-    )
+      },
+    ),
   );
 
   const mockSetVizType = jest.fn();
@@ -410,10 +410,10 @@ test("getVisualization map", async () => {
             viz_type: "map",
             data: mapData,
           }),
-          ctx.set("Content-Type", "application/json")
+          ctx.set("Content-Type", "application/json"),
         );
-      }
-    )
+      },
+    ),
   );
 
   const mockSetVizType = jest.fn();
@@ -458,10 +458,10 @@ test("getVisualization custom", async () => {
             data: customData,
             viz_type: "custom",
           }),
-          ctx.set("Content-Type", "application/json")
+          ctx.set("Content-Type", "application/json"),
         );
-      }
-    )
+      },
+    ),
   );
 
   const mockSetVizType = jest.fn();
@@ -500,10 +500,10 @@ test("getVisualization text", async () => {
             data: { text: "some text" },
             viz_type: "text",
           }),
-          ctx.set("Content-Type", "application/json")
+          ctx.set("Content-Type", "application/json"),
         );
-      }
-    )
+      },
+    ),
   );
 
   const mockSetVizType = jest.fn();
@@ -543,10 +543,10 @@ test("getVisualization variable input", async () => {
             },
             viz_type: "variable_input",
           }),
-          ctx.set("Content-Type", "application/json")
+          ctx.set("Content-Type", "application/json"),
         );
-      }
-    )
+      },
+    ),
   );
 
   const mockSetVizType = jest.fn();
@@ -598,10 +598,10 @@ test("getVisualization Live Chat", async () => {
             },
             viz_type: "Live Chat",
           }),
-          ctx.set("Content-Type", "application/json")
+          ctx.set("Content-Type", "application/json"),
         );
-      }
-    )
+      },
+    ),
   );
 
   const mockSetVizType = jest.fn();
@@ -657,7 +657,7 @@ test("updateObjectWithVariableInputs", async () => {
 
   const result = updateObjectWithVariableInputs(
     JSON.parse(JSON.stringify(args)),
-    variableInputs
+    variableInputs,
   );
   expect(result).toStrictEqual({
     location: "Test",
@@ -666,7 +666,7 @@ test("updateObjectWithVariableInputs", async () => {
 
   const newResult = updateObjectWithVariableInputs(
     JSON.parse(JSON.stringify(args)),
-    {}
+    {},
   );
   expect(newResult).toStrictEqual({
     location: "",
@@ -675,7 +675,7 @@ test("updateObjectWithVariableInputs", async () => {
 
   const jsonResult = updateObjectWithVariableInputs(
     JSON.parse(JSON.stringify(args)),
-    { "Some Variable": { some: "value" } }
+    { "Some Variable": { some: "value" } },
   );
   expect(jsonResult).toStrictEqual({
     location: '{"some":"value"}',
@@ -700,7 +700,9 @@ test("updateObjectWithVariableInputs", async () => {
     const dateResult = updateObjectWithVariableInputs(
       JSON.parse(JSON.stringify(date_args)),
       dateVariableInputs,
-      { a_date: "date", another_date: "date-hour" }
+      {
+        "Some Variable": "yyyy-MM-dd'T'HH:mm:ss'Z'",
+      },
     );
     expect(dateResult).toStrictEqual({
       a_date: addDays(fixedDate, -1),
@@ -714,7 +716,7 @@ test("updateObjectWithVariableInputs", async () => {
 
 test("getBaseMapLayer", async () => {
   const result = getBaseMapLayer(
-    "https://server.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer"
+    "https://server.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer",
   );
 
   expect(result).toStrictEqual({
@@ -741,7 +743,7 @@ test("findSelectOptionByValue", async () => {
   let result;
   result = findSelectOptionByValue(
     baseMapLayers,
-    "https://server.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Reference/MapServer"
+    "https://server.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Reference/MapServer",
   );
   expect(result).toStrictEqual({
     label: "World Ocean Reference",
@@ -761,7 +763,7 @@ test("findSelectOptionByValue", async () => {
   ];
   result = findSelectOptionByValue(
     options,
-    "https://server.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Reference/MapServer"
+    "https://server.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Reference/MapServer",
   );
   expect(result).toStrictEqual({
     label: "World Ocean Reference",

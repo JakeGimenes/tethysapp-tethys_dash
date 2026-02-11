@@ -1,6 +1,10 @@
 import appAPI from "services/api/app";
 import { spaceAndCapitalize } from "components/modals/utilities";
-import { parseDateMath } from "components/inputs/dateUtils";
+import {
+  parseDateMath,
+  checkForVariable,
+  isRelativeInput,
+} from "components/inputs/dateUtils";
 
 export function checkForEmptyVariableInputs({
   metadataString,
@@ -220,13 +224,19 @@ export function getGridItem(gridItems, gridItemI) {
   return result;
 }
 
-export function updateObjectWithVariableInputs(args, variableInputs, argTypes) {
-  for (let gridItemsArg in args) {
-    let value = args[gridItemsArg];
+export function updateObjectWithVariableInputs(
+  args,
+  variableInputs,
+  variableInputDateFormats,
+) {
+  const argsCopy = JSON.parse(JSON.stringify(args));
+  for (let gridItemsArg in argsCopy) {
+    let value = argsCopy[gridItemsArg];
 
     if (typeof value !== "string") {
       value = JSON.stringify(value);
     }
+
     let updatedValuesWithVariableInputs = value.replace(
       /\$\{([^}]+)\}/g,
       (_, key) =>
@@ -235,22 +245,32 @@ export function updateObjectWithVariableInputs(args, variableInputs, argTypes) {
           : (variableInputs[key] ?? ""),
     );
 
-    if (typeof args[gridItemsArg] !== "string") {
+    if (typeof argsCopy[gridItemsArg] !== "string") {
       updatedValuesWithVariableInputs = JSON.parse(
         updatedValuesWithVariableInputs,
       );
     }
-    args[gridItemsArg] = updatedValuesWithVariableInputs;
+    argsCopy[gridItemsArg] = updatedValuesWithVariableInputs;
 
-    if (argTypes) {
-      const argType = argTypes[gridItemsArg];
-      if (argType === "date" || argType === "date-hour") {
-        args[gridItemsArg] = parseDateMath({ value: args[gridItemsArg] });
+    if (variableInputDateFormats) {
+      const argVariables = checkForVariable(value);
+      const dateFormat = variableInputDateFormats[argVariables];
+      if (dateFormat) {
+        argsCopy[gridItemsArg] = parseDateMath({
+          value: argsCopy[gridItemsArg],
+          dateFormat: dateFormat,
+        });
       }
+    }
+
+    if (isRelativeInput(updatedValuesWithVariableInputs)) {
+      argsCopy[gridItemsArg] = parseDateMath({
+        value: updatedValuesWithVariableInputs,
+      });
     }
   }
 
-  return args;
+  return argsCopy;
 }
 
 export const nonDropDownVariableInputTypes = [

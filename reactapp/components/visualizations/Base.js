@@ -27,6 +27,7 @@ import { addVerticalLine } from "components/visualizations/BasePlot";
 import { WebsocketContext } from "components/contexts/WebSocketContext";
 import ProgressBar from "react-bootstrap/ProgressBar";
 import LiveChat from "components/visualizations/LiveChat";
+import { isRelativeInput } from "components/inputs/dateUtils";
 
 const StyledSpinner = styled(Spinner)`
   margin: auto;
@@ -199,11 +200,6 @@ export const Visualization = memo(
   },
 );
 
-// Helper function to check if a value is a relative date
-const isRelativeDate = (val) => {
-  return typeof val === "string" && /^now([+-]\d+[YMWDHmS])*$/.test(val);
-};
-
 export function toLocalISO(d) {
   const pad = (n) => String(n).padStart(2, "0");
   return (
@@ -268,20 +264,21 @@ export const compareFilteredArgs = (
 };
 
 // Filter function to exclude date/date-hour types and relative dates
-const filterNonRelativeDateArgs = (args, variableInputs, types) => {
+const filterNonRelativeDateArgs = (
+  args,
+  variableInputs,
+  variableInputDateFormats,
+) => {
   const filtered = {};
   for (const [key, value] of Object.entries(args)) {
-    const argType = types?.[key];
+    const dateFormat = variableInputDateFormats?.[key];
     const dependentVariableInputs = getDependentVariableInputs(value);
 
     let validFilter = true;
     for (const input of dependentVariableInputs) {
       // Skip if the argument type is date or date-hour and the value is a relative date
       const variableInput = variableInputs?.[input];
-      if (
-        (argType === "date" || argType === "date-hour") &&
-        isRelativeDate(variableInput)
-      ) {
+      if (dateFormat || isRelativeInput(variableInput)) {
         validFilter = false;
       }
     }
@@ -304,7 +301,9 @@ const BaseVisualization = () => {
   const [vizType, setVizType] = useState("loader");
   const [vizData, setVizData] = useState({});
   const { visualizations } = useContext(AppContext);
-  const { variableInputValues } = useContext(VariableInputsContext);
+  const { variableInputValues, variableInputDateFormats } = useContext(
+    VariableInputsContext,
+  );
   const gridItemArgsWithVariableInputs = useRef(0);
   const gridItemMetadataWithVariableInputs = useRef(0);
   const customMessages = useRef({});
@@ -373,24 +372,27 @@ const BaseVisualization = () => {
       "source",
     );
     const sourceType = visualization?.type;
-    const argTypes = visualization?.args;
 
     const itemData = { source: gridItemSource, args: args };
     const updatedGridItemArgs = convertDates(
-      updateObjectWithVariableInputs(args, variableInputValues, argTypes),
+      updateObjectWithVariableInputs(
+        args,
+        variableInputValues,
+        variableInputDateFormats,
+      ),
     );
 
     const updatedGridItemMetadata = updateObjectWithVariableInputs(
       gridMetadata,
       variableInputValues,
-      argTypes,
+      variableInputDateFormats,
     );
     const customMessaging = gridMetadata.customMessaging;
 
     const filteredOriginalArgs = filterNonRelativeDateArgs(
       originalArgs,
       variableInputValues,
-      argTypes,
+      variableInputDateFormats,
     );
 
     // Only allow the empty args load to run once per source unless refresh is true

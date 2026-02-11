@@ -1,6 +1,6 @@
 {
   "name": "tethysdash_frontend",
-  "version": "0.0.1",
+  "version": "0.16.10",
   "description": "Frontend React project for tethysdash",
   "main": "index.js",
   "scripts": {
