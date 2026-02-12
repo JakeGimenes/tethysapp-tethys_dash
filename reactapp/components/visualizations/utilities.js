@@ -2,9 +2,9 @@ import appAPI from "services/api/app";
 import { spaceAndCapitalize } from "components/modals/utilities";
 import {
   parseDateMath,
-  checkForVariable,
-  isRelativeInput,
+  convertDatesToLocalISO,
 } from "components/inputs/dateUtils";
+import { format } from "date-fns";
 
 export function checkForEmptyVariableInputs({
   metadataString,
@@ -69,6 +69,7 @@ export async function getVisualization({
   variableInputValues,
   dashboardView,
   vizLoadingIcon = true,
+  variableInputDateFormats = {},
 }) {
   const metadata = JSON.parse(metadataString);
   const emptyVariableWarnings = checkForEmptyVariableInputs({
@@ -114,6 +115,13 @@ export async function getVisualization({
   if (vizLoadingIcon && sourceType !== "map") {
     setVizType("loader");
   }
+
+  itemData.args = updateObjectWithVariableInputs(
+    JSON.parse(argsString),
+    variableInputValues,
+    variableInputDateFormats,
+    true,
+  );
 
   const apiResponse = await appAPI.getVisualizationData(itemData);
   if (apiResponse.success === true) {
@@ -228,8 +236,34 @@ export function updateObjectWithVariableInputs(
   args,
   variableInputs,
   variableInputDateFormats,
+  returnDatesAsLocalISO = false,
 ) {
   const argsCopy = JSON.parse(JSON.stringify(args));
+  const variableInputsCopy = JSON.parse(JSON.stringify(variableInputs));
+
+  if (variableInputDateFormats) {
+    for (let [variableInputKey, variableInputValue] of Object.entries(
+      variableInputs,
+    )) {
+      const dateFormat = variableInputDateFormats[variableInputKey];
+      if (dateFormat) {
+        const updatedValue = parseDateMath({
+          value: variableInputValue,
+          dateFormat: dateFormat,
+        });
+        if (returnDatesAsLocalISO) {
+          variableInputsCopy[variableInputKey] =
+            convertDatesToLocalISO(updatedValue);
+        } else {
+          variableInputsCopy[variableInputKey] = format(
+            updatedValue,
+            dateFormat,
+          );
+        }
+      }
+    }
+  }
+
   for (let gridItemsArg in argsCopy) {
     let value = argsCopy[gridItemsArg];
 
@@ -240,9 +274,9 @@ export function updateObjectWithVariableInputs(
     let updatedValuesWithVariableInputs = value.replace(
       /\$\{([^}]+)\}/g,
       (_, key) =>
-        typeof variableInputs[key] === "object"
-          ? JSON.stringify(variableInputs[key])
-          : (variableInputs[key] ?? ""),
+        typeof variableInputsCopy[key] === "object"
+          ? JSON.stringify(variableInputsCopy[key])
+          : (variableInputsCopy[key] ?? ""),
     );
 
     if (typeof argsCopy[gridItemsArg] !== "string") {
@@ -251,23 +285,6 @@ export function updateObjectWithVariableInputs(
       );
     }
     argsCopy[gridItemsArg] = updatedValuesWithVariableInputs;
-
-    if (variableInputDateFormats) {
-      const argVariables = checkForVariable(value);
-      const dateFormat = variableInputDateFormats[argVariables];
-      if (dateFormat) {
-        argsCopy[gridItemsArg] = parseDateMath({
-          value: argsCopy[gridItemsArg],
-          dateFormat: dateFormat,
-        });
-      }
-    }
-
-    if (isRelativeInput(updatedValuesWithVariableInputs)) {
-      argsCopy[gridItemsArg] = parseDateMath({
-        value: updatedValuesWithVariableInputs,
-      });
-    }
   }
 
   return argsCopy;
