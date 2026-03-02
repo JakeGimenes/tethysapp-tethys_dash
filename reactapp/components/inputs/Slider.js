@@ -107,7 +107,10 @@ function formatNumber(n, template) {
 
 function formatDateValue(date, format) {
   try {
-    return formatDate(parseDateMath({ value: date }), format);
+    return formatDate(
+      parseDateMath({ value: date, dateFormat: format }),
+      format,
+    );
   } catch (err) {
     console.error("Date formatting error:", err.message);
     return date.toString();
@@ -305,6 +308,7 @@ const getInitialIndices = (values, initialValue, initialRange, rangeMode) => {
 };
 
 const Slider = ({
+  variable_name,
   label,
   step,
   min,
@@ -324,7 +328,10 @@ const Slider = ({
   ],
 }) => {
   const { gridItemArgsString } = useContext(GridItemContext);
-  const { variableInputDateFormats } = useContext(VariableInputsContext);
+  const { variableInputDateFormats, variableInputValues } = useContext(
+    VariableInputsContext,
+  );
+  const [rawValue, setRawValue] = useState(null);
   const rawMetadata =
     JSON.parse(gridItemArgsString || "{}")?.[
       "variable_options_source.metadata"
@@ -378,6 +385,34 @@ const Slider = ({
     min,
     max,
   });
+
+  useEffect(() => {
+    const sliderVariableValue = variableInputValues[variable_name];
+    const currentValue = formatValue(
+      values[debouncedCurrentIdx],
+      outputFormat,
+      isDateType,
+    );
+    if (sliderVariableValue) {
+      // Find the index of the sliderVariableValue in values
+      const idx = values.findIndex((v) =>
+        valuesEqual(
+          sliderVariableValue,
+          formatValue(v, outputFormat, isDateType),
+        ),
+      );
+      if (idx === -1) {
+        // Value does not align with an index, store as rawValue
+        setRawValue(sliderVariableValue);
+      } else {
+        setRawValue(null);
+        if (!valuesEqual(sliderVariableValue, currentValue)) {
+          setCurrentIdx(idx);
+        }
+      }
+    }
+    // eslint-disable-next-line
+  }, [variableInputValues]);
 
   // Update speed if speeds prop changes
   useEffect(() => {
@@ -526,12 +561,43 @@ const Slider = ({
     return null;
   if (!rangeMode && Array.isArray(currentIdx)) return null;
 
-  const sliderValue = rangeMode ? currentIdx : currentIdx;
-  const sliderMin = 0;
-  const sliderMax = values.length - 1;
-  const displayValue = rangeMode
+  // For non-indexed value, snap handle to nearest index but display raw value
+  let sliderValue = rangeMode ? currentIdx : currentIdx;
+  let displayValue = rangeMode
     ? `${formatValue(values[currentIdx[0]], outputFormat, isDateType)} - ${formatValue(values[currentIdx[1]], outputFormat, isDateType)}`
     : formatValue(values[currentIdx], outputFormat, isDateType);
+
+  if (!rangeMode && rawValue !== null) {
+    // Find the closest index for the handle, support both date and number types
+    let closestIdx = 0;
+    let minDiff = Infinity;
+    for (let i = 0; i < values.length; i++) {
+      let diff;
+      if (isDateType) {
+        diff = Math.abs(
+          parseDateMath({
+            value: values[i],
+            dateFormat: outputFormat,
+          }).getTime() -
+            parseDateMath({
+              value: rawValue,
+              dateFormat: outputFormat,
+            }).getTime(),
+        );
+      } else {
+        diff = Math.abs(Number(values[i]) - Number(rawValue));
+      }
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestIdx = i;
+      }
+    }
+    sliderValue = closestIdx;
+    displayValue =
+      formatValue(rawValue, outputFormat, isDateType) + " (custom)";
+  }
+  const sliderMin = 0;
+  const sliderMax = values.length - 1;
 
   const showPlayControls = Array.isArray(speeds) && speeds.length > 0;
   const showSpeedDropdown = Array.isArray(speeds) && speeds.length > 1;
@@ -696,6 +762,7 @@ const Slider = ({
 };
 
 Slider.propTypes = {
+  variable_name: PropTypes.string.isRequired,
   label: PropTypes.string,
   step: PropTypes.number.isRequired,
   min: PropTypes.oneOfType([PropTypes.number, PropTypes.string]).isRequired,
