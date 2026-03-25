@@ -1,6 +1,7 @@
 import { moduleMap } from "components/map/moduleMap";
 import { Vector as VectorSource } from "ol/source.js";
 import MVT from "ol/format/MVT.js";
+import KML from "ol/format/KML.js";
 import GeoJSON from "ol/format/GeoJSON.js";
 import EsriJSON from "ol/format/EsriJSON";
 import { tile as tileStrategy } from "ol/loadingstrategy.js";
@@ -54,13 +55,23 @@ const moduleLoader = async (config, mapProjection) => {
         if (type === "Vector Tile") {
           resolvedProps.format = new MVT();
         }
+        if (type === "KML") {
+          resolvedProps.format = new KML();
+        }
         return new moduleCache[type](resolvedProps);
       }
     }
     const importModule = getModuleImporter(type);
     const module = await importModule();
 
-    const ModuleConstructor = module.default;
+    // Handle both default exports and named exports
+    let ModuleConstructor = module.default;
+    if (!ModuleConstructor) {
+      ModuleConstructor =
+        type === "PMTiles Vector"
+          ? module.PMTilesVectorSource
+          : module.PMTilesRasterSource;
+    }
 
     if (typeof ModuleConstructor !== "function") {
       throw new Error(`Module '${type}' does not export a constructor.`);
@@ -71,6 +82,9 @@ const moduleLoader = async (config, mapProjection) => {
     const resolvedProps = await resolveProps(props, mapProjection);
     if (type === "Vector Tile") {
       resolvedProps.format = new MVT();
+    }
+    if (type === "KML") {
+      resolvedProps.format = new KML();
     }
 
     if (type === "GeoJSON") {
@@ -163,11 +177,14 @@ const getModuleImporter = (type) => {
     WMS: "ol/source/ImageWMS.js",
     Raster: "ol/source/Raster.js",
     GeoJSON: "ol/format/GeoJSON.js",
+    KML: "ol/source/Vector.js",
     Style: "ol/style/Style.js",
     Stroke: "ol/style/Stroke.js",
     Fill: "ol/style/Fill.js",
     "ESRI Feature Service": "ol/format/EsriJSON.js",
     InvalidForTesting: "DontUseThis",
+    "PMTiles Vector": "ol-pmtiles",
+    "PMTiles Raster": "ol-pmtiles",
     // Add other mappings as needed
   };
 
@@ -196,7 +213,7 @@ const loadGeoJSON = (config, mapProjection) => {
   return vectorSource;
 };
 
-const loadESRIJSON = (config) => {
+export const loadESRIJSON = (config) => {
   const vectorSource = new VectorSource({
     format: new EsriJSON(),
     url: function (extent, resolution, projection) {
@@ -255,7 +272,7 @@ const loadESRIJSON = (config) => {
   return vectorSource;
 };
 
-function createDotFill({ color = "#000", radius = 2, spacing = 8 }) {
+function createDotFill({ color, radius, spacing }) {
   const canvas = document.createElement("canvas");
   canvas.width = spacing;
   canvas.height = spacing;
@@ -274,11 +291,7 @@ function createDotFill({ color = "#000", radius = 2, spacing = 8 }) {
   });
 }
 
-function createHatchFill({
-  color = "#000",
-  spacing = 8,
-  direction = "diagonal",
-}) {
+function createHatchFill({ color, spacing, direction }) {
   const canvas = document.createElement("canvas");
   canvas.width = spacing;
   canvas.height = spacing;
@@ -543,20 +556,20 @@ export function getGeometryBucket(feature) {
   return "point";
 }
 
-function buildPolygonFill(merged) {
+export function buildPolygonFill(merged) {
   if (merged.polygonFillType === "hatch") {
     return createHatchFill({
       color: merged.fill || defaultFill,
-      spacing: merged.hatchSpacing ?? defaultHatchSpacing,
-      direction: merged.hatchDirection ?? defaultHatchDirection,
+      spacing: merged.hatchSpacing || defaultHatchSpacing,
+      direction: merged.hatchDirection || defaultHatchDirection,
     });
   }
 
   if (merged.polygonFillType === "dot") {
     return createDotFill({
       color: merged.fill || defaultFill,
-      radius: merged.dotRadius ?? defaultDotRadius,
-      spacing: merged.dotSpacing ?? defaultDotSpacing,
+      radius: merged.dotRadius || defaultDotRadius,
+      spacing: merged.dotSpacing || defaultDotSpacing,
     });
   }
 
@@ -630,7 +643,7 @@ export function createJsonStyleFunction(styleJson) {
 
     const stroke = lineDash
       ? new Stroke({
-          color: merged.stroke,
+          color: merged.stroke || defaultStroke,
           width: merged.strokeWidth ?? defaultStrokeWidth,
           lineDash,
         })
@@ -658,7 +671,7 @@ export function createJsonStyleFunction(styleJson) {
       style = new Style({ stroke, zIndex });
     }
     // --- POLYGON ---
-    else if (geometryBucket === "polygon") {
+    else {
       const fill = buildPolygonFill(merged);
       style = new Style({ fill, stroke, zIndex });
     }

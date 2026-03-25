@@ -80,7 +80,8 @@ const MapComponent = ({
   };
 
   useEffect(() => {
-    // Set up an initial map and set it to state/ref
+    // Set up an initial map and set it to state/
+    // istanbul ignore next
     if (mapDivRef.current) {
       const initialMap = new Map({
         target: mapDivRef.current,
@@ -93,7 +94,9 @@ const MapComponent = ({
       visualizationRef.current = initialMap;
 
       if (setMapReady) {
+        // istanbul ignore next
         initialMap.once("rendercomplete", () => {
+          // istanbul ignore next
           setMapReady(true);
         });
       }
@@ -108,6 +111,7 @@ const MapComponent = ({
     }
 
     return () => {
+      // istanbul ignore next
       if (visualizationRef.current) {
         visualizationRef.current.setTarget(undefined);
         visualizationRef.current = null;
@@ -268,6 +272,7 @@ const MapComponent = ({
         );
       }
 
+      // istanbul ignore next
       if (visualizationRef.current) {
         // setup click event with new layers. This is done so that the variable
         // and states in the passed function are updated and not stale

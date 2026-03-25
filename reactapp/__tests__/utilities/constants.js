@@ -960,7 +960,7 @@ export const mockedSliderVariable = {
   h: 20,
   source: "Variable Input",
   args_string: JSON.stringify({
-    initial_value: "0",
+    initial_value: 50,
     variable_name: "Test Variable",
     variable_options_source: "slider",
     "variable_options_source.metadata": {
@@ -1300,6 +1300,21 @@ export const layerConfigArcGISFeatureService = {
   },
 };
 
+export const layerConfigKML = {
+  configuration: {
+    type: "VectorLayer",
+    props: {
+      name: "KML Layer",
+      source: {
+        type: "KML",
+        props: {
+          url: "https://developers.google.com/kml/documentation/KML_Samples.kml",
+        },
+      },
+    },
+  },
+};
+
 export const layerConfigGeoJSON = {
   configuration: {
     type: "VectorLayer",
@@ -1399,6 +1414,38 @@ export const layerConfigWebGLTile = {
       },
       name: "World Light Gray Base",
       zIndex: 0,
+    },
+  },
+};
+
+export const layerConfigPMTilesRaster = {
+  configuration: {
+    type: "WebGLTile",
+    props: {
+      name: "PMTiles Raster Layer",
+      source: {
+        type: "PMTiles Raster",
+        props: {
+          url: "https://communityhydrofabric.s3.us-east-1.amazonaws.com/map/nexus.pmtiles",
+        },
+      },
+      zIndex: 1,
+    },
+  },
+};
+
+export const layerConfigPMTilesVector = {
+  configuration: {
+    type: "VectorTileLayer",
+    props: {
+      name: "PMTiles Vector Layer",
+      source: {
+        type: "PMTiles Vector",
+        props: {
+          url: "https://communityhydrofabric.s3.us-east-1.amazonaws.com/map/nexus.pmtiles",
+        },
+      },
+      zIndex: 1,
     },
   },
 };

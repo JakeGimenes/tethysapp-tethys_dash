@@ -7,9 +7,13 @@ import VectorSource from "ol/source/Vector";
 import { LineString, MultiPolygon, Polygon, Point } from "ol/geom";
 import { Stroke, Style, Circle } from "ol/style";
 import Icon from "ol/style/Icon";
+import { toGeometry } from "ol/render/Feature";
 import appAPI from "services/api/app";
 import { v4 as uuidv4 } from "uuid";
 import JSON5 from "json5";
+import { PMTiles } from "pmtiles";
+import { VectorTile } from "@mapbox/vector-tile";
+import Protobuf from "pbf";
 
 export const sourcePropertiesOptions = {
   "ESRI Image and Map Service": {
@@ -69,6 +73,21 @@ export const sourcePropertiesOptions = {
       },
     },
   },
+  KML: {
+    required: {
+      url: {
+        placeholder: "KML URL",
+      },
+    },
+    optional: {
+      attributions: {
+        placeholder: "Attributions",
+      },
+      projection: {
+        placeholder: "EPSG:<Code>",
+      },
+    },
+  },
   "Image Tile": {
     required: {
       url: {
@@ -122,6 +141,32 @@ export const sourcePropertiesOptions = {
         WHERE: {
           placeholder: "WHERE clause for the query filter",
         },
+      },
+    },
+  },
+  "PMTiles Vector": {
+    required: {
+      url: { placeholder: "PMTiles Vector URL" },
+    },
+    optional: {
+      attributions: {
+        placeholder: "Attributions",
+      },
+      tileSize: {
+        placeholder: "Tile Size (e.g., 256, 512)",
+      },
+    },
+  },
+  "PMTiles Raster": {
+    required: {
+      url: { placeholder: "PMTiles Raster URL" },
+    },
+    optional: {
+      attributions: {
+        placeholder: "Attributions",
+      },
+      tileSize: {
+        placeholder: "Tile Size (e.g., 256, 512)",
       },
     },
   },
@@ -315,11 +360,54 @@ export async function queryLayerFeatures(layerInfo, map, coordinate, pixel) {
         coordinate,
         LayerName,
       );
+    } else if (sourceType === "PMTiles Vector") {
+      features = getVectorTileLayerFeatures(map, pixel);
+    } else if (sourceType === "KML") {
+      features = getKMLLayerFeatures(map, pixel, coordinate, LayerName);
     } else {
       throw Error(`${sourceType} is not currently configured to be queried`);
     }
   }
 
+  return features;
+}
+
+async function getKMLLayerFeatures(map, pixel, coordinate, LayerName) {
+  let features = await getGeoJSONLayerFeatures(
+    map,
+    pixel,
+    coordinate,
+    LayerName,
+  );
+
+  // Remove styleUrl and description, and filter out features with no other attributes
+  features = features.map((feature) => {
+    const attrs = { ...feature.attributes };
+    delete attrs.styleUrl;
+    delete attrs.description;
+    return {
+      ...feature,
+      attributes: attrs,
+    };
+  });
+
+  return features;
+}
+
+function getVectorTileLayerFeatures(map, pixel) {
+  const features = [];
+  map.forEachFeatureAtPixel(pixel, function (feature, layer) {
+    if (!feature) return;
+    let featureLayerName = feature.get("layer");
+    features.push({
+      layerName: featureLayerName,
+      attributes: feature.getProperties(),
+      geometry: {
+        type: toGeometry(feature).getType(),
+        coordinates: toGeometry(feature).getCoordinates(),
+      },
+    });
+  });
   return features;
 }
 
@@ -435,7 +523,10 @@ async function getGeoJSONLayerFeatures(map, pixel, coordinate, LayerName) {
       const { geometry, ...properties } = feature.getProperties();
 
       // if a feature is a collection of geometries, then check each individual item in the collection and check if it was clicked
-      if (geometry.getType() === "GeometryCollection") {
+      if (
+        geometry.getType() === "GeometryCollection" ||
+        geometry.getType() === "MultiGeometry"
+      ) {
         const resolution = map.getView().getResolution();
 
         // loop through each individual geometry in the collection
@@ -546,6 +637,7 @@ export async function getLayerAttributes(
   const layerNumber = sourceProperties?.layer;
 
   // make the appropriate request based on the source type
+  // TODO: add PM Vector Tile and KML attribute retrieval
   if (sourceType === "ESRI Image and Map Service") {
     attributes = await getImageArcGISRestLayerAttributes(sourceUrl);
   } else if (sourceType === "WMS") {
@@ -562,11 +654,81 @@ export async function getLayerAttributes(
       layerNumber,
       layerName,
     );
+  } else if (sourceType === "KML") {
+    attributes = await getKMLLayerAttributes(sourceUrl, layerName);
+  } else if (sourceType === "PMTiles Vector") {
+    attributes = await getPMTilesVectorLayerAttributes(sourceUrl);
   } else {
     throw Error(`${sourceType} is not currently configured to be queried`);
   }
 
   return attributes;
+}
+
+async function getPMTilesVectorLayerAttributes(sourceUrl) {
+  // Default to tile 0/0/0 if not specified, or allow passing tile coordinates as needed
+  const z = 0,
+    x = 0,
+    y = 0;
+  const pmtiles = new PMTiles(sourceUrl);
+  const { data } = await pmtiles.getZxy(z, x, y);
+  const tile = new VectorTile(new Protobuf(data));
+  const sourceAttributes = {};
+  const layerNames = Object.keys(tile.layers);
+  for (const lyrName of layerNames) {
+    const layer = tile.layers[lyrName];
+    const attributesSet = new Set();
+    for (let i = 0; i < layer.length; i++) {
+      const feature = layer.feature(i);
+      Object.keys(feature.properties).forEach((attr) => {
+        attributesSet.add(attr);
+      });
+    }
+    const attributes = Array.from(attributesSet).map((attr) => ({
+      name: attr,
+      alias: attr,
+    }));
+    sourceAttributes[lyrName] = attributes;
+  }
+  return sourceAttributes;
+}
+
+async function getKMLLayerAttributes(sourceUrl, layerName) {
+  const parser = new DOMParser();
+  const kmlTextResponse = await fetch(sourceUrl);
+  const kmlText = await kmlTextResponse.text();
+  const xmlDoc = parser.parseFromString(kmlText, "application/xml");
+
+  const invalidTags = [
+    "Point",
+    "LineString",
+    "Polygon",
+    "MultiGeometry",
+    "MultiLineString",
+    "MultiPolygon",
+    "GeometryCollection",
+    "styleUrl",
+    "description",
+  ];
+
+  const placemarks = xmlDoc.getElementsByTagName("Placemark");
+  const attributes = new Set();
+  for (let i = 0; i < placemarks.length; i++) {
+    const placemark = placemarks[i];
+    for (let j = 0; j < placemark.children.length; j++) {
+      const child = placemark.children[j];
+      const tag = child.tagName;
+      if (!invalidTags.includes(tag)) {
+        attributes.add(tag);
+      }
+    }
+  }
+  return {
+    [layerName]: Array.from(attributes).map((attr) => ({
+      name: attr,
+      alias: attr,
+    })),
+  };
 }
 
 async function getImageArcGISRestLayerAttributes(sourceUrl) {

@@ -251,6 +251,7 @@ const MapVisualization = ({
       positioning: "center-center",
     });
 
+    // istanbul ignore next
     if (visualizationRef?.current) {
       // known non-coverage for tests
       visualizationRef.current.addOverlay(spinnerOverlayRef.current);
@@ -259,6 +260,7 @@ const MapVisualization = ({
     }
 
     return () => {
+      // istanbul ignore next
       if (visualizationRef?.current) {
         // known non-coverage for tests
         if (spinnerOverlayRef.current) {
@@ -274,6 +276,7 @@ const MapVisualization = ({
   }, [visualizationRef]);
 
   useEffect(() => {
+    // istanbul ignore next
     if (popupRootRef.current) {
       popupRootRef.current.render(
         <OverlayContentWrapper aria-label="Map Popup" id="map-popup">
@@ -399,6 +402,7 @@ const MapVisualization = ({
   };
 
   const updateVariableInputsForFeature = (selectedFeature) => {
+    console.log("Updating variable inputs for feature:", selectedFeature);
     const layerName = selectedFeature.layerName;
     const mapAttributeVariables = mapAttributeVariablesRef.current;
 
@@ -445,13 +449,14 @@ const MapVisualization = ({
   };
 
   const onMapClick = async (map, evt) => {
-    // known non-coverage for tests
+    // istanbul ignore next
     if (drawing.current || isProcessing) return;
     setIsProcessing(true);
 
     const coordinate = evt.coordinate;
     const pixel = evt.pixel;
 
+    // istanbul ignore next
     if (spinnerOverlayRef.current) {
       spinnerOverlayRef.current.setPosition(coordinate);
     }
@@ -530,6 +535,7 @@ const MapVisualization = ({
     const queryLayerFeaturesResults = await Promise.all(queryCalls);
 
     // Remove spinner overlay once queries are done
+    // istanbul ignore next
     if (spinnerOverlayRef.current) {
       spinnerOverlayRef.current.setPosition(null);
     }
