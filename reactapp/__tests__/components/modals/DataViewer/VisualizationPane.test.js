@@ -14,7 +14,7 @@ import createLoadedComponent from "__tests__/utilities/customRender";
 import PropTypes from "prop-types";
 import { server } from "__tests__/utilities/server";
 import { rest } from "msw";
-import { AppContext } from "components/contexts/Contexts";
+import { AppContext, AppTourContext } from "components/contexts/Contexts";
 import { findVisualizationBySource } from "components/visualizations/utilities";
 import MapContextProvider from "components/contexts/MapContext";
 
@@ -95,6 +95,55 @@ const TestingComponent = ({
     </>
   );
 };
+
+test("Search Visualization Type Button doesnt do anything in AppTour", async () => {
+  const mockedDashboard = JSON.parse(JSON.stringify(userDashboard));
+  const gridItem = mockedDashboard.tabs[0].gridItems[0];
+  const mockSetGridItemMessage = jest.fn();
+  const mockSetVizType = jest.fn();
+  const mockSetVizData = jest.fn();
+  const mockSetVizMetadata = jest.fn();
+  const mockSetShowingSubModal = jest.fn();
+
+  render(
+    createLoadedComponent({
+      children: (
+        <AppTourContext.Provider
+          value={{
+            activeAppTour: true,
+          }}
+        >
+          <TestingComponent
+            gridItemIndex={0}
+            layoutContext={mockedDashboard}
+            source={gridItem.source}
+            argsString={gridItem.args_string}
+            setGridItemMessage={mockSetGridItemMessage}
+            vizType={"loader"}
+            setVizType={mockSetVizType}
+            setVizData={mockSetVizData}
+            setVizMetadata={mockSetVizMetadata}
+            setShowingSubModal={mockSetShowingSubModal}
+          />
+        </AppTourContext.Provider>
+      ),
+      options: {
+        inDataViewerMode: true,
+      },
+    }),
+  );
+
+  expect(mockSetVizMetadata).toHaveBeenCalledTimes(0);
+  expect(mockSetVizType).toHaveBeenCalledTimes(0);
+  expect(mockSetVizData).toHaveBeenCalledTimes(0);
+
+  const visualizationTypeSelect = await screen.findByLabelText(
+    "Search Visualization Type Button",
+  );
+  await userEvent.click(visualizationTypeSelect);
+  expect(screen.queryByText("Default")).not.toBeInTheDocument();
+  expect(mockSetShowingSubModal).toHaveBeenCalledTimes(0);
+});
 
 test("Visualization Pane Custom Image", async () => {
   const mockedDashboard = JSON.parse(JSON.stringify(userDashboard));

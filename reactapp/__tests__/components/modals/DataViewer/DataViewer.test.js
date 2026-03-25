@@ -21,7 +21,11 @@ import createLoadedComponent, {
   InputVariablePComponent,
 } from "__tests__/utilities/customRender";
 import selectEvent from "react-select-event";
-import { GridItemContext, TabContext } from "components/contexts/Contexts";
+import {
+  GridItemContext,
+  TabContext,
+  AppTourContext,
+} from "components/contexts/Contexts";
 
 jest.mock("uuid", () => ({
   v4: () => 12345678,
@@ -1026,6 +1030,50 @@ test("Dashboard Viewer multi variable date range fails if duplicated variable na
   expect(
     await screen.findByText("Duplicate variable name(s) found: Start Date"),
   ).toBeInTheDocument();
+});
+
+test("Dashboard Viewer Modal Save in AppTour doesnt do anything", async () => {
+  const mockedDashboard = JSON.parse(JSON.stringify(userDashboard));
+  const gridItem = mockedDashboard.tabs[0].gridItems[0];
+  const mockHandleModalClose = jest.fn();
+  const mockSetGridItemMessage = jest.fn();
+  const mockSetShowGridItemMessage = jest.fn();
+  const mockUpdateTab = jest.fn();
+
+  render(
+    createLoadedComponent({
+      children: (
+        <AppTourContext.Provider
+          value={{
+            activeAppTour: true,
+          }}
+        >
+          <TestingComponent
+            gridItem={gridItem}
+            mockHandleModalClose={mockHandleModalClose}
+            mockSetGridItemMessage={mockSetGridItemMessage}
+            mockSetShowGridItemMessage={mockSetShowGridItemMessage}
+            onTabUpdate={mockUpdateTab}
+          />
+        </AppTourContext.Provider>
+      ),
+      options: { initialDashboard: mockedDashboard, inAppTour: true },
+    }),
+  );
+
+  expect(await screen.findByText("Edit Visualization")).toBeInTheDocument();
+  expect(await screen.findByText("Visualization")).toBeInTheDocument();
+  expect(await screen.findByText("Settings")).toBeInTheDocument();
+  expect(mockUpdateTab).toHaveBeenCalledTimes(1); // useEffect for testing component
+
+  const dataviewerSaveButton = await screen.findByLabelText(
+    "dataviewer-save-button",
+  );
+  fireEvent.click(dataviewerSaveButton);
+
+  expect(mockUpdateTab).toHaveBeenCalledTimes(1);
+  expect(mockHandleModalClose).toHaveBeenCalledTimes(0);
+  expect(mockSetShowGridItemMessage).toHaveBeenCalledTimes(0);
 });
 
 describe("getAllVariableInputNames", () => {
