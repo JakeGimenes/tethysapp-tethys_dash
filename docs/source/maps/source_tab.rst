@@ -4,10 +4,8 @@
 Source Tab
 ----------
 
-The source tab defines the source of the data for the layer and any additional properties. Once a source type is selected, 
-source properties will appear for further customizations and setup. Some properties are required for layers to render while 
-others are optional. Source type options are predefined and currently consist of the following options with their available 
-properties. 
+
+The source tab defines the data source for the layer and its properties. After selecting a source type, relevant properties will appear for further customization. Some properties are required for the layer to render, while others are optional. The available source types and their properties are listed below.
 
 ------------------------------------------------------------------------------------------------------------------------
 
@@ -77,10 +75,8 @@ Image Tile
 GeoJSON
 ++++++++
 
-The GeoJSON source is slightly different from the other source options. This option will display a text area and a 
-button to upload your GeoJSON that may be stored in a file. GeoJSONs must follow 
-`the GeoJSON specification <https://datatracker.ietf.org/doc/html/rfc7946>`_ and also contain a "crs.properties.name" 
-value for projection information. A example of a valid GeoJSON is::
+
+The GeoJSON source is different from the other options. It provides a text area and a button to upload your GeoJSON file. GeoJSONs must follow the `GeoJSON specification <https://datatracker.ietf.org/doc/html/rfc7946>`_ and include a "crs.properties.name" value for projection information. Example of a valid GeoJSON::
 
     {
         "type": "FeatureCollection",
@@ -110,6 +106,41 @@ Vector Tile
     - **urls:** (required) A comma delimited list of URL templates. Must include {x}, {y} or {-y}, and {z} placeholders. A {?-?} template pattern, for example subdomain{a-f}.domain.com, may be used instead of defining each one separately in the urls option.
     - **attributions:** (optional) Attributions.
     - **projection:** (optional) Projection. Default is the view projection (EPSG:3857).
+
+------------------------------------------------------------------------------------------------------------------------
+
++++
+KML
++++
+
+**Openlayers Class:** `KML <https://openlayers.org/en/latest/apidoc/module-ol_format_KML-KML.html>`_
+
+**Layer Properties:**
+    - **urls:** (required) KML file URL. Must be publicly accessible.
+    - **attributions:** (optional) Attributions.
+    - **projection:** (optional) Projection. Default is the view projection (EPSG:3857).
+
+------------------------------------------------------------------------------------------------------------------------
+
+++++++++++++++
+PMTiles Vector
+++++++++++++++
+
+**Layer Properties:**
+    - **urls:** (required) PMTiles Vector Tile URL. Must be publicly accessible and include {x}, {y} or {-y}, and {z} placeholders.
+    - **attributions:** (optional) Attributions.
+    - **tileSize:** (optional) Tile size. Default is 256.
+
+------------------------------------------------------------------------------------------------------------------------
+
+++++++++++++++
+PMTiles Raster
+++++++++++++++
+
+**Layer Properties:**
+    - **urls:** (required) PMTiles Raster Tile URL. Must be publicly accessible and include {x}, {y} or {-y}, and {z} placeholders.
+    - **attributions:** (optional) Attributions.
+    - **tileSize:** (optional) Tile size. Default is 256.
 
 
 

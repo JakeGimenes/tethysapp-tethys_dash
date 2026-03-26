@@ -1,6 +1,6 @@
 # TethysDash
 
-This app was created using an experimental Tethys + React app scaffold. It uses React for the frontend of the app and Tethys as the backend. For more detailed information, check the [official TethysDash documentation](https://tethysdashdocs.readthedocs.io/en/latest/index.html)
+This app was created using an experimental Tethys + React app scaffold. It uses React for the frontend of the app and Tethys as the backend. For more detailed information, check the [official TethysDash documentation](https://tethysdash.readthedocs.io/en/latest/)
 
 ## Quick Installation
 
@@ -59,19 +59,19 @@ pip install -e .
     tethysdash setup
 ```
 
-5. Start Tethys Portal
-
-```
-    tethysdash start
-```
-
-6. Install Plugin Examples (not necessary but recommended)
+5. Install Plugin Examples (not necessary but recommended)
 
 ```
 cd ..
 git clone https://github.com/FIRO-Tethys/tethysdash_examples
 cd tethysdash_examples
 pip install -e .
+```
+
+6. Start Tethys Portal
+
+```
+    tethysdash start
 ```
 
 ## Frontend Development
