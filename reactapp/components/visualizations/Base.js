@@ -74,9 +74,11 @@ export const Visualization = memo(
   }) => {
     if (progressMessage && vizType === "loader") {
       const msgObj = JSON.parse(progressMessage);
-      const { message, step, totalSteps } = msgObj;
+      const { message, percentageComplete } = msgObj;
       const percent =
-        step && totalSteps ? Math.round((step / totalSteps) * 100) : null;
+        percentageComplete !== undefined
+          ? Math.round(percentageComplete)
+          : null;
 
       return (
         <CenteredContainer>
@@ -84,7 +86,7 @@ export const Visualization = memo(
           {percent !== null && (
             <ProgressBar
               now={percent}
-              label={`${step} / ${totalSteps} (${percent}%)`}
+              label={`${percentageComplete}%`}
               style={{ margin: "0 auto", width: "60%" }}
             />
           )}
@@ -435,7 +437,7 @@ Visualization.propTypes = {
   vizType: PropTypes.string, // determines the type of visualization to be displayed
   vizData: PropTypes.object, // contains information for the various visualization args
   dataviewerViz: PropTypes.bool, // determines if the visualization is in the dataviewer
-  progressMessage: PropTypes.string, // stringified object that contains message, step, and totalSteps
+  progressMessage: PropTypes.string, // stringified object that contains message and percentageComplete (if provided)
   vizMetadata: PropTypes.object, // contains metadata for the visualization
 };
 

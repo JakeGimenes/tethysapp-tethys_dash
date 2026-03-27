@@ -58,6 +58,7 @@ Properties:
     - **attribution**: Description of the data source for attribution purposes. Optional.
 Methods:
     - **run**: The main function to implement. The dashboard app calls this method and uses its results as the visualization data.
+    - **send_update**: A method to send updates from the plugin to the dashboard app. Useful for long-running processes to provide progress updates. See the `Sending Progress Updates`_ section for more information.
 
 ==========================
 Plugin Visualization Types
@@ -821,19 +822,35 @@ The entry point tells intake that your package is a driver. When installed, the 
 Sending Progress Updates
 ------------------------
 
-TethysDash plugins also have the capability to send progress updates from the read method. This is useful for long running processes to give users feedback on the status of their request. In order to use this feature, the TethysDash application must be configured to use websockets. For more information about setting up websockers, see :doc:`installation`.
 
-To send progress updates, do the following:
+TethysDash plugins can send progress updates to the dashboard app during long-running processes, providing users with real-time feedback. This is easily accomplished using the `send_update` method provided by the `TethysDashPlugin` base class. Your TethysDash application must be configured to use websockets. For more information about setting up websockets, see :doc:`installation`.
 
-1. Import the send_websocket_message function from tethysdash::
-   
-    from tethyapp.tethysdash import send_websocket_message
+In your plugin class, simply call `self.send_update` from within a class method. The `send_update` method automatically handles the WebSocket message for you. For example::
 
-2. Make sure the read method has the request_id kwarg to receive the request_id from the dashboard app::
+    from tethysapp.tethysdash.plugin_helpers import TethysDashPlugin
 
-    def read(self, request_id=None):
+    class MyLongRunningPlugin(TethysDashPlugin):
+        name = "long_plugin"
+        group = "Example"
+        label = "Long Running Example"
+        type = "plotly"
+        args = {}
+        tags = ["example"]
+        description = "Shows progress updates."
 
-3. Implement into your read method by sending messages with the following format::
+        def run(self):
+            # Step 1
+            self.send_update("Starting step 1...")
+            # ... do some work ...
+            self.send_update("Step 1 complete", percentage_complete=33)
+            # Step 2
+            self.send_update("Starting step 2...")
+            # ... do more work ...
+            self.send_update("Step 2 complete", percentage_complete=66)
+            # Final step
+            self.send_update("All steps complete!", percentage_complete=100)
+            return {"result": "done"}
 
-    send_websocket_message(request_id, 'some custom progress message')
-    send_websocket_message(request_id, 'some custom progress message', 1, 2) # option values of step and total_steps for progress percentage (i.e. 1 out of 2 steps completed is 50%)
+The `percentage_complete` argument is optional and can be used to indicate progress as a percentage (0–100). You can call `send_update` as many times as needed during your process.
+
+This approach is recommended for all new plugins. If you are maintaining legacy plugins that do not subclass `TethysDashPlugin`, you may still use `send_websocket_message` directly, but new development should use `send_update` for clarity and maintainability.

@@ -181,8 +181,7 @@ it("Initializes a Base Item with an empty div and updates it with an image and p
   wsInstance.send({
     requestId: "12345678",
     message: "Progress Bar Testing With Percent...",
-    step: 1,
-    totalSteps: 2,
+    percentageComplete: 50,
   });
 
   const progressMessage2 = await screen.findByText(
@@ -190,7 +189,7 @@ it("Initializes a Base Item with an empty div and updates it with an image and p
   );
   expect(progressMessage2).toBeInTheDocument();
   expect(screen.getByRole("progressbar")).toBeInTheDocument();
-  expect(screen.getByText("1 / 2 (50%)")).toBeInTheDocument();
+  expect(screen.getByText("50%")).toBeInTheDocument();
 
   const image = await screen.findByAltText(mockedApiImageBase.source);
   expect(image.src).toBe(
