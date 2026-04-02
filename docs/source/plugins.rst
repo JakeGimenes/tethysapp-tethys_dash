@@ -511,6 +511,11 @@ from the plugin
 
 **DataSource visualization_type value:** *map_layer*
 
+.. note::
+    Use the ``LayerConfigurationBuilder`` helper class (shown in the example below) to construct the return dictionary. It validates required fields and ensures the correct structure is produced. Import it alongside ``TethysDashPlugin``::
+
+        from tethysapp.tethysdash.plugin_helpers import TethysDashPlugin, LayerConfigurationBuilder
+
 **read return: (dictionary)**
     - **configuration** (required): An object that contains metadata for the layer and source.
         - **type** (required): A string that determines the type of openlayers layer type ("ImageLayer", "VectorLayer", "TileLayer", "VectorTileLayer").
@@ -533,9 +538,45 @@ from the plugin
     - **queryable** (optional): A boolean indicating if the layer is queryable
     - **legend** (optional): See maps :ref:`legend_tab` for more information.
 
+**LayerConfigurationBuilder**
+
+    TethysDash provides a ``LayerConfigurationBuilder`` helper class to construct map layer configurations with the correct structure. It is the recommended approach for building map layer plugins. The builder validates required source properties at build time and eliminates the need to manually construct the nested configuration dictionary.
+
+    **Supported source types:**
+
+    - ``ESRI Image and Map Service``
+    - ``ESRI Feature Service``
+    - ``WMS``
+    - ``KML``
+    - ``Image Tile``
+    - ``GeoJSON``
+    - ``Vector Tile``
+    - ``PMTiles Vector``
+    - ``PMTiles Raster``
+
+    **Builder methods:**
+
+    - ``set_source_properties(**kwargs)`` — Set properties on the layer's data source (e.g., ``url``, ``params``, ``attributions``). Required and optional properties vary by source type; call ``get_available_source_properties()`` to inspect them.
+    - ``set_layer_visibility(bool)`` — Set the default visibility of the layer.
+    - ``set_opacity(float)`` — Set layer opacity between 0.0 and 1.0.
+    - ``set_queryable(bool)`` — Set whether the layer is queryable on click.
+    - ``set_min_zoom(int)`` / ``set_max_zoom(int)`` — Set zoom visibility bounds.
+    - ``set_min_resolution(int)`` / ``set_max_resolution(int)`` — Set resolution visibility bounds.
+    - ``set_min_zoom_query(int)`` — Minimum zoom level required to query the layer.
+    - ``set_geojson(dict)`` — Attach a GeoJSON object (for GeoJSON source type only).
+    - ``set_legend(dict | "default" | None)`` — Set the legend configuration.
+    - ``set_style(dict | str)`` — Set the layer style.
+    - ``add_attribute_alias(key, alias, layer_name)`` — Add a display alias for a layer attribute.
+    - ``add_attribute_variable(key, variable, layer_name)`` — Map a layer attribute to a dashboard variable input.
+    - ``omit_popup_attribute(key, layer_name)`` — Hide an attribute from the feature popup.
+    - ``get_available_source_properties()`` — Return the required and optional properties for the configured source type.
+    - ``get_layer_names()`` — Fetch layer names from the service (supported for ESRI, WMS, and GeoJSON sources).
+    - ``get_layer_attributes()`` — Fetch attribute field names from the service.
+    - ``build()`` — Validate required fields and return the final configuration dictionary.
+
 **Example**: ::
 
-    from tethysapp.tethysdash.plugin_helpers import TethysDashPlugin
+    from tethysapp.tethysdash.plugin_helpers import TethysDashPlugin, LayerConfigurationBuilder
 
 
     class MapLayerExample(TethysDashPlugin):
@@ -548,75 +589,40 @@ from the plugin
 
         def run(self):
             """
-            Return map layer configuration
+            Return map layer configuration using LayerConfigurationBuilder
             """
-            layer_source = {
-                "type": "ESRI Image and Map Service",
-                "props": {
-                    "url": "https://maps.water.noaa.gov/server/rest/services/rfc/rfc_max_forecast/MapServer",
-                    "attributions": "National Water Center",
-                    "params": {"LAYERS": "show:0"},
-                },
-            }
+            layer_name = "RFC Max Forecast"
+            sublayer_name = "Max Status - Forecast Trend"
 
-            layer_configuration = {
-                "type": "ImageLayer",
-                "props": {
-                    "name": "RFC Max Forecast",
-                    "source": layer_source,
-                    "opacity": 0.5,
-                },
-                "layerVisibility": True,
-                "style": {
-                    "type": "Style",
-                    "props": {
-                        "stroke": {
-                            "type": "Stroke",
-                            "props": {
-                                "color": "#501020",
-                                "width": 1,
-                            },
-                        },
-                    },
-                },
-            }
+            builder = LayerConfigurationBuilder(layer_name, "ESRI Image and Map Service")
 
-            aliases = {
-                "Max Status - Forecast Trend": {
-                    "record_threshold": "Record Threshold",
-                    "major_threshold": "Major Threshold",
-                    "moderate_threshold": "Moderate Threshold",
-                    "minor_threshold": "Minor Threshold",
-                    "action_threshold": "Action Threshold",
-                }
-            }
+            builder.set_source_properties(
+                url="https://maps.water.noaa.gov/server/rest/services/rfc/rfc_max_forecast/MapServer",
+                attributions="National Water Center",
+                params={"LAYERS": "show:0"},
+            )
 
-            variables = {
-                "Max Status - Forecast Trend": {
-                    "nws_lid": "LID",
-                }
-            }
+            builder.set_layer_visibility(True)
+            builder.set_opacity(0.5)
+            builder.set_queryable(True)
 
-            omitted_attributes = {
-                "Max Status - Forecast Trend": [
-                    "geom",
-                    "oid",
-                ]
-            }
+            builder.add_attribute_alias("record_threshold", "Record Threshold", sublayer_name)
+            builder.add_attribute_alias("major_threshold", "Major Threshold", sublayer_name)
+            builder.add_attribute_alias("moderate_threshold", "Moderate Threshold", sublayer_name)
+            builder.add_attribute_alias("minor_threshold", "Minor Threshold", sublayer_name)
+            builder.add_attribute_alias("action_threshold", "Action Threshold", sublayer_name)
 
-            legend = {
+            builder.add_attribute_variable("nws_lid", "LID", sublayer_name)
+
+            builder.omit_popup_attribute("geom", sublayer_name)
+            builder.omit_popup_attribute("oid", sublayer_name)
+
+            builder.set_legend({
                 "title": "Some Title",
                 "items": [{"label": "Some label", "color": "green", "symbol": "square"}],
-            }
+            })
 
-            return {
-                "configuration": layer_configuration,
-                "attributeVariables": variables,
-                "omittedPopupAttributes": omitted_attributes,
-                "attributeAliases": aliases,
-                "queryable": True,
-                "legend": legend,
-            }
+            return builder.build()
 
 
 |

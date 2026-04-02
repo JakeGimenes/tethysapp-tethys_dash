@@ -135,6 +135,9 @@ class TethysDashPlugin(base.DataSource):
         DO NOT OVERRIDE THIS METHOD.
         This method is managed by the TethysDashPlugin base class.
 
+        Args:
+            request_id (str): The unique identifier for the plugin execution request, used for WebSocket messaging.
+
         Returns:
             The output of the plugin, which will be passed to the visualization
             component for rendering.
@@ -249,6 +252,15 @@ available_source_properties = {
             "projection": "EPSG:<Code>",
         },
     },
+    "KML": {
+        "required": {
+            "url": "KML URL",
+        },
+        "optional": {
+            "attributions": "Attributions",
+            "projection": "EPSG:<Code>",
+        },
+    },
     "Image Tile": {
         "required": {
             "url": "Image Tile URL",
@@ -284,6 +296,24 @@ available_source_properties = {
             },
         },
     },
+    "PMTiles Vector": {
+        "required": {
+            "url": "PMTiles Vector URL",
+        },
+        "optional": {
+            "attributions": "Attributions",
+            "tileSize": "Tile Size (e.g., 256, 512)",
+        },
+    },
+    "PMTiles Raster": {
+        "required": {
+            "url": "PMTiles Raster URL",
+        },
+        "optional": {
+            "attributions": "Attributions",
+            "tileSize": "Tile Size (e.g., 256, 512)",
+        },
+    },
 }
 
 
@@ -308,9 +338,12 @@ class LayerConfigurationBuilder:
                 - 'ESRI Image and Map Service'
                 - 'ESRI Feature Service'
                 - 'WMS'
+                - 'KML'
                 - 'Image Tile'
                 - 'GeoJSON'
                 - 'Vector Tile'
+                - 'PMTiles Vector'
+                - 'PMTiles Raster'
 
         Raises:
             ValueError: If layer_source is not one of the supported options.
@@ -324,6 +357,9 @@ class LayerConfigurationBuilder:
             "ESRI Image and Map Service": "ImageLayer",
             "ESRI Feature Service": "VectorLayer",
             "GeoJSON": "VectorLayer",
+            "KML": "VectorLayer",
+            "PMTiles Vector": "VectorTileLayer",
+            "PMTiles Raster": "TileLayer",
         }
 
         if layer_source not in valid_sources:
