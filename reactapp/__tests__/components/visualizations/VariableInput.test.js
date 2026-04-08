@@ -503,6 +503,91 @@ it("Creates a Slider Input for a Variable Input, missing metadata", async () => 
   ).toBeInTheDocument();
 });
 
+it("renders slider-missing-metadata when Array mode has no values array", async () => {
+  render(
+    createLoadedComponent({
+      children: (
+        <>
+          <GridItemContext.Provider
+            value={{ gridItemArgsString: JSON.stringify({}) }}
+          >
+            <VariableInput
+              variable_name="Array Slider"
+              variable_options_source="slider"
+              metadata={{ dataType: "Array" }}
+              onChange={jest.fn()}
+            />
+          </GridItemContext.Provider>
+        </>
+      ),
+    }),
+  );
+  expect(
+    await screen.findByTestId("slider-missing-metadata"),
+  ).toBeInTheDocument();
+});
+
+it("renders slider-missing-metadata when Array mode values is not an array", async () => {
+  render(
+    createLoadedComponent({
+      children: (
+        <>
+          <GridItemContext.Provider
+            value={{ gridItemArgsString: JSON.stringify({}) }}
+          >
+            <VariableInput
+              variable_name="Array Slider"
+              variable_options_source="slider"
+              metadata={{ dataType: "Array", values: "not-an-array" }}
+              onChange={jest.fn()}
+            />
+          </GridItemContext.Provider>
+        </>
+      ),
+    }),
+  );
+  expect(
+    await screen.findByTestId("slider-missing-metadata"),
+  ).toBeInTheDocument();
+});
+
+it("renders Array mode slider when metadata has valid values array", async () => {
+  const handleChange = jest.fn();
+  render(
+    createLoadedComponent({
+      children: (
+        <>
+          <GridItemContext.Provider
+            value={{ gridItemArgsString: JSON.stringify({}) }}
+          >
+            <VariableInput
+              variable_name="Array Slider"
+              variable_options_source="slider"
+              metadata={{
+                dataType: "Array",
+                values: ["url1", "url2", "url3"],
+                labels: ["Frame 1", "Frame 2", "Frame 3"],
+                speedOptions: [500, 250],
+              }}
+              onChange={handleChange}
+            />
+          </GridItemContext.Provider>
+        </>
+      ),
+    }),
+  );
+
+  // Should render a working slider, not the missing-metadata div
+  expect(
+    screen.queryByTestId("slider-missing-metadata"),
+  ).not.toBeInTheDocument();
+  // Slider should be present with min/max labels from the labels array
+  expect(await screen.findByLabelText("Min Value")).toHaveTextContent(
+    "Frame 1",
+  );
+  expect(screen.getByLabelText("Max Value")).toHaveTextContent("Frame 3");
+});
+
 it("renders slider-missing-metadata when no initial value or range", async () => {
   render(
     createLoadedComponent({
@@ -707,11 +792,12 @@ it("Creates a Number Input for a Variable Input", async () => {
 
   expect(await screen.findByText("Test Variable")).toBeInTheDocument();
 
-  const variableInput = await screen.findByRole("spinbutton");
+  const variableInput = await screen.findByRole("textbox");
   expect(variableInput).toBeInTheDocument();
+  await user.clear(variableInput);
   await user.type(variableInput, "9");
 
-  expect(variableInput).toHaveValue(9);
+  expect(variableInput).toHaveValue("9");
   expect(handleChange).toHaveBeenCalledWith(9);
 
   // Only update the Text Input after clicking the input refresh button
@@ -1131,11 +1217,12 @@ describe("When inDataViewerMode", () => {
 
     expect(await screen.findByText("Test Variable")).toBeInTheDocument();
 
-    const variableInput = await screen.findByRole("spinbutton");
+    const variableInput = await screen.findByRole("textbox");
     expect(variableInput).toBeInTheDocument();
+    await user.clear(variableInput);
     await user.type(variableInput, "9");
 
-    expect(variableInput).toHaveValue(9);
+    expect(variableInput).toHaveValue("9");
     expect(handleChange).toHaveBeenCalledWith(9);
 
     // Only update the Text Input after clicking the input refresh button

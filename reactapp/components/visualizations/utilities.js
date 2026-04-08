@@ -330,10 +330,7 @@ export function updateObjectWithVariableInputs({
       );
     }
 
-    if (
-      sourceArgs[gridItemsArg] === "date" ||
-      sourceArgs[gridItemsArg] === "date-hour"
-    ) {
+    if (sourceArgs[gridItemsArg] === "date") {
       const parsedDate = parseDate(
         updatedValuesWithVariableInputs,
         variableInputDateFormats?.[gridItemsArg],
@@ -360,11 +357,6 @@ export const nonDropDownVariableInputTypes = [
     label: "date",
     value: "date",
     sub_args: { metadata: "custom-DateMetadata" },
-  },
-  {
-    label: "date-hour (deprecated, use date instead)",
-    value: "date-hour",
-    sub_args: { metadata: "date-format" },
   },
   {
     label: "dropdown",
