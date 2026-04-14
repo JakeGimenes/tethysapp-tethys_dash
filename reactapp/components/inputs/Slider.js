@@ -123,6 +123,100 @@ const formatValue = (val, outputFormat, isDateType) => {
     : formatNumber(val, outputFormat);
 };
 
+/**
+ * Aligns a date to the nearest step boundary in the given direction.
+ * The alignment grid is defined by: offset + n * step (in the given unit).
+ * Sub-units are zeroed before alignment (e.g., minutes/seconds for Hours).
+ */
+export const alignDateToStep = (
+  date,
+  step,
+  unit,
+  offset = 0,
+  direction = "ceil",
+) => {
+  const d = new Date(date);
+  const roundFn = direction === "floor" ? Math.floor : Math.ceil;
+
+  // Zero out sub-units and align to the step grid
+  switch (unit) {
+    case "Seconds": {
+      d.setMilliseconds(0);
+      const s = d.getSeconds();
+      d.setSeconds(offset + roundFn((s - offset) / step) * step);
+      break;
+    }
+    case "Minutes": {
+      d.setSeconds(0, 0);
+      const m = d.getMinutes();
+      d.setMinutes(offset + roundFn((m - offset) / step) * step);
+      break;
+    }
+    case "Hours": {
+      d.setMinutes(0, 0, 0);
+      const h = d.getHours();
+      d.setHours(offset + roundFn((h - offset) / step) * step);
+      break;
+    }
+    case "Days": {
+      const hadTime =
+        d.getHours() > 0 || d.getMinutes() > 0 || d.getSeconds() > 0;
+      d.setHours(0, 0, 0, 0);
+      if (direction !== "floor" && hadTime) {
+        d.setDate(d.getDate() + 1);
+      }
+      break;
+    }
+    case "Weeks": {
+      const hadTime =
+        d.getHours() > 0 || d.getMinutes() > 0 || d.getSeconds() > 0;
+      d.setHours(0, 0, 0, 0);
+      const day = d.getDay(); // 0=Sun
+      if (direction === "floor") {
+        if (day !== 0) {
+          d.setDate(d.getDate() - day);
+        }
+      } else {
+        if (day !== 0 || hadTime) {
+          d.setDate(d.getDate() + (7 - day));
+        }
+      }
+      break;
+    }
+    case "Months": {
+      const hadSubMonth =
+        d.getDate() > 1 ||
+        d.getHours() > 0 ||
+        d.getMinutes() > 0 ||
+        d.getSeconds() > 0;
+      d.setHours(0, 0, 0, 0);
+      d.setDate(1);
+      if (direction !== "floor" && hadSubMonth) {
+        d.setMonth(d.getMonth() + 1);
+      }
+      break;
+    }
+    case "Years": {
+      const hadSubYear =
+        d.getMonth() > 0 ||
+        d.getDate() > 1 ||
+        d.getHours() > 0 ||
+        d.getMinutes() > 0 ||
+        d.getSeconds() > 0;
+      d.setHours(0, 0, 0, 0);
+      d.setMonth(0, 1);
+      if (direction !== "floor" && hadSubYear) {
+        d.setFullYear(d.getFullYear() + 1);
+        d.setMonth(0, 1);
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  return d;
+};
+
 export const calculateSliderValues = ({
   min,
   max,
@@ -131,6 +225,8 @@ export const calculateSliderValues = ({
   dataType,
   rawMinDateFormat,
   rawMaxDateFormat,
+  alignSteps = false,
+  alignOffset = 0,
 }) => {
   // Helper to ensure max is always included
   const ensureMaxIncluded = (arr, max, eqFn = (a, b) => a === b) => {
@@ -195,8 +291,41 @@ export const calculateSliderValues = ({
     };
 
     if (isRelative(min) && isRelative(max)) {
-      // For relative, output as 'now-xU' where U is unit
       const unitAbbr = Object.keys(unitMap).find((k) => unitMap[k] === unit);
+
+      if (alignSteps) {
+        // Floor "now" to the step grid so computation is stable within
+        // a step interval (e.g., 9:01 and 9:29 both anchor to 9:00).
+        // Output absolute ISO strings so formatValue produces stable results.
+        const now = new Date();
+        const anchoredNow = alignDateToStep(
+          now,
+          step,
+          unit,
+          alignOffset,
+          "floor",
+        );
+        const minOffset = parseRel(min, unit);
+        const maxOffset = parseRel(max, unit);
+        let minDate = timeDeltas[unit](anchoredNow, minOffset);
+        let maxDate = timeDeltas[unit](anchoredNow, maxOffset);
+        minDate = alignDateToStep(minDate, step, unit, alignOffset);
+        maxDate = alignDateToStep(maxDate, step, unit, alignOffset);
+        const arr = [];
+        const diff = diffDeltas[unit](maxDate, minDate);
+        let steps = Math.floor(diff / step);
+        for (let i = 0; i <= steps; i++) {
+          const d = timeDeltas[unit](minDate, i * step);
+          arr.push(toLocalISOString(d).replace(/\.\d+$/, ""));
+        }
+        return ensureMaxIncluded(
+          arr,
+          toLocalISOString(maxDate).replace(/\.\d+$/, ""),
+          (a, b) => a.replace(/\.\d+$/, "") === b.replace(/\.\d+$/, ""),
+        ).map((d) => d.replace(/\.\d+$/, ""));
+      }
+
+      // For relative, output as 'now-xU' where U is unit
       const minVal = parseRel(min, unit);
       const maxVal = parseRel(max, unit);
       const arr = [];
@@ -250,6 +379,10 @@ export const calculateSliderValues = ({
       maxDate =
         parseDateMath({ value: max, dateFormat: rawMaxDateFormat }) ||
         new Date();
+    }
+    if (alignSteps) {
+      minDate = alignDateToStep(minDate, step, unit, alignOffset);
+      maxDate = alignDateToStep(maxDate, step, unit, alignOffset);
     }
     const arr = [];
     const diff = diffDeltas[unit](maxDate, minDate);
@@ -328,11 +461,15 @@ const Slider = ({
   ],
   values: valuesProp,
   labels: labelsProp,
+  alignOffset = 0,
+  alignSteps = false,
 }) => {
   const { gridItemArgsString } = useContext(GridItemContext);
-  const { variableInputDateFormats, variableInputValues } = useContext(
-    VariableInputsContext,
-  );
+  const {
+    variableInputDateFormats,
+    variableInputValues,
+    setVariableInputSliderMeta,
+  } = useContext(VariableInputsContext);
   const [rawValue, setRawValue] = useState(null);
   const rawMetadata =
     JSON.parse(gridItemArgsString || "{}")?.[
@@ -356,6 +493,30 @@ const Slider = ({
   const isArrayType = dataType === "Array";
   const rangeMode = isArrayType ? false : rangeModeRaw;
   const unit = dateTimeDelta;
+
+  // For aligned relative date sliders, recalculate values when a step boundary
+  // is crossed so the window of absolute dates shifts forward.
+  const isRelativeRange =
+    isDateType &&
+    typeof min === "string" &&
+    min.startsWith("now") &&
+    typeof max === "string" &&
+    max.startsWith("now");
+  const [stepEpoch, setStepEpoch] = useState(0);
+  useEffect(() => {
+    if (!alignSteps || !isRelativeRange) return;
+    const flooredNow = alignDateToStep(
+      new Date(),
+      step,
+      unit,
+      alignOffset,
+      "floor",
+    );
+    const nextBoundary = timeDeltas[unit](flooredNow, step);
+    const msUntilNext = nextBoundary.getTime() - Date.now() + 100;
+    const tid = setTimeout(() => setStepEpoch((e) => e + 1), msUntilNext);
+    return () => clearTimeout(tid);
+  }, [stepEpoch, step, unit, alignSteps, alignOffset, isRelativeRange]);
 
   // For Array mode, keep a stable reference to avoid spurious resets on refresh
   const prevArrayRef = useRef(valuesProp);
@@ -382,6 +543,8 @@ const Slider = ({
       dataType,
       rawMinDateFormat,
       rawMaxDateFormat,
+      alignOffset,
+      alignSteps,
     });
   }, [
     isArrayType,
@@ -393,6 +556,39 @@ const Slider = ({
     dataType,
     rawMinDateFormat,
     rawMaxDateFormat,
+    alignOffset,
+    alignSteps,
+    stepEpoch, // intentional: triggers recalculation when step boundary is crossed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ]);
+
+  // Publish pre-formatted slider values to context for ImageSequence preloading
+  const prevFormattedRef = useRef(null);
+  useEffect(() => {
+    if (!setVariableInputSliderMeta || !variable_name || values.length === 0)
+      return;
+    const formatted = isArrayType
+      ? values
+      : values.map((v) => formatValue(v, outputFormat, isDateType));
+    if (
+      prevFormattedRef.current &&
+      prevFormattedRef.current.length === formatted.length &&
+      prevFormattedRef.current.every((v, i) => v === formatted[i])
+    ) {
+      return;
+    }
+    prevFormattedRef.current = formatted;
+    setVariableInputSliderMeta((prev) => ({
+      ...prev,
+      [variable_name]: { values: formatted },
+    }));
+  }, [
+    variable_name,
+    values,
+    outputFormat,
+    isDateType,
+    isArrayType,
+    setVariableInputSliderMeta,
   ]);
 
   // Track index/indices
@@ -400,12 +596,17 @@ const Slider = ({
     getInitialIndices(values, initialValue, initialRange, rangeMode),
   );
 
-  // Debounced version of currentIdx for onChange calls
-  const debouncedCurrentIdx = useDebounce(currentIdx, debounceDelay);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(
     speeds.length > 0 ? speeds[0].value : 1000,
   );
+
+  // Debounced version of currentIdx for onChange calls
+  // During playback, reduce debounce to match speed so fast speeds aren't bottlenecked
+  const effectiveDebounce = playing
+    ? Math.min(debounceDelay, speed)
+    : debounceDelay;
+  const debouncedCurrentIdx = useDebounce(currentIdx, effectiveDebounce);
   const intervalRef = useRef(null);
   const prev = useRef({
     rangeMode,
@@ -527,7 +728,14 @@ const Slider = ({
       onChange(formatted);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedCurrentIdx, outputFormat, rangeMode, isDateType, isArrayType, values]);
+  }, [
+    debouncedCurrentIdx,
+    outputFormat,
+    rangeMode,
+    isDateType,
+    isArrayType,
+    values,
+  ]);
 
   useEffect(() => {
     if (playing) {
@@ -640,7 +848,8 @@ const Slider = ({
   const labels = isArrayType && Array.isArray(labelsProp) ? labelsProp : null;
   let displayValue;
   if (isArrayType) {
-    const currentLabel = labels?.[currentIdx] ?? `${currentIdx + 1} / ${values.length}`;
+    const currentLabel =
+      labels?.[currentIdx] ?? `${currentIdx + 1} / ${values.length}`;
     displayValue = currentLabel;
   } else if (rangeMode) {
     displayValue = `${formatValue(values[currentIdx[0]], outputFormat, isDateType)} - ${formatValue(values[currentIdx[1]], outputFormat, isDateType)}`;
@@ -655,16 +864,16 @@ const Slider = ({
     for (let i = 0; i < values.length; i++) {
       let diff;
       if (isDateType) {
-        diff = Math.abs(
-          parseDateMath({
-            value: values[i],
-            dateFormat: outputFormat,
-          }).getTime() -
-            parseDateMath({
-              value: rawValue,
-              dateFormat: outputFormat,
-            }).getTime(),
-        );
+        const valDate = parseDateMath({
+          value: values[i],
+          dateFormat: outputFormat,
+        });
+        const rawDate = parseDateMath({
+          value: rawValue,
+          dateFormat: outputFormat,
+        });
+        if (!valDate || !rawDate) continue;
+        diff = Math.abs(valDate.getTime() - rawDate.getTime());
       } else {
         diff = Math.abs(Number(values[i]) - Number(rawValue));
       }
@@ -682,7 +891,9 @@ const Slider = ({
     if (idx !== -1) {
       sliderValue = idx;
     }
-    displayValue = (labels?.[sliderValue] ?? `${sliderValue + 1} / ${values.length}`) + " (custom)";
+    displayValue =
+      (labels?.[sliderValue] ?? `${sliderValue + 1} / ${values.length}`) +
+      " (custom)";
   }
   const sliderMin = 0;
   const sliderMax = values.length - 1;

@@ -8,7 +8,10 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { spyElementPrototypes } from "rc-util/lib/test/domHook";
-import Slider, { calculateSliderValues } from "components/inputs/Slider";
+import Slider, {
+  calculateSliderValues,
+  alignDateToStep,
+} from "components/inputs/Slider";
 import { format, addDays, addHours } from "date-fns";
 import {
   GridItemContext,
@@ -2055,6 +2058,234 @@ describe("Slider Component", () => {
     );
     expect(await screen.findByText("2025-01-02 (custom)")).toBeInTheDocument();
   });
+
+  it("publishes formatted slider values to context and skips update when unchanged", async () => {
+    const setVariableInputSliderMeta = jest.fn((updater) => updater({}));
+    const handleChange = jest.fn();
+
+    const contextValue = {
+      variableInputDateFormats: {},
+      variableInputValues: {},
+      setVariableInputSliderMeta,
+    };
+
+    const { rerender } = render(
+      <VariableInputsContext.Provider value={contextValue}>
+        <GridItemContext.Provider value={{ gridItemArgsString: "{}" }}>
+          <Slider
+            variable_name="Test Slider"
+            label="Test Slider"
+            step={1}
+            min={0}
+            max={3}
+            initialValue={0}
+            outputFormat="{{n}}"
+            dataType="Number"
+            onChange={handleChange}
+            debounceDelay={0}
+          />
+        </GridItemContext.Provider>
+      </VariableInputsContext.Provider>,
+    );
+
+    await advanceTimers(100);
+    // Should have published formatted values on initial render
+    expect(setVariableInputSliderMeta).toHaveBeenCalled();
+    const firstCall = setVariableInputSliderMeta.mock.calls[0][0];
+    const result = firstCall({});
+    expect(result["Test Slider"].values).toEqual(["0", "1", "2", "3"]);
+
+    setVariableInputSliderMeta.mockClear();
+
+    // Rerender with a new setVariableInputSliderMeta reference so the
+    // useEffect re-fires, but same slider values — should hit the
+    // prevFormattedRef equality check (lines 538-542) and skip the update.
+    const setVariableInputSliderMeta2 = jest.fn((updater) => updater({}));
+    rerender(
+      <VariableInputsContext.Provider
+        value={{
+          variableInputDateFormats: {},
+          variableInputValues: {},
+          setVariableInputSliderMeta: setVariableInputSliderMeta2,
+        }}
+      >
+        <GridItemContext.Provider value={{ gridItemArgsString: "{}" }}>
+          <Slider
+            variable_name="Test Slider"
+            label="Test Slider"
+            step={1}
+            min={0}
+            max={3}
+            initialValue={0}
+            outputFormat="{{n}}"
+            dataType="Number"
+            onChange={handleChange}
+            debounceDelay={0}
+          />
+        </GridItemContext.Provider>
+      </VariableInputsContext.Provider>,
+    );
+
+    await advanceTimers(100);
+    // The effect re-ran but values are identical, so the early return fires
+    expect(setVariableInputSliderMeta2).not.toHaveBeenCalled();
+  });
+
+  it("recalculates aligned relative values when step boundary is crossed", async () => {
+    jest.setSystemTime(new Date("2025-06-15T09:01:00"));
+    const handleChange = jest.fn();
+
+    render(
+      <VariableInputsContext.Provider
+        value={{
+          variableInputDateFormats: {},
+          variableInputValues: {},
+          setVariableInputSliderMeta: jest.fn((updater) => updater({})),
+        }}
+      >
+        <GridItemContext.Provider value={{ gridItemArgsString: "{}" }}>
+          <Slider
+            variable_name="Forecast"
+            label="Forecast"
+            step={30}
+            min="now-1D"
+            max="now"
+            initialValue="now-1D"
+            outputFormat="yyyyMMddHHmm"
+            dataType="Date"
+            dateTimeDelta="Minutes"
+            onChange={handleChange}
+            debounceDelay={0}
+            alignSteps={true}
+            alignOffset={0}
+          />
+        </GridItemContext.Provider>
+      </VariableInputsContext.Provider>,
+    );
+
+    await advanceTimers(100);
+    // At 9:01, anchoredNow floors to 9:00. First value should be on :00/:30 grid
+    const firstCall = handleChange.mock.calls[0][0];
+    expect(firstCall).toMatch(/00$|30$/);
+
+    handleChange.mockClear();
+
+    // Advance time past the next 30-minute boundary (9:30) + 100ms buffer
+    const msUntilBoundary = new Date("2025-06-15T09:30:00").getTime() -
+      new Date("2025-06-15T09:01:00").getTime() + 200;
+    jest.setSystemTime(new Date("2025-06-15T09:30:01"));
+    await advanceTimers(msUntilBoundary);
+
+    // After the boundary, the stepEpoch timer should have fired,
+    // triggering a values recalculation with the new anchored time
+    await advanceTimers(500);
+    expect(handleChange).toHaveBeenCalled();
+    const newCall =
+      handleChange.mock.calls[handleChange.mock.calls.length - 1][0];
+    expect(newCall).toMatch(/00$|30$/);
+
+  });
+
+  it("publishes raw values for array-type sliders to context", async () => {
+    const setVariableInputSliderMeta = jest.fn((updater) => updater({}));
+    const handleChange = jest.fn();
+
+    render(
+      <VariableInputsContext.Provider
+        value={{
+          variableInputDateFormats: {},
+          variableInputValues: {},
+          setVariableInputSliderMeta,
+        }}
+      >
+        <GridItemContext.Provider value={{ gridItemArgsString: "{}" }}>
+          <Slider
+            variable_name="array_slider"
+            label="Array Slider"
+            dataType="Array"
+            values={["alpha", "beta", "gamma"]}
+            onChange={handleChange}
+            debounceDelay={0}
+          />
+        </GridItemContext.Provider>
+      </VariableInputsContext.Provider>,
+    );
+
+    await advanceTimers(100);
+    expect(setVariableInputSliderMeta).toHaveBeenCalled();
+    const updater = setVariableInputSliderMeta.mock.calls[0][0];
+    const result = updater({});
+    // Array type should publish raw values, not formatted
+    expect(result["array_slider"].values).toEqual(["alpha", "beta", "gamma"]);
+  });
+
+  it("skips unparseable dates when finding closest index for raw value", async () => {
+    const handleChange = jest.fn();
+    const min = "2025-01-01T00:00:00.000";
+    const max = "2025-01-05T00:00:00.000";
+
+    // First render with an empty variableInputValue so the slider mounts normally
+    const { rerender } = render(
+      <VariableInputsContext.Provider
+        value={{
+          variableInputDateFormats: {},
+          variableInputValues: { "Test Var": "" },
+        }}
+      >
+        <GridItemContext.Provider value={{}}>
+          <Slider
+            variable_name={"Test Var"}
+            step={2}
+            min={min}
+            max={max}
+            initialValue={min}
+            outputFormat="yyyy-MM-dd"
+            dataType="Date"
+            dateTimeDelta="Days"
+            onChange={handleChange}
+          />
+        </GridItemContext.Provider>
+      </VariableInputsContext.Provider>,
+    );
+
+    await advanceTimers(100);
+
+    // Rerender with a variable input value of " " (whitespace) which
+    // won't match any formatted slider value → sets rawValue.
+    // parseDateMath returns null for whitespace-only strings after
+    // date-fns parse fails and new Date(" ") is invalid,
+    // hitting the continue on line 875.
+    rerender(
+      <VariableInputsContext.Provider
+        value={{
+          variableInputDateFormats: {},
+          variableInputValues: { "Test Var": " " },
+        }}
+      >
+        <GridItemContext.Provider value={{}}>
+          <Slider
+            variable_name={"Test Var"}
+            step={2}
+            min={min}
+            max={max}
+            initialValue={min}
+            outputFormat="yyyy-MM-dd"
+            dataType="Date"
+            dateTimeDelta="Days"
+            onChange={handleChange}
+          />
+        </GridItemContext.Provider>
+      </VariableInputsContext.Provider>,
+    );
+
+    await advanceTimers(100);
+    // Should render without crashing. The "(custom)" suffix indicates
+    // the rawValue code path was taken, and parseDateMath returned null
+    // for the raw value causing each iteration to hit the continue branch.
+    expect(screen.getByLabelText("Display Value")).toHaveTextContent(
+      "(custom)",
+    );
+  });
 });
 
 test("calculateSliderValues returns correct values", () => {
@@ -2743,5 +2974,399 @@ describe("Array mode", () => {
     await advanceTimers(100);
     // Display should still show 3 — index was not reset
     expect(screen.getByLabelText("Display Value")).toHaveTextContent("3");
+  });
+});
+
+// =============================================================================
+// alignDateToStep tests
+// =============================================================================
+describe("alignDateToStep", () => {
+  it("aligns hours to step boundaries with no offset", () => {
+    const date = new Date("2026-04-02T14:35:22");
+    const result = alignDateToStep(date, 6, "Hours", 0);
+    expect(result.getHours()).toBe(18);
+    expect(result.getMinutes()).toBe(0);
+    expect(result.getSeconds()).toBe(0);
+  });
+
+  it("aligns hours with offset", () => {
+    // 18:00 with step=3, offset=5 → grid is 5,8,11,14,17,20 → ceil(18)=20
+    const date = new Date("2026-04-02T18:00:00");
+    const result = alignDateToStep(date, 3, "Hours", 5);
+    expect(result.getHours()).toBe(20);
+    expect(result.getMinutes()).toBe(0);
+  });
+
+  it("keeps value on grid point unchanged", () => {
+    // 12:00 is on the 6-hour grid with offset=0
+    const date = new Date("2026-04-02T12:00:00");
+    const result = alignDateToStep(date, 6, "Hours", 0);
+    expect(result.getHours()).toBe(12);
+    expect(result.getDate()).toBe(2);
+  });
+
+  it("aligns minutes to step boundaries", () => {
+    const date = new Date("2026-04-02T14:17:45");
+    const result = alignDateToStep(date, 30, "Minutes", 0);
+    expect(result.getMinutes()).toBe(30);
+    expect(result.getSeconds()).toBe(0);
+  });
+
+  it("aligns days to midnight (ceils)", () => {
+    const date = new Date("2026-04-02T14:30:00");
+    const result = alignDateToStep(date, 1, "Days", 0);
+    expect(result.getDate()).toBe(3);
+    expect(result.getHours()).toBe(0);
+    expect(result.getMinutes()).toBe(0);
+  });
+
+  it("keeps midnight unchanged for days", () => {
+    const date = new Date("2026-04-02T00:00:00");
+    const result = alignDateToStep(date, 1, "Days", 0);
+    expect(result.getDate()).toBe(2);
+    expect(result.getHours()).toBe(0);
+  });
+
+  it("handles hour overflow to next day", () => {
+    // 23:00 with step=6, offset=0 → grid is 0,6,12,18,24→next day 00:00
+    const date = new Date("2026-04-02T23:00:00");
+    const result = alignDateToStep(date, 6, "Hours", 0);
+    expect(result.getDate()).toBe(3);
+    expect(result.getHours()).toBe(0);
+  });
+
+  it("aligns seconds to step boundaries", () => {
+    const date = new Date("2026-04-02T14:30:17.500");
+    const result = alignDateToStep(date, 15, "Seconds", 0);
+    expect(result.getSeconds()).toBe(30);
+    expect(result.getMilliseconds()).toBe(0);
+  });
+
+  it("aligns seconds with offset", () => {
+    const date = new Date("2026-04-02T14:30:17");
+    const result = alignDateToStep(date, 10, "Seconds", 5);
+    // grid: 5,15,25,35,45,55 → ceil(17) = 25
+    expect(result.getSeconds()).toBe(25);
+  });
+
+  it("aligns weeks to start of week", () => {
+    // Wednesday April 8 2026 at 10:00
+    const date = new Date("2026-04-08T10:00:00");
+    const result = alignDateToStep(date, 1, "Weeks", 0);
+    // Should ceil to next Sunday (April 12)
+    expect(result.getDay()).toBe(0); // Sunday
+    expect(result.getHours()).toBe(0);
+    expect(result.getDate()).toBe(12);
+  });
+
+  it("keeps Sunday midnight unchanged for weeks", () => {
+    // Sunday April 12 2026 at midnight
+    const date = new Date("2026-04-12T00:00:00");
+    const result = alignDateToStep(date, 1, "Weeks", 0);
+    expect(result.getDay()).toBe(0);
+    expect(result.getDate()).toBe(12);
+    expect(result.getHours()).toBe(0);
+  });
+
+  it("aligns months to 1st of month", () => {
+    const date = new Date("2026-04-15T10:30:00");
+    const result = alignDateToStep(date, 1, "Months", 0);
+    // Should ceil to May 1
+    expect(result.getMonth()).toBe(4); // May (0-indexed)
+    expect(result.getDate()).toBe(1);
+    expect(result.getHours()).toBe(0);
+  });
+
+  it("keeps 1st of month midnight unchanged", () => {
+    const date = new Date("2026-04-01T00:00:00");
+    const result = alignDateToStep(date, 1, "Months", 0);
+    expect(result.getMonth()).toBe(3); // April
+    expect(result.getDate()).toBe(1);
+  });
+
+  it("aligns years to Jan 1", () => {
+    const date = new Date("2026-06-15T10:00:00");
+    const result = alignDateToStep(date, 1, "Years", 0);
+    // Should ceil to Jan 1 2027
+    expect(result.getFullYear()).toBe(2027);
+    expect(result.getMonth()).toBe(0);
+    expect(result.getDate()).toBe(1);
+    expect(result.getHours()).toBe(0);
+  });
+
+  it("keeps Jan 1 midnight unchanged for years", () => {
+    const date = new Date("2026-01-01T00:00:00");
+    const result = alignDateToStep(date, 1, "Years", 0);
+    expect(result.getFullYear()).toBe(2026);
+    expect(result.getMonth()).toBe(0);
+    expect(result.getDate()).toBe(1);
+  });
+
+  it("returns date unchanged for unknown unit", () => {
+    const date = new Date("2026-04-02T14:35:22");
+    const result = alignDateToStep(date, 1, "Unknown", 0);
+    expect(result.getTime()).toBe(date.getTime());
+  });
+
+  it("defaults offset to 0 when omitted", () => {
+    const date = new Date("2026-04-02T14:35:22");
+    const result = alignDateToStep(date, 6, "Hours");
+    expect(result.getHours()).toBe(18);
+    expect(result.getMinutes()).toBe(0);
+  });
+
+  it("floors minutes to step boundary with direction='floor'", () => {
+    const date = new Date("2026-04-02T09:01:00");
+    const result = alignDateToStep(date, 30, "Minutes", 0, "floor");
+    expect(result.getHours()).toBe(9);
+    expect(result.getMinutes()).toBe(0);
+    expect(result.getSeconds()).toBe(0);
+  });
+
+  it("floors hours to step boundary with direction='floor'", () => {
+    const date = new Date("2026-04-02T14:35:22");
+    const result = alignDateToStep(date, 6, "Hours", 0, "floor");
+    expect(result.getHours()).toBe(12);
+    expect(result.getMinutes()).toBe(0);
+    expect(result.getSeconds()).toBe(0);
+  });
+
+  it("floors days with direction='floor' (keeps same day)", () => {
+    const date = new Date("2026-04-02T14:35:22");
+    const result = alignDateToStep(date, 1, "Days", 0, "floor");
+    expect(result.getDate()).toBe(2);
+    expect(result.getHours()).toBe(0);
+  });
+
+  it("floor keeps value on grid point unchanged", () => {
+    const date = new Date("2026-04-02T09:00:00");
+    const result = alignDateToStep(date, 30, "Minutes", 0, "floor");
+    expect(result.getHours()).toBe(9);
+    expect(result.getMinutes()).toBe(0);
+  });
+
+  it("floors weeks to previous Sunday when day is not Sunday", () => {
+    // 2026-04-02 is a Thursday (day=4)
+    const date = new Date("2026-04-02T14:35:22");
+    const result = alignDateToStep(date, 1, "Weeks", 0, "floor");
+    expect(result.getDay()).toBe(0); // Sunday
+    expect(result.getDate()).toBe(29); // March 29 is the previous Sunday
+    expect(result.getHours()).toBe(0);
+    expect(result.getMinutes()).toBe(0);
+  });
+
+  it("floors weeks keeps Sunday unchanged", () => {
+    // 2026-03-29 is a Sunday
+    const date = new Date("2026-03-29T10:00:00");
+    const result = alignDateToStep(date, 1, "Weeks", 0, "floor");
+    expect(result.getDay()).toBe(0);
+    expect(result.getDate()).toBe(29);
+    expect(result.getHours()).toBe(0);
+  });
+});
+
+// =============================================================================
+// calculateSliderValues with alignSteps tests
+// =============================================================================
+describe("calculateSliderValues with alignSteps", () => {
+  it("aligns absolute date steps to 6-hour boundaries", () => {
+    const result = calculateSliderValues({
+      min: "2025-01-01T02:30:00",
+      max: "2025-01-02T02:30:00",
+      step: 6,
+      unit: "Hours",
+      dataType: "Date",
+      alignSteps: true,
+      alignOffset: 0,
+    });
+    // min ceils from 02:30 → 06:00, max ceils from 02:30 next day → 06:00
+    expect(result[0]).toBe("2025-01-01T06:00:00");
+    expect(result[result.length - 1]).toBe("2025-01-02T06:00:00");
+    // All values should be on 6-hour boundaries
+    result.forEach((val) => {
+      const hour = new Date(val).getHours();
+      expect(hour % 6).toBe(0);
+    });
+  });
+
+  it("aligns with offset for 3-hour step", () => {
+    const result = calculateSliderValues({
+      min: "2025-01-01T18:00:00",
+      max: "2025-01-02T12:00:00",
+      step: 3,
+      unit: "Hours",
+      dataType: "Date",
+      alignSteps: true,
+      alignOffset: 5,
+    });
+    // min=18:00, grid=5,8,11,14,17,20 → ceil(18)=20
+    expect(result[0]).toBe("2025-01-01T20:00:00");
+    // All hours should be on offset+n*3 grid: 2,5,8,11,14,17,20,23
+    result.forEach((val) => {
+      const hour = new Date(val).getHours();
+      expect(Math.abs((hour - 5) % 3)).toBe(0);
+    });
+  });
+
+  it("aligns 30-minute steps", () => {
+    const result = calculateSliderValues({
+      min: "2025-01-01T10:15:00",
+      max: "2025-01-01T12:45:00",
+      step: 30,
+      unit: "Minutes",
+      dataType: "Date",
+      alignSteps: true,
+      alignOffset: 0,
+    });
+    // min ceils 10:15 → 10:30, max ceils 12:45 → 13:00
+    expect(result[0]).toBe("2025-01-01T10:30:00");
+    expect(result[result.length - 1]).toBe("2025-01-01T13:00:00");
+    result.forEach((val) => {
+      const mins = new Date(val).getMinutes();
+      expect(mins % 30).toBe(0);
+    });
+  });
+
+  it("does not align when alignSteps is false", () => {
+    const result = calculateSliderValues({
+      min: "2025-01-01T02:30:00",
+      max: "2025-01-01T14:30:00",
+      step: 6,
+      unit: "Hours",
+      dataType: "Date",
+      alignSteps: false,
+    });
+    // Should start at exact min
+    expect(result[0]).toBe("2025-01-01T02:30:00");
+  });
+
+  it("aligns relative dates and returns absolute ISO strings on the step grid", () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2025-06-15T14:35:00"));
+
+    try {
+      const result = calculateSliderValues({
+        min: "now-1D",
+        max: "now",
+        step: 6,
+        unit: "Hours",
+        dataType: "Date",
+        alignSteps: true,
+        alignOffset: 0,
+      });
+      // anchoredNow floors 14:35 → 12:00, so now-1D = June 14 12:00
+      // min ceils June 14 12:00 → 12:00 (already on grid)
+      // max ceils June 15 12:00 → 12:00 (already on grid)
+      // All values should be absolute ISO strings on 6-hour boundaries
+      result.forEach((val) => {
+        expect(val).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
+        const hour = new Date(val).getHours();
+        expect(hour % 6).toBe(0);
+      });
+      expect(result.length).toBeGreaterThan(0);
+      expect(result[0]).toBe("2025-06-14T12:00:00");
+      expect(result[result.length - 1]).toBe("2025-06-15T12:00:00");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("produces identical output at 9:00 and 9:01 for 30-minute aligned steps", () => {
+    jest.useFakeTimers();
+    try {
+      const args = {
+        min: "now-7D",
+        max: "now",
+        step: 30,
+        unit: "Minutes",
+        dataType: "Date",
+        alignSteps: true,
+        alignOffset: 0,
+      };
+      jest.setSystemTime(new Date("2025-06-15T09:00:00"));
+      const result1 = calculateSliderValues(args);
+
+      jest.setSystemTime(new Date("2025-06-15T09:01:00"));
+      const result2 = calculateSliderValues(args);
+
+      // Both should be identical since they anchor to the same floored "now" (9:00)
+      expect(result1).toEqual(result2);
+      // All values should be on 30-minute boundaries
+      result1.forEach((val) => {
+        const mins = new Date(val).getMinutes();
+        expect(mins % 30).toBe(0);
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("shifts output when step boundary is crossed", () => {
+    jest.useFakeTimers();
+    try {
+      const args = {
+        min: "now-1D",
+        max: "now",
+        step: 6,
+        unit: "Hours",
+        dataType: "Date",
+        alignSteps: true,
+        alignOffset: 0,
+      };
+      jest.setSystemTime(new Date("2025-06-15T11:00:00"));
+      const result1 = calculateSliderValues(args);
+
+      jest.setSystemTime(new Date("2025-06-15T12:00:00"));
+      const result2 = calculateSliderValues(args);
+
+      // At 11:00, anchoredNow floors to 6:00; at 12:00 it floors to 12:00
+      // Results should differ (window shifted by 6 hours)
+      expect(result1).not.toEqual(result2);
+      expect(result1[0]).toBe("2025-06-14T06:00:00");
+      expect(result2[0]).toBe("2025-06-14T12:00:00");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("non-aligned relative dates still return relative strings", () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2025-06-15T14:35:00"));
+    try {
+      const result = calculateSliderValues({
+        min: "now-1D",
+        max: "now",
+        step: 6,
+        unit: "Hours",
+        dataType: "Date",
+        alignSteps: false,
+      });
+      result.forEach((val) => {
+        expect(val).toMatch(/^now([+-]\d+H)?$/);
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("value already on grid stays unchanged", () => {
+    const result = calculateSliderValues({
+      min: "2025-01-01T06:00:00",
+      max: "2025-01-02T06:00:00",
+      step: 6,
+      unit: "Hours",
+      dataType: "Date",
+      alignSteps: true,
+      alignOffset: 0,
+    });
+    expect(result[0]).toBe("2025-01-01T06:00:00");
+    expect(result[result.length - 1]).toBe("2025-01-02T06:00:00");
+    expect(result).toEqual([
+      "2025-01-01T06:00:00",
+      "2025-01-01T12:00:00",
+      "2025-01-01T18:00:00",
+      "2025-01-02T00:00:00",
+      "2025-01-02T06:00:00",
+    ]);
   });
 });
