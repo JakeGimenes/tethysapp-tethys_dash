@@ -52,12 +52,10 @@ Here is the full source for the ``GeoGLOWS Forecast Plot`` plugin from the `teth
 .. code-block:: python
 
    from tethysapp.tethysdash.plugin_helpers import TethysDashPlugin
-   import plotly.express as px
-   import json
-   import geoglows
+   import requests
 
 
-   class PlotlyExample(TethysDashPlugin):
+   class GeoGLOWSForecastPlot(TethysDashPlugin):
        name = "geoglows_forecast_plot"
        group = "Tutorials"
        label = "GeoGLOWS Forecast Plot"
@@ -75,17 +73,54 @@ Here is the full source for the ``GeoGLOWS Forecast Plot`` plugin from the `teth
            """
            Return plotly information
            """
-           forecast_data = geoglows.data.forecast(int(self.river_ID))
-           forecast_plot = geoglows.plots.forecast(forecast_data)
-           return json.loads(forecast_plot.to_json())
+           self.send_update("Loading forecast data from GeoGLOWS API...")
+           url = f"https://geoglows.ecmwf.int/api/v2/forecast/{self.river_ID}?format=json"
+           response = requests.get(url)
+           forecast_data = response.json()
+
+           self.send_update("Processing forecast data...")
+           data = [
+               {
+                   "type": "scatter",
+                   "x": forecast_data["datetime"],
+                   "y": forecast_data["flow_uncertainty_lower"],
+                   "name": "Lower Uncertainty",
+                   "line": {"color": "lightblue"},
+               },
+               {
+                   "type": "scatter",
+                   "x": forecast_data["datetime"],
+                   "y": forecast_data["flow_uncertainty_upper"],
+                   "name": "Upper Uncertainty",
+                   "line": {"color": "lightblue"},
+                   "fill": "tonexty",
+                   "fillcolor": "lightblue",
+               },
+               {
+                   "type": "scatter",
+                   "x": forecast_data["datetime"],
+                   "y": forecast_data["flow_median"],
+                   "name": "Median Forecast",
+                   "line": {"color": "darkblue"},
+               },
+           ]
+
+           layout = {
+               "title": f"GeoGLOWS Forecast ({self.river_ID})",
+           }
+
+           config = {"displayModeBar": True}
+
+           return {"data": data, "layout": layout, "config": config}
 
 A few things worth noticing before you wire it into the dashboard:
 
 - ``name = "geoglows_forecast_plot"`` is the unique identifier written into the dashboard JSON's ``source`` field.
 - ``label = "GeoGLOWS Forecast Plot"`` and ``group = "Tutorials"`` control how the plugin appears in the **Visualization Type** dropdown — that is what you will pick in the next step.
-- ``type = "plotly"`` tells TethysDash to render whatever ``run()`` returns as a Plotly figure. Other types include ``map``, ``table``, ``card``, ``text``, and more (see :doc:`../plugins`).
+- ``type = "plotly"`` tells TethysDash to render whatever ``run()`` returns as a Plotly figure (i.e. a ``{"data": [...], "layout": {...}, "config": {...}}`` object). Other types include ``map``, ``table``, ``card``, ``text``, and more (see :doc:`../plugins`).
 - ``args = {"river_ID": "number"}`` declares a single numeric input. TethysDash automatically renders a form field for it in the visualization editor — this is the field you will bind to ``${river_id}``.
-- ``run()`` is what TethysDash calls to produce the plot. It receives ``self.river_ID`` (set by TethysDash from the variable input's current value), calls the GeoGLOWS API for the forecast, and returns the Plotly figure as JSON.
+- ``run()`` is what TethysDash calls to produce the plot. It fetches the forecast for ``self.river_ID`` from the GeoGLOWS REST API, builds three Plotly traces (lower-uncertainty band, upper-uncertainty band, and median forecast), and returns them in the standard Plotly figure shape.
+- The ``self.send_update(...)`` calls stream progress messages back to the dashboard over the WebSocket while ``run()`` is in flight, so the user sees what the plot is doing instead of a silent spinner.
 
 Step 5 — Add a new dashboard item
 ---------------------------------
