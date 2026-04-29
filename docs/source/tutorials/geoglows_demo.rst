@@ -197,7 +197,7 @@ Troubleshooting
 Final Solution
 --------------
 
-`GEOGLOWS_Demo.json <https://github.com/tethysplatform/workshop/blob/main/docs/workshop/GEOGLOWS_China_TethysDash.json>`_
+`GEOGLOWS_China_TethysDash.json <https://github.com/tethysplatform/workshop/blob/main/docs/workshop/GEOGLOWS_China_TethysDash.json>`_
 
 .. note::
 
