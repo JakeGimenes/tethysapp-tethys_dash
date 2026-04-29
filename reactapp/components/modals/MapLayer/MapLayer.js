@@ -20,6 +20,7 @@ import {
   attributePropsPropType,
   saveLayerJSON,
 } from "components/map/utilities";
+import { buildGeoTIFFStyleColor } from "components/map/geoTIFFStyle";
 import {
   removeEmptyValues,
   checkRequiredKeys,
@@ -68,6 +69,16 @@ const RightGroup = styled.div`
   align-items: center;
 `;
 
+export const getLayerType = (sourceType) => {
+  if (sourceType === "GeoTIFF") return "WebGLTile";
+  if (sourceType.includes("Vector")) return "VectorTileLayer";
+  if (sourceType.includes("Raster")) return "WebGLTile";
+  if (sourceType.includes("Tile")) return "TileLayer";
+  if (sourceType.includes("Image") || sourceType.includes("WMS"))
+    return "ImageLayer";
+  return "VectorLayer";
+};
+
 const MapLayerModal = ({
   showModal,
   handleModalClose,
@@ -86,6 +97,7 @@ const MapLayerModal = ({
   const [legend, setLegend] = useState(layerInfo.legend);
   const [selectedOption, setSelectedOption] = useState(null);
   const [hiddenForExtentDraw, setHiddenForExtentDraw] = useState(false);
+  const [showingSubModal, setShowingSubModal] = useState(false);
   const legendContainerRef = useRef(null);
   const styleContainerRef = useRef(null);
   const { csrf, mapLayerTemplates } = useContext(AppContext);
@@ -102,10 +114,8 @@ const MapLayerModal = ({
 
     const extent = mapContext.drawnExtent;
     const projection =
-      visualizationRef?.current
-        ?.getView()
-        ?.getProjection()
-        ?.getCode() || "EPSG:3857";
+      visualizationRef?.current?.getView()?.getProjection()?.getCode() ||
+      "EPSG:3857";
 
     setSourceProps((prev) => ({
       ...prev,
@@ -118,7 +128,12 @@ const MapLayerModal = ({
 
     setHiddenForExtentDraw(false);
     mapContext.setDrawnExtent(null);
-  }, [mapContext?.drawnExtent, hiddenForExtentDraw, mapContext, visualizationRef]);
+  }, [
+    mapContext?.drawnExtent,
+    hiddenForExtentDraw,
+    mapContext,
+    visualizationRef,
+  ]);
 
   // When extentDrawMode becomes null while hidden (user cancelled), re-show modal
   useEffect(() => {
@@ -154,13 +169,32 @@ const MapLayerModal = ({
       validSourceProps.urls = validSourceProps.urls.split(",");
     }
 
-    const getLayerType = (sourceType) => {
-      if (sourceType.includes("Vector")) return "VectorTileLayer";
-      if (sourceType.includes("Raster")) return "WebGLTile";
-      if (sourceType.includes("Tile")) return "TileLayer";
-      if (sourceType.includes("Image") || sourceType.includes("WMS"))
-        return "ImageLayer";
-      return "VectorLayer";
+    if (sourceProps.type === "GeoTIFF") {
+      const rawSources = sourceProps.props?.sources ?? [];
+      const cleanSourceInfo = (s) => {
+        const out = { url: s.url };
+        if (typeof s.bands === "string" && s.bands.trim() !== "") {
+          out.bands = s.bands;
+        }
+        if (s.min !== undefined && s.min !== "") out.min = s.min;
+        if (s.max !== undefined && s.max !== "") out.max = s.max;
+        if (s.nodata !== undefined && s.nodata !== "") out.nodata = s.nodata;
+        if (typeof s.projection === "string" && s.projection.trim() !== "") {
+          out.projection = s.projection;
+        }
+        if (Array.isArray(s.overviews) && s.overviews.length > 0) {
+          out.overviews = s.overviews;
+        }
+        return out;
+      };
+      const restoredSources = rawSources
+        .filter((s) => typeof s?.url === "string" && s.url.trim() !== "")
+        .map(cleanSourceInfo);
+      if (restoredSources.length === 0) {
+        setErrorMessage("Add at least one source with a URL before saving.");
+        return;
+      }
+      validSourceProps.sources = restoredSources;
     }
 
     const mapConfiguration = {
@@ -229,25 +263,57 @@ const MapLayerModal = ({
     }
 
     if (sourceProps.type === "GeoJSON") {
-      const apiResponse = await saveLayerJSON({
-        stringJSON: sourceProps.geojson,
-        csrf,
-        check_crs: true,
-        dashboard_uuid: uuid,
-      });
-      if (!apiResponse.success) {
-        setErrorMessage(
-          apiResponse.message ??
-            "Failed to upload the json data. Check logs for more information.",
-        );
-        return;
-      }
+      const geoStr = (sourceProps.geojson ?? "").trim();
+      const isJsonBody = geoStr.startsWith("{") || geoStr.startsWith("[");
       mapConfiguration.configuration.props.source.props = {};
-      mapConfiguration.configuration.props.source.geojson =
-        apiResponse.filename;
+      if (isJsonBody) {
+        const apiResponse = await saveLayerJSON({
+          stringJSON: sourceProps.geojson,
+          csrf,
+          check_crs: true,
+          dashboard_uuid: uuid,
+        });
+        if (!apiResponse.success) {
+          setErrorMessage(
+            apiResponse.message ??
+              "Failed to upload the json data. Check logs for more information.",
+          );
+          return;
+        }
+        mapConfiguration.configuration.props.source.geojson =
+          apiResponse.filename;
+      } else {
+        mapConfiguration.configuration.props.source.geojson = geoStr;
+      }
     }
 
-    if (style && style !== "{}") {
+    if (sourceProps.type === "GeoTIFF") {
+      const { rampName, rampMin, rampMax } = sourceProps;
+      const hasRamp =
+        typeof rampName === "string" &&
+        rampName.trim() !== "" &&
+        typeof rampMin === "string" &&
+        rampMin.trim() !== "" &&
+        typeof rampMax === "string" &&
+        rampMax.trim() !== "" &&
+        Number.isFinite(Number(rampMin)) &&
+        Number.isFinite(Number(rampMax));
+      if (hasRamp) {
+        const hasNodata = validSourceProps.sources.some(
+          (s) => s?.nodata !== undefined && s.nodata !== "",
+        );
+        const color = buildGeoTIFFStyleColor({
+          rampName,
+          rampMin,
+          rampMax,
+          hasNodata,
+        });
+        mapConfiguration.configuration.style = { color };
+        mapConfiguration.configuration.props.source.rampName = rampName;
+        mapConfiguration.configuration.props.source.rampMin = rampMin;
+        mapConfiguration.configuration.props.source.rampMax = rampMax;
+      }
+    } else if (style && style !== "{}") {
       const apiResponse = await saveLayerJSON({
         stringJSON: style,
         csrf,
@@ -314,7 +380,13 @@ const MapLayerModal = ({
         className="map-layer"
         dialogClassName="fiftyWideModalDialog"
         contentClassName="mapLayerContent"
-        style={hiddenForExtentDraw ? { visibility: "hidden" } : undefined}
+        style={
+          hiddenForExtentDraw
+            ? { visibility: "hidden" }
+            : showingSubModal
+              ? { zIndex: 1050 }
+              : undefined
+        }
         backdrop={hiddenForExtentDraw ? false : true}
       >
         <StyledModalHeader closeButton>
@@ -350,6 +422,7 @@ const MapLayerModal = ({
                 setAttributeProps={setAttributeProps}
                 setErrorMessage={setErrorMessage}
                 onRequestHideModal={onRequestHideModal}
+                onSubModalToggle={setShowingSubModal}
               />
             </Tab>
             <Tab
@@ -366,6 +439,7 @@ const MapLayerModal = ({
                   containerRef={styleContainerRef}
                   layerProps={layerProps}
                   sourceProps={sourceProps}
+                  setSourceProps={setSourceProps}
                 />
               </div>
             </Tab>

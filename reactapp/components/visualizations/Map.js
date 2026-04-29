@@ -11,6 +11,7 @@ import {
   loadLayerJSONs,
 } from "components/map/utilities";
 import PropTypes from "prop-types";
+import { COLOR_RAMPS } from "components/map/colorRamps";
 import { getBaseMapLayer } from "components/visualizations/utilities";
 import {
   DataViewerModeContext,
@@ -334,6 +335,23 @@ const MapVisualization = ({
           await loadLayerJSONs(layer, uuid);
           if (layer.legend) {
             if (layer.legend === "default") {
+              const rampSource = layer.configuration?.props?.source;
+              if (
+                rampSource?.type === "GeoTIFF" &&
+                typeof rampSource.rampName === "string" &&
+                COLOR_RAMPS[rampSource.rampName] &&
+                rampSource.rampMin !== undefined &&
+                rampSource.rampMax !== undefined
+              ) {
+                newMapLegend.push({
+                  rampColors: COLOR_RAMPS[rampSource.rampName],
+                  rampMin: rampSource.rampMin,
+                  rampMax: rampSource.rampMax,
+                  title: layer.configuration?.props?.name,
+                });
+                newMapLayers.push(layer.configuration);
+                continue;
+              }
               // If the layer has a style JSON, pass it as legend metadata
               if (layer.configuration.style) {
                 let styleJSON = layer.configuration.style;
