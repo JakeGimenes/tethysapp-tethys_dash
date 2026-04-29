@@ -11,6 +11,12 @@ What you will build
 - A ``river_id`` variable input that captures the ``comid`` of whichever river segment the user clicks on the map.
 - A **GeoGLOWS Forecast Plot** that re-fetches whenever ``river_id`` changes, with a friendly placeholder message shown before any river has been selected.
 
+.. image:: ../../images/tutorials/geoglows_part2/01_final_dashboard.png
+   :align: center
+   :class: tutorial-image
+
+|
+
 Prerequisites
 -------------
 

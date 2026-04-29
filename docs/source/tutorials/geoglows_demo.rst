@@ -12,6 +12,12 @@ What you will build
 - Friendly **attribute aliases** and a clean **popup** showing only the most useful fields.
 - A **Base Map** variable input so the user can switch the underlying base map at runtime without editing the dashboard.
 
+.. image:: ../../images/tutorials/geoglows_part1/01_final_dashboard.png
+   :align: center
+   :class: tutorial-image
+
+|
+
 Prerequisites
 -------------
 
