@@ -1,6 +1,13 @@
 import PropTypes from "prop-types";
 import DataSelect from "components/inputs/DataSelect";
-import { useState, useEffect, useRef, memo, useContext } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  memo,
+  useContext,
+} from "react";
 import FileUpload from "components/inputs/FileUpload";
 import styled from "styled-components";
 import {
@@ -12,9 +19,13 @@ import DataRadioSelect from "components/inputs/DataRadioSelect";
 import NormalInput from "components/inputs/NormalInput";
 import appAPI from "services/api/app";
 import { removeEmptyValues } from "components/modals/utilities";
-import { LayoutContext } from "components/contexts/Contexts";
+import { findSelectOptionByValue } from "components/visualizations/utilities";
+import { VisualizationArguments } from "components/modals/DataViewer/VisualizationPane";
+import { AppContext, LayoutContext } from "components/contexts/Contexts";
 import { useMapContext } from "components/contexts/MapContext";
 import Button from "react-bootstrap/Button";
+import Alert from "react-bootstrap/Alert";
+import Spinner from "react-bootstrap/Spinner";
 import GeoTIFFSourceModal from "components/modals/MapLayer/GeoTIFFSourceModal";
 import "components/modals/wideModal.css";
 
@@ -175,8 +186,8 @@ export const generatePropertiesArrayWithValues = (
   };
 
   // Process required and optional parts with existingValues
-  processKeys(sourceProperties.required, true, "", existingValues);
-  processKeys(sourceProperties.optional, false, "", existingValues);
+  processKeys(sourceProperties?.required, true, "", existingValues);
+  processKeys(sourceProperties?.optional, false, "", existingValues);
 
   return { properties, placeholders, types };
 };
@@ -205,9 +216,11 @@ function parsePropertiesArray(properties) {
 const SourcePane = ({
   sourceProps,
   setSourceProps,
+  setStyle,
   setAttributeProps,
   setErrorMessage,
   onRequestHideModal,
+  onFetchPluginDefaults,
   onSubModalToggle,
 }) => {
   const [sourceProperties, setSourceProperties] = useState([]); // array of objects that represent properties that will be rendered in the table
@@ -216,6 +229,8 @@ const SourcePane = ({
   const [sourceType, setSourceType] = useState({}); // source type dropdown selection {value: ..., label: ...}
   const [geoJSON, setGeoJSON] = useState("{}"); // track the geojson value
   const [geoJSONSource, setGeoJSONSource] = useState("custom"); // track the geojson value
+  const [pluginFetching, setPluginFetching] = useState(false);
+  const [pluginFetchError, setPluginFetchError] = useState(null);
 
   const [sources, setSources] = useState(() =>
     Array.isArray(sourceProps?.props?.sources) ? sourceProps.props.sources : [],
@@ -228,6 +243,54 @@ const SourcePane = ({
 
   const { uuid } = useContext(LayoutContext);
   const mapContext = useMapContext();
+  const { dynamicMapLayers } = useContext(AppContext);
+
+  const selectedPluginOption =
+    (sourceProps.source &&
+      findSelectOptionByValue(
+        dynamicMapLayers,
+        sourceProps.source,
+        "source",
+      )) ||
+    (sourceProps.type &&
+      findSelectOptionByValue(dynamicMapLayers, sourceProps.type));
+  const isDynamicMapLayer = !!selectedPluginOption;
+  const savedAsDynamicPlugin = !!sourceProps.source;
+  const pluginUnavailable = savedAsDynamicPlugin && !isDynamicMapLayer;
+
+  const pluginArgSchema = selectedPluginOption?.args ?? {};
+  const pluginVizArguments = Object.entries(pluginArgSchema).map(
+    ([argName, argType]) => ({ name: argName, label: argName, type: argType }),
+  );
+
+  const handlePluginArgChange = useCallback(
+    (key) => (newValue) => {
+      setSourceProps((prev) => ({
+        ...prev,
+        args: {
+          ...(prev?.args ?? {}),
+          [key]: newValue?.value ?? newValue,
+        },
+      }));
+    },
+    [setSourceProps],
+  );
+
+  const runFetchPluginDefaults = useCallback(
+    async (source, args) => {
+      if (!onFetchPluginDefaults) return;
+      setPluginFetchError(null);
+      setPluginFetching(true);
+      const result = await onFetchPluginDefaults(source, args);
+      setPluginFetching(false);
+      if (!result?.success) {
+        setPluginFetchError(
+          result?.error ?? "Failed to fetch plugin defaults.",
+        );
+      }
+    },
+    [onFetchPluginDefaults],
+  );
 
   useEffect(() => {
     if (typeof onSubModalToggle === "function") {
@@ -247,7 +310,17 @@ const SourcePane = ({
 
   useEffect(() => {
     // if loading existing layer, then set states appropriately
-    if (sourceProps.type) {
+    if (isDynamicMapLayer) {
+      setSourceType({
+        value: selectedPluginOption.value,
+        label: selectedPluginOption.label,
+      });
+    } else if (pluginUnavailable) {
+      setSourceType({
+        value: sourceProps.type ?? sourceProps.source,
+        label: sourceProps.type ?? sourceProps.source,
+      });
+    } else if (sourceProps.type) {
       const { properties, placeholders, types } =
         generatePropertiesArrayWithValues(
           sourcePropertiesOptions[sourceProps.type],
@@ -259,7 +332,7 @@ const SourcePane = ({
       setSourceType({ value: sourceProps.type, label: sourceProps.type });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sourceProps.type, sourceProps.props?.imageExtent]);
+  }, [sourceProps.type, sourceProps.source, sourceProps.props?.imageExtent]);
 
   useEffect(() => {
     const fetchGeoJSON = async () => {
@@ -302,6 +375,14 @@ const SourcePane = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceProps.geojson]);
 
+  const potentialMapLayers = Object.keys(sourcePropertiesOptions).map(
+    (option) => ({
+      value: option,
+      label: option,
+    }),
+  );
+  potentialMapLayers.push(...dynamicMapLayers);
+
   function handlePropertyChange({ newValue, rowIndex, field }) {
     // update table values
     const updatedSourceProperties = JSON.parse(
@@ -322,35 +403,45 @@ const SourcePane = ({
 
   function handleLayerTypeChange(e) {
     setSourceType(e);
+    setPluginFetchError(null);
 
-    // update table values and placeholders from new source type
-    const { properties, placeholders, types } =
-      generatePropertiesArrayWithValues(
+    let properties = [];
+    let placeholders = [];
+    let types = [];
+    const isRuntime = e.type === "map_layer";
+    if (!isRuntime) {
+      // update table values and placeholders from new source type
+      ({ properties, placeholders, types } = generatePropertiesArrayWithValues(
         sourcePropertiesOptions[e.value],
         sourceProps.props,
-      );
+      ));
+    }
     setSourceProperties(properties);
     SetPropertyPlaceholders(placeholders);
     SetPropertyTypes(types);
 
-    // update layer source props
     const parsedSourceProps = parsePropertiesArray(properties);
-    setSourceProps((previousSourceProps) => {
-      if ("geojson" in previousSourceProps) {
-        delete previousSourceProps.geojson;
-      }
-
-      return {
-        ...previousSourceProps,
-        ...{
+    setSourceProps(() => {
+      if (isRuntime) {
+        return {
+          ...e,
           type: e.value,
           props: removeEmptyValues(parsedSourceProps),
-        },
+          args: {},
+        };
+      }
+      return {
+        type: e.value,
+        props: removeEmptyValues(parsedSourceProps),
       };
     });
 
     // reset attribute variable and omitted popup attributes since the source has changed
     setAttributeProps({});
+
+    if (isRuntime) {
+      runFetchPluginDefaults(e.source, {});
+    }
   }
 
   function handleDrawExtentOnMap() {
@@ -580,13 +671,24 @@ const SourcePane = ({
         aria-label={"Source Type Input"}
         selectedOption={sourceType}
         onChange={handleLayerTypeChange}
-        options={Object.keys(sourcePropertiesOptions).map((option) => ({
-          value: option,
-          label: option,
-        }))}
+        options={potentialMapLayers}
       />
 
-      {sourceType.value && (
+      {pluginUnavailable && (
+        <Alert variant="warning" role="alert">
+          <Alert.Heading>Plugin not available</Alert.Heading>
+          <p>
+            This layer was configured with the dynamic map-layer plugin
+            <strong> {sourceProps.source}</strong>, but it is no longer
+            installed on this server (or your account does not have access to
+            it). The layer&apos;s saved style, legend, and attribute settings
+            are preserved, but no features will load at viewer time. Remove the
+            layer or replace its source to restore rendering.
+          </p>
+        </Alert>
+      )}
+
+      {sourceType.value && !pluginUnavailable && (
         <>
           {sourceType.value === "GeoJSON" ? (
             <>
@@ -621,22 +723,92 @@ const SourcePane = ({
                 />
               )}
             </>
+          ) : isDynamicMapLayer ? (
+            <>
+              {pluginVizArguments.length > 0 ? (
+                <VisualizationArguments
+                  selectedVizTypeOption={sourceType}
+                  vizArguments={pluginVizArguments}
+                  vizInputsValues={sourceProps.args ?? {}}
+                  handleInputChange={handlePluginArgChange}
+                />
+              ) : (
+                <p>
+                  <em>This plugin takes no arguments.</em>
+                </p>
+              )}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  marginTop: "0.75rem",
+                }}
+              >
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() =>
+                    runFetchPluginDefaults(
+                      sourceProps.source ?? sourceType.value,
+                      sourceProps.args ?? {},
+                    )
+                  }
+                  disabled={pluginFetching}
+                  aria-label="Fetch plugin defaults"
+                >
+                  {pluginFetching ? (
+                    <>
+                      <Spinner
+                        as="span"
+                        animation="border"
+                        size="sm"
+                        role="status"
+                        aria-hidden="true"
+                      />
+                      <span style={{ marginLeft: "0.4rem" }}>
+                        Fetching&hellip;
+                      </span>
+                    </>
+                  ) : (
+                    "Fetch defaults"
+                  )}
+                </Button>
+                <small style={{ color: "#6c757d" }}>
+                  Re-runs the plugin with the current args above and overwrites
+                  Style / Legend / Attributes panes.
+                </small>
+              </div>
+              {pluginFetchError && (
+                <Alert
+                  variant="danger"
+                  role="alert"
+                  style={{ marginTop: "0.5rem" }}
+                >
+                  {pluginFetchError}
+                </Alert>
+              )}
+            </>
           ) : sourceType.value === "GeoTIFF" ? (
             renderGeoTIFFPane()
           ) : (
             <>
-              <InputTable
-                label="Source Properties"
-                onChange={handlePropertyChange}
-                values={sourceProperties}
-                disabledFields={["required", "property"]}
-                placeholders={propertyPlaceholders}
-                show_placeholder_on_hover={true}
-                types={propertyTypes}
-              />
-              <p>
-                <em>* indicates a required property</em>
-              </p>
+              {sourceProperties.length > 0 && (
+                <>
+                  <InputTable
+                    label="Source Properties"
+                    onChange={handlePropertyChange}
+                    values={sourceProperties}
+                    disabledFields={["required", "property"]}
+                    placeholders={propertyPlaceholders}
+                    show_placeholder_on_hover={true}
+                    types={propertyTypes}
+                  />
+                  <p>
+                    <em>* indicates a required property</em>
+                  </p>
+                </>
+              )}
               {sourceType.value === "Static Image" &&
                 mapContext &&
                 onRequestHideModal && (
@@ -660,9 +832,11 @@ const SourcePane = ({
 SourcePane.propTypes = {
   sourceProps: sourcePropType,
   setSourceProps: PropTypes.func, // setter for sourceProps state
+  setStyle: PropTypes.func, // setter for style state (used by Fetch defaults applied from MapLayer)
   setAttributeProps: PropTypes.func, // setter for attributeProps state
   setErrorMessage: PropTypes.func,
   onRequestHideModal: PropTypes.func, // callback to hide the modal for extent drawing
+  onFetchPluginDefaults: PropTypes.func,
   onSubModalToggle: PropTypes.func, // (open: boolean) => void — parent raises zIndex while GeoTIFF sub-modal is open
 };
 

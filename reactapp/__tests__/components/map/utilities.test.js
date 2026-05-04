@@ -10,7 +10,10 @@ import {
   saveLayerJSON,
   checkForCRS,
   getStyleFields,
+  swapVectorLayerFeatures,
+  updateOlLayerProps,
 } from "components/map/utilities";
+import VectorSource from "ol/source/Vector.js";
 import { LineString, Point, MultiPolygon, Polygon } from "ol/geom";
 import VectorLayer from "ol/layer/Vector.js";
 import {
@@ -23,10 +26,8 @@ import {
 } from "__tests__/utilities/constants";
 import appAPI from "services/api/app";
 import { PMTiles } from "pmtiles";
-
-jest.mock("uuid", () => ({
-  v4: () => 12345678,
-}));
+import { server } from "__tests__/utilities/server";
+import { rest } from "msw";
 
 test("getStyleFields GeoJSON", async () => {
   const sourceProps = layerConfigGeoJSON.configuration.props.source;
@@ -1484,7 +1485,10 @@ const geoTIFFLayerConfig = ({ nodata } = {}) => ({
   },
 });
 
-const mockGeoTIFFMap = ({ getDataReturn, layerName = "Test GeoTIFF Layer" }) => {
+const mockGeoTIFFMap = ({
+  getDataReturn,
+  layerName = "Test GeoTIFF Layer",
+}) => {
   const targetLayer = {
     get: jest.fn((key) => (key === "name" ? layerName : undefined)),
     getData: jest.fn(() => getDataReturn),
@@ -1680,7 +1684,7 @@ test("getLayerAttributes ImageArcGISRest", async () => {
 
   const sourceProps = layerConfigImageArcGISRest.configuration.props.source;
   const layerName = layerConfigImageArcGISRest.configuration.props.name;
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({
     "Max Status - Forecast Trend": [
@@ -1773,7 +1777,7 @@ test("getLayerAttributes ImageArcGISRest, param layers show", async () => {
     LAYERS: "show:0,2",
   };
 
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({
     "Max Status - Forecast Trend": [{ name: "nws_name", alias: "Name" }],
@@ -1851,7 +1855,7 @@ test("getLayerAttributes ImageArcGISRest, param layers hide", async () => {
     LAYERS: "hide:0,2",
   };
 
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({
     "Max Status - Forecast Trend (1)": [{ name: "nws_name2", alias: "Name2" }],
@@ -1941,7 +1945,7 @@ test("getLayerAttributes ImageArcGISRest, param layers include", async () => {
     LAYERS: "include:2",
   };
 
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({
     "Max Status - Forecast Trend": [{ name: "nws_name", alias: "Name" }],
@@ -2032,7 +2036,7 @@ test("getLayerAttributes ImageArcGISRest, param layers exclude", async () => {
     LAYERS: "exclude:1",
   };
 
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({
     "Max Status - Forecast Trend": [{ name: "nws_name", alias: "Name" }],
@@ -2113,7 +2117,7 @@ test("getLayerAttributes ImageArcGISRest, param layers nonsense, missing fields"
     LAYERS: "nonsense:1",
   };
 
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({
     "Max Status - Forecast Trend": [],
@@ -2162,7 +2166,7 @@ test("getLayerAttributes ArcGISFeatureService", async () => {
   const sourceProps =
     layerConfigArcGISFeatureService.configuration.props.source;
   const layerName = layerConfigArcGISFeatureService.configuration.props.name;
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({
     "Some ArcGISFeatureService Layer": [
@@ -2226,7 +2230,7 @@ test("getLayerAttributes ArcGISFeatureService with slash", async () => {
   const sourceProps =
     layerConfigArcGISFeatureService.configuration.props.source;
   const layerName = layerConfigArcGISFeatureService.configuration.props.name;
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({
     "Some ArcGISFeatureService Layer": [
@@ -2261,7 +2265,7 @@ test("getLayerAttributes ImageWMS", async () => {
 
   const sourceProps = layerConfigImageWMS.configuration.props.source;
   const layerName = layerConfigImageWMS.configuration.props.name;
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({
     states: [
@@ -2277,7 +2281,7 @@ test("getLayerAttributes ImageWMS Bad Fetch", async () => {
   const sourceProps = layerConfigImageWMS.configuration.props.source;
   const layerName = layerConfigImageWMS.configuration.props.name;
 
-  await expect(getLayerAttributes(sourceProps, layerName)).rejects.toThrow(
+  await expect(getLayerAttributes({ sourceProps, layerName })).rejects.toThrow(
     "Failed to fetch attribute data for layer 'topp:states'. Check if the layer exists.",
   );
 });
@@ -2297,7 +2301,7 @@ test("getLayerAttributes ImageWMS XML Error", async () => {
   const sourceProps = layerConfigImageWMS.configuration.props.source;
   const layerName = layerConfigImageWMS.configuration.props.name;
 
-  await expect(getLayerAttributes(sourceProps, layerName)).rejects.toThrow(
+  await expect(getLayerAttributes({ sourceProps, layerName })).rejects.toThrow(
     "WFS DescribeFeatureType request failed for layer 'topp:states'. Ensure WFS is enabled and the layer name is correct.",
   );
 });
@@ -2317,7 +2321,7 @@ test("getLayerAttributes ImageWMS XML Schema Error", async () => {
   const sourceProps = layerConfigImageWMS.configuration.props.source;
   const layerName = layerConfigImageWMS.configuration.props.name;
 
-  await expect(getLayerAttributes(sourceProps, layerName)).rejects.toThrow(
+  await expect(getLayerAttributes({ sourceProps, layerName })).rejects.toThrow(
     "Unexpected DescribeFeatureType format for layer 'topp:states'.",
   );
 });
@@ -2336,7 +2340,7 @@ test("getLayerAttributes ImageWMS XML Bad Fields", async () => {
 
   const sourceProps = layerConfigImageWMS.configuration.props.source;
   const layerName = layerConfigImageWMS.configuration.props.name;
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({});
 });
@@ -2355,7 +2359,7 @@ test("getLayerAttributes ImageWMS No complexType Type and No element Name", asyn
 
   const sourceProps = layerConfigImageWMS.configuration.props.source;
   const layerName = layerConfigImageWMS.configuration.props.name;
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({
     "topp:states": [{ name: "the_geom", alias: "the_geom" }],
@@ -2367,7 +2371,7 @@ test("getLayerAttributes ImageWMS no layers", async () => {
   sourceProps.props.params.LAYERS = undefined;
   const layerName = layerConfigImageWMS.configuration.props.name;
 
-  await expect(getLayerAttributes(sourceProps, layerName)).rejects.toThrow(
+  await expect(getLayerAttributes({ sourceProps, layerName })).rejects.toThrow(
     "No layers specified in source parameters.",
   );
 });
@@ -2375,7 +2379,7 @@ test("getLayerAttributes ImageWMS no layers", async () => {
 test("getLayerAttributes GEOJSON", async () => {
   const sourceProps = layerConfigGeoJSON.configuration.props.source;
   const layerName = layerConfigGeoJSON.configuration.props.name;
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({
     "GeoJSON Layer": [{ name: "Some Field", alias: "Some Field" }],
@@ -2389,7 +2393,7 @@ test("getLayerAttributes GEOJSON 2", async () => {
   const sourceProps = updatedlayerConfigGeoJSON.configuration.props.source;
   sourceProps.geojson = JSON.stringify(sourceProps.geojson);
   const layerName = updatedlayerConfigGeoJSON.configuration.props.name;
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({
     "GeoJSON Layer": [{ name: "Some Field", alias: "Some Field" }],
@@ -2441,7 +2445,7 @@ test("getLayerAttributes GEOJSON URL", async () => {
   const sourceProps = updatedlayerConfigGeoJSON.configuration.props.source;
   sourceProps.geojson = "some/url.json";
   const layerName = updatedlayerConfigGeoJSON.configuration.props.name;
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({
     "GeoJSON Layer": [
@@ -2466,7 +2470,7 @@ test("getLayerAttributes GEOJSON Missing URL", async () => {
   sourceProps.geojson = "some/url.json";
   const layerName = updatedlayerConfigGeoJSON.configuration.props.name;
 
-  await expect(getLayerAttributes(sourceProps, layerName)).rejects.toThrow(
+  await expect(getLayerAttributes({ sourceProps, layerName })).rejects.toThrow(
     "Failed to fetch: missing",
   );
 });
@@ -2478,7 +2482,7 @@ test("getLayerAttributes GEOJSON no features", async () => {
   const sourceProps = updatedlayerConfigGeoJSON.configuration.props.source;
   delete sourceProps.geojson.features;
   const layerName = updatedlayerConfigGeoJSON.configuration.props.name;
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({ "GeoJSON Layer": [] });
 });
@@ -2498,7 +2502,7 @@ test("getLayerAttributes GEOJSON no feature properties", async () => {
     },
   ];
   const layerName = updatedlayerConfigGeoJSON.configuration.props.name;
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({ "GeoJSON Layer": [] });
 });
@@ -2528,7 +2532,7 @@ test("getLayerAttributes KML", async () => {
     }),
   );
 
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({
     "KML Layer": [{ name: "name", alias: "name" }],
@@ -2563,7 +2567,7 @@ test("getLayerAttributes PM Tiles Vector", async () => {
   const layerName = layerConfigPMTilesVector.configuration.props.name;
   sourceProps.props.url = "some/url.pmtiles";
 
-  const attributes = await getLayerAttributes(sourceProps, layerName);
+  const attributes = await getLayerAttributes({ sourceProps, layerName });
 
   expect(attributes).toStrictEqual({
     "PMTiles Vector Layer": [
@@ -2576,9 +2580,147 @@ test("getLayerAttributes PM Tiles Vector", async () => {
 test("getLayerAttributes Error", async () => {
   const sourceProps = { type: "bad type", props: {} };
   const layerName = "test";
-  await expect(getLayerAttributes(sourceProps, layerName)).rejects.toThrow(
+  await expect(getLayerAttributes({ sourceProps, layerName })).rejects.toThrow(
     "bad type is not currently configured to be queried",
   );
+});
+
+test("getLayerAttributes Dynamic Layer", async () => {
+  const sourceProps = {
+    source: "DynamicLayerPlugin",
+  };
+  const layerName = "test";
+
+  server.use(
+    rest.get(
+      "http://api.test/apps/tethysdash/visualizations/get/",
+      (req, res, ctx) => {
+        return res(
+          ctx.delay(500),
+          ctx.status(200),
+          ctx.json({
+            success: true,
+            data: {
+              attributeAliases: { test: { name: "Name Alias", id: "ID" } },
+              attributeVariables: { test: { name: "Name Variable" } },
+              omittedPopupAttributes: { test: ["omitted"] },
+            },
+          }),
+          ctx.set("Content-Type", "application/json"),
+        );
+      },
+    ),
+  );
+
+  const attributes = await getLayerAttributes({
+    sourceProps,
+    layerName,
+    isDynamicMapLayer: true,
+  });
+
+  expect(attributes).toStrictEqual({
+    test: [
+      { name: "name", alias: "Name Alias" },
+      { name: "id", alias: "ID" },
+      { name: "omitted", alias: "omitted" },
+    ],
+  });
+});
+
+test("getLayerAttributes Dynamic Layer, plugin error", async () => {
+  const sourceProps = {
+    source: "DynamicLayerPlugin",
+  };
+  const layerName = "test";
+
+  server.use(
+    rest.get(
+      "http://api.test/apps/tethysdash/visualizations/get/",
+      (req, res, ctx) => {
+        return res(
+          ctx.delay(500),
+          ctx.status(200),
+          ctx.json({
+            success: false,
+          }),
+          ctx.set("Content-Type", "application/json"),
+        );
+      },
+    ),
+  );
+
+  await expect(
+    async () =>
+      await getLayerAttributes({
+        sourceProps,
+        layerName,
+        isDynamicMapLayer: true,
+      }),
+  ).rejects.toThrow("Failed to fetch plugin attributes.");
+});
+
+test("getLayerAttributes Dynamic Layer, plugin error with message", async () => {
+  const sourceProps = {
+    source: "DynamicLayerPlugin",
+  };
+  const layerName = "test";
+
+  server.use(
+    rest.get(
+      "http://api.test/apps/tethysdash/visualizations/get/",
+      (req, res, ctx) => {
+        return res(
+          ctx.delay(500),
+          ctx.status(200),
+          ctx.json({
+            success: false,
+            data: { error: "Plugin error message" },
+          }),
+          ctx.set("Content-Type", "application/json"),
+        );
+      },
+    ),
+  );
+
+  await expect(
+    async () =>
+      await getLayerAttributes({
+        sourceProps,
+        layerName,
+        isDynamicMapLayer: true,
+      }),
+  ).rejects.toThrow("Plugin error message");
+});
+
+test("getLayerAttributes Dynamic Layer, no data", async () => {
+  const sourceProps = {
+    source: "DynamicLayerPlugin",
+  };
+  const layerName = "test";
+
+  server.use(
+    rest.get(
+      "http://api.test/apps/tethysdash/visualizations/get/",
+      (req, res, ctx) => {
+        return res(
+          ctx.delay(500),
+          ctx.status(200),
+          ctx.json({
+            success: true,
+          }),
+          ctx.set("Content-Type", "application/json"),
+        );
+      },
+    ),
+  );
+
+  const attributes = await getLayerAttributes({
+    sourceProps,
+    layerName,
+    isDynamicMapLayer: true,
+  });
+
+  expect(attributes).toStrictEqual({ test: [] });
 });
 
 test("loadLayerJSONs Object", async () => {
@@ -3112,6 +3254,142 @@ test("saveLayerJSON geojson", async () => {
 
   expect(response.success).toBe(true);
   expect(response.filename).toBe("some_file.json");
+});
+
+function makeVectorLayerWithFeatures(initialFeatureCount = 0) {
+  // eslint-disable-next-line global-require
+  const OLFeature = require("ol/Feature").default;
+  const source = new VectorSource();
+  for (let i = 0; i < initialFeatureCount; i++) {
+    source.addFeature(new OLFeature({}));
+  }
+  return new VectorLayer({ source });
+}
+
+test("swapVectorLayerFeatures clears source and adds parsed features", () => {
+  const olLayer = makeVectorLayerWithFeatures(3);
+  const fc = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: { id: 1 },
+        geometry: { type: "Point", coordinates: [0, 0] },
+      },
+      {
+        type: "Feature",
+        properties: { id: 2 },
+        geometry: { type: "Point", coordinates: [1, 1] },
+      },
+    ],
+    crs: { type: "name", properties: { name: "EPSG:4326" } },
+  };
+
+  swapVectorLayerFeatures(olLayer, fc, "EPSG:3857");
+
+  const newFeatures = olLayer.getSource().getFeatures();
+  expect(newFeatures).toHaveLength(2);
+});
+
+test("swapVectorLayerFeatures clears source when FeatureCollection is empty", () => {
+  const olLayer = makeVectorLayerWithFeatures(5);
+  const emptyFc = {
+    type: "FeatureCollection",
+    features: [],
+    crs: { type: "name", properties: { name: "EPSG:4326" } },
+  };
+
+  swapVectorLayerFeatures(olLayer, emptyFc, "EPSG:3857");
+  expect(olLayer.getSource().getFeatures()).toHaveLength(0);
+});
+
+test("swapVectorLayerFeatures treats null as empty (empty-success state)", () => {
+  const olLayer = makeVectorLayerWithFeatures(3);
+  swapVectorLayerFeatures(olLayer, null, "EPSG:3857");
+  expect(olLayer.getSource().getFeatures()).toHaveLength(0);
+});
+
+test("swapVectorLayerFeatures is a no-op when olLayer has no source", () => {
+  expect(() => swapVectorLayerFeatures(null, null, "EPSG:3857")).not.toThrow();
+  expect(() => swapVectorLayerFeatures({}, null, "EPSG:3857")).not.toThrow();
+});
+
+test("swapVectorLayerFeatures defaults dataProjection to EPSG:4326 when CRS absent", () => {
+  const olLayer = makeVectorLayerWithFeatures(0);
+  const fcNoCrs = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: {},
+        geometry: { type: "Point", coordinates: [0, 0] },
+      },
+    ],
+  };
+  expect(() =>
+    swapVectorLayerFeatures(olLayer, fcNoCrs, "EPSG:3857"),
+  ).not.toThrow();
+  expect(olLayer.getSource().getFeatures()).toHaveLength(1);
+});
+
+test("updateOlLayerProps applies cosmetic props in place", () => {
+  const olLayer = new VectorLayer({ source: new VectorSource() });
+  olLayer.set("name", "old name");
+  olLayer.setOpacity(1);
+
+  updateOlLayerProps(olLayer, {
+    name: "new name",
+    opacity: 0.5,
+    minZoom: 3,
+    maxZoom: 18,
+    minResolution: 0.1,
+    maxResolution: 100,
+  });
+
+  expect(olLayer.get("name")).toBe("new name");
+  expect(olLayer.getOpacity()).toBe(0.5);
+  expect(olLayer.getMinZoom()).toBe(3);
+  expect(olLayer.getMaxZoom()).toBe(18);
+  expect(olLayer.getMinResolution()).toBe(0.1);
+  expect(olLayer.getMaxResolution()).toBe(100);
+});
+
+test("updateOlLayerProps keeps layerId / pluginSource tags in sync", () => {
+  const olLayer = new VectorLayer({ source: new VectorSource() });
+  olLayer.set("layerId", "old-id");
+  olLayer.set("pluginSource", { source: "old_plugin", args: {} });
+
+  updateOlLayerProps(olLayer, {
+    layerId: "new-id",
+    pluginSource: { source: "new_plugin", args: { bbox: "x" } },
+  });
+
+  expect(olLayer.get("layerId")).toBe("new-id");
+  expect(olLayer.get("pluginSource")).toEqual({
+    source: "new_plugin",
+    args: { bbox: "x" },
+  });
+});
+
+test("updateOlLayerProps ignores undefined or wrong-typed fields", () => {
+  const olLayer = new VectorLayer({ source: new VectorSource() });
+  olLayer.setOpacity(0.7);
+  olLayer.set("name", "keep me");
+
+  updateOlLayerProps(olLayer, {
+    // opacity as string — wrong type, ignored
+    opacity: "0.3",
+    // name absent — preserved
+  });
+
+  expect(olLayer.getOpacity()).toBe(0.7);
+  expect(olLayer.get("name")).toBe("keep me");
+});
+
+test("updateOlLayerProps is a no-op when olLayer or newProps is null", () => {
+  expect(() => updateOlLayerProps(null, { name: "x" })).not.toThrow();
+  const olLayer = new VectorLayer({ source: new VectorSource() });
+  expect(() => updateOlLayerProps(olLayer, null)).not.toThrow();
 });
 
 test("queryLayerFeatures GeoTIFF tolerates missing source.props.sources (covers `?? []` fallback)", async () => {

@@ -10,6 +10,9 @@ import {
 import selectEvent from "react-select-event";
 import MapLayerModal, {
   getLayerType,
+  rekeyAttributeMapToLayer,
+  renameLayerInAttributeProps,
+  normalizeAttributePropsForLayer,
 } from "components/modals/MapLayer/MapLayer";
 import { AppContext, LayoutContext } from "components/contexts/Contexts";
 import MapContextProvider, {
@@ -20,10 +23,6 @@ import { getLayerAttributes } from "components/map/utilities";
 import { server } from "__tests__/utilities/server";
 import { rest } from "msw";
 import { fullMapLayer } from "__tests__/utilities/constants";
-
-jest.mock("uuid", () => ({
-  v4: () => 12345678,
-}));
 
 jest.mock("components/map/utilities", () => {
   const originalModule = jest.requireActual("components/map/utilities");
@@ -45,6 +44,7 @@ const TestingComponent = ({
   handleModalClose,
   addMapLayer,
   layerInfo,
+  dynamicMapLayers = [],
 }) => {
   const csrf = "asdasdasdasd";
   const mapLayerTemplates = [
@@ -61,6 +61,7 @@ const TestingComponent = ({
   const appContext = {
     csrf,
     mapLayerTemplates,
+    dynamicMapLayers,
   };
 
   return (
@@ -1420,10 +1421,82 @@ test("MapLayerModal update ImageArcGISRest layer", async () => {
   });
 });
 
+test("MapLayerModal handleLayerPropsChange accepts a direct object updater", async () => {
+  const handleModalClose = jest.fn();
+  const addMapLayer = jest.fn();
+  const layerInfo = {
+    layerProps: {
+      name: "Existing Layer",
+    },
+    sourceProps: {
+      props: {
+        url: "Some Url",
+      },
+      type: "ESRI Image and Map Service",
+    },
+    attributeProps: {
+      aliases: {
+        "Existing Layer": {
+          STATE_NAME: "State",
+        },
+      },
+    },
+  };
+  render(
+    <TestingComponent
+      showModal={true}
+      handleModalClose={handleModalClose}
+      addMapLayer={addMapLayer}
+      layerInfo={layerInfo}
+    />,
+  );
+
+  expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+  // LayerPane.handlePropertyChange calls setLayerProps with a plain object
+  // (not a function), exercising the non-function branch of the
+  // `typeof updater === "function" ? updater(prev) : updater` ternary in
+  // handleLayerPropsChange.
+  const layerTabContent = screen.getByLabelText("layer-tab");
+  const opacityInput = within(layerTabContent).getByLabelText("value Input 0");
+  fireEvent.change(opacityInput, { target: { value: "0.5" } });
+
+  const createLayerButton = await screen.findByLabelText("Create Layer Button");
+  fireEvent.click(createLayerButton);
+
+  expect(addMapLayer).toHaveBeenCalledWith({
+    configuration: {
+      type: "ImageLayer",
+      props: {
+        name: "Existing Layer",
+        opacity: "0.5",
+        source: {
+          type: "ESRI Image and Map Service",
+          props: {
+            url: "Some Url",
+          },
+        },
+      },
+    },
+    // Name was unchanged, so attributeAliases keys must remain under
+    // "Existing Layer" — i.e., renameLayerInAttributeProps was NOT called.
+    attributeAliases: {
+      "Existing Layer": {
+        STATE_NAME: "State",
+      },
+    },
+  });
+});
+
 // Helper component for extent draw tests — wraps MapLayerModal with MapContext
 const ExtentTestComponent = ({ layerInfo, visualizationRefOverride }) => {
   const csrf = "asdasdasdasd";
-  const appContext = { csrf, mapLayerTemplates: [] };
+  const appContext = {
+    csrf,
+    mapLayerTemplates: [],
+    dynamicMapLayers: [],
+    sessionNonce: "test-nonce",
+  };
   const { setExtentDrawMode, setDrawnExtent, extentDrawMode } = useMapContext();
   const defaultRef = useRef({
     getView: () => ({
@@ -2582,14 +2655,857 @@ describe("MapLayerModal save path regression for non-GeoTIFF sources", () => {
   });
 });
 
-TestingComponent.propTypes = {
-  showModal: PropTypes.bool,
-  handleModalClose: PropTypes.func,
-  addMapLayer: PropTypes.func,
-  layerInfo: PropTypes.object,
-  mapLayers: PropTypes.array,
-  existingLayerOriginalName: PropTypes.object,
-};
+describe("MapLayerModal plugin layer", () => {
+  test("fetchPluginDefaults sets configuration", async () => {
+    const handleModalClose = jest.fn();
+    const addMapLayer = jest.fn();
+    const layerInfo = {
+      layerProps: {},
+      sourceProps: {
+        type: "Stream Gauges (Dynamic)",
+        source: "custom_layer_test",
+        args: {},
+        props: {},
+      },
+    };
+
+    server.use(
+      rest.get(
+        "http://api.test/apps/tethysdash/visualizations/get/",
+        (req, res, ctx) => {
+          return res(
+            ctx.status(200),
+            ctx.json({
+              success: true,
+              data: {
+                configuration: {
+                  layerVisibility: false,
+                  props: {
+                    name: "Some Plugin Layer",
+                  },
+                },
+                attributeAliases: { test: { name: "Name Alias", id: "ID" } },
+                attributeVariables: { test: { name: "Name Variable" } },
+                omittedPopupAttributes: { test: ["omitted"] },
+                queryable: false,
+                legend: "default",
+              },
+            }),
+            ctx.set("Content-Type", "application/json"),
+          );
+        },
+      ),
+    );
+
+    render(
+      <TestingComponent
+        showModal={true}
+        handleModalClose={handleModalClose}
+        addMapLayer={addMapLayer}
+        layerInfo={layerInfo}
+        dynamicMapLayers={[
+          {
+            label: "Dynamic Map Layers",
+            options: [
+              {
+                source: "custom_layer_test",
+                value: "Stream Gauges (Dynamic)",
+                label: "Stream Gauges (Dynamic)",
+                args: {},
+                type: "map_layer",
+                tags: ["hydrology", "gauges", "live"],
+                attribution: "",
+                description:
+                  "Live stream gauge locations, color-coded by current flow.",
+                loading_icon: true,
+                restricted: false,
+                dynamic_map_layer: true,
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    const fetchPluginDefaultsButton = await screen.findByLabelText(
+      "Fetch plugin defaults",
+    );
+    fireEvent.click(fetchPluginDefaultsButton);
+
+    expect(await screen.findByText(/Fetching/)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Fetching/)).not.toBeInTheDocument();
+    });
+
+    const createLayerButton = await screen.findByLabelText(
+      "Create Layer Button",
+    );
+    fireEvent.click(createLayerButton);
+
+    await waitFor(() => {
+      expect(addMapLayer).toHaveBeenCalledTimes(1);
+    });
+
+    expect(addMapLayer).toHaveBeenLastCalledWith({
+      attributeAliases: {
+        "Some Plugin Layer": {
+          id: "ID",
+          name: "Name Alias",
+        },
+      },
+      attributeVariables: {
+        "Some Plugin Layer": {
+          name: "Name Variable",
+        },
+      },
+      configuration: {
+        layerVisibility: false,
+        props: {
+          layerId: 12345678,
+          name: "Some Plugin Layer",
+          pluginSource: {
+            args: {},
+            source: "custom_layer_test",
+          },
+          source: {
+            geojson: {
+              crs: {
+                properties: {
+                  name: "EPSG:4326",
+                },
+                type: "name",
+              },
+              features: [],
+              type: "FeatureCollection",
+            },
+            props: {},
+            type: "GeoJSON",
+          },
+        },
+        type: "VectorLayer",
+      },
+      legend: "default",
+      omittedPopupAttributes: {
+        "Some Plugin Layer": ["omitted"],
+      },
+      queryable: false,
+    });
+  });
+
+  test("fetchPluginDefaults sets configuration without data returned", async () => {
+    const handleModalClose = jest.fn();
+    const addMapLayer = jest.fn();
+    const layerInfo = {
+      layerProps: { name: "Plugin Layer" },
+      sourceProps: {
+        type: "Stream Gauges (Dynamic)",
+        source: "custom_layer_test",
+        args: {},
+        props: {},
+      },
+    };
+
+    server.use(
+      rest.get(
+        "http://api.test/apps/tethysdash/visualizations/get/",
+        (req, res, ctx) => {
+          return res(
+            ctx.status(200),
+            ctx.json({
+              success: true,
+            }),
+            ctx.set("Content-Type", "application/json"),
+          );
+        },
+      ),
+    );
+
+    render(
+      <TestingComponent
+        showModal={true}
+        handleModalClose={handleModalClose}
+        addMapLayer={addMapLayer}
+        layerInfo={layerInfo}
+        dynamicMapLayers={[
+          {
+            label: "Dynamic Map Layers",
+            options: [
+              {
+                source: "custom_layer_test",
+                value: "Stream Gauges (Dynamic)",
+                label: "Stream Gauges (Dynamic)",
+                args: {},
+                type: "map_layer",
+                tags: ["hydrology", "gauges", "live"],
+                attribution: "",
+                description:
+                  "Live stream gauge locations, color-coded by current flow.",
+                loading_icon: true,
+                restricted: false,
+                dynamic_map_layer: true,
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    const fetchPluginDefaultsButton = await screen.findByLabelText(
+      "Fetch plugin defaults",
+    );
+    fireEvent.click(fetchPluginDefaultsButton);
+
+    expect(await screen.findByText(/Fetching/)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Fetching/)).not.toBeInTheDocument();
+    });
+
+    const createLayerButton = await screen.findByLabelText(
+      "Create Layer Button",
+    );
+    fireEvent.click(createLayerButton);
+
+    await waitFor(() => {
+      expect(addMapLayer).toHaveBeenCalledTimes(1);
+    });
+
+    expect(addMapLayer).toHaveBeenLastCalledWith({
+      configuration: {
+        props: {
+          layerId: 12345678,
+          name: "Plugin Layer",
+          pluginSource: {
+            args: {},
+            source: "custom_layer_test",
+          },
+          source: {
+            geojson: {
+              crs: {
+                properties: {
+                  name: "EPSG:4326",
+                },
+                type: "name",
+              },
+              features: [],
+              type: "FeatureCollection",
+            },
+            props: {},
+            type: "GeoJSON",
+          },
+        },
+        type: "VectorLayer",
+      },
+    });
+  });
+
+  test("fetchPluginDefaults; API call not successful", async () => {
+    const handleModalClose = jest.fn();
+    const addMapLayer = jest.fn();
+    const layerInfo = {
+      layerProps: { name: "Plugin Layer" },
+      sourceProps: {
+        type: "Stream Gauges (Dynamic)",
+        source: "custom_layer_test",
+        args: {},
+        props: {},
+      },
+    };
+
+    server.use(
+      rest.get(
+        "http://api.test/apps/tethysdash/visualizations/get/",
+        (req, res, ctx) => {
+          return res(
+            ctx.status(200),
+            ctx.json({
+              success: false,
+            }),
+            ctx.set("Content-Type", "application/json"),
+          );
+        },
+      ),
+    );
+
+    render(
+      <TestingComponent
+        showModal={true}
+        handleModalClose={handleModalClose}
+        addMapLayer={addMapLayer}
+        layerInfo={layerInfo}
+        dynamicMapLayers={[
+          {
+            label: "Dynamic Map Layers",
+            options: [
+              {
+                source: "custom_layer_test",
+                value: "Stream Gauges (Dynamic)",
+                label: "Stream Gauges (Dynamic)",
+                args: {},
+                type: "map_layer",
+                tags: ["hydrology", "gauges", "live"],
+                attribution: "",
+                description:
+                  "Live stream gauge locations, color-coded by current flow.",
+                loading_icon: true,
+                restricted: false,
+                dynamic_map_layer: true,
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    const fetchPluginDefaultsButton = await screen.findByLabelText(
+      "Fetch plugin defaults",
+    );
+    fireEvent.click(fetchPluginDefaultsButton);
+
+    expect(await screen.findByText(/Fetching/)).toBeInTheDocument();
+
+    expect(
+      await screen.findByText(/Failed to fetch plugin defaults. Check logs./),
+    ).toBeInTheDocument();
+  });
+
+  test("fetchPluginDefaults; API call not successful with message", async () => {
+    const handleModalClose = jest.fn();
+    const addMapLayer = jest.fn();
+    const layerInfo = {
+      layerProps: { name: "Plugin Layer" },
+      sourceProps: {
+        type: "Stream Gauges (Dynamic)",
+        source: "custom_layer_test",
+        args: {},
+        props: {},
+      },
+    };
+
+    server.use(
+      rest.get(
+        "http://api.test/apps/tethysdash/visualizations/get/",
+        (req, res, ctx) => {
+          return res(
+            ctx.status(200),
+            ctx.json({
+              success: false,
+              data: {
+                error: "Something went wrong",
+              },
+            }),
+            ctx.set("Content-Type", "application/json"),
+          );
+        },
+      ),
+    );
+
+    render(
+      <TestingComponent
+        showModal={true}
+        handleModalClose={handleModalClose}
+        addMapLayer={addMapLayer}
+        layerInfo={layerInfo}
+        dynamicMapLayers={[
+          {
+            label: "Dynamic Map Layers",
+            options: [
+              {
+                source: "custom_layer_test",
+                value: "Stream Gauges (Dynamic)",
+                label: "Stream Gauges (Dynamic)",
+                args: {},
+                type: "map_layer",
+                tags: ["hydrology", "gauges", "live"],
+                attribution: "",
+                description:
+                  "Live stream gauge locations, color-coded by current flow.",
+                loading_icon: true,
+                restricted: false,
+                dynamic_map_layer: true,
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    const fetchPluginDefaultsButton = await screen.findByLabelText(
+      "Fetch plugin defaults",
+    );
+    fireEvent.click(fetchPluginDefaultsButton);
+
+    expect(await screen.findByText(/Fetching/)).toBeInTheDocument();
+
+    expect(await screen.findByText(/Something went wrong/)).toBeInTheDocument();
+  });
+
+  test("fetchPluginDefaults; API call fails", async () => {
+    const handleModalClose = jest.fn();
+    const addMapLayer = jest.fn();
+    const layerInfo = {
+      layerProps: { name: "Plugin Layer" },
+      sourceProps: {
+        type: "Stream Gauges (Dynamic)",
+        source: "custom_layer_test",
+        args: {},
+        props: {},
+      },
+    };
+
+    const spy = jest
+      .spyOn(appAPI, "getVisualizationData")
+      .mockRejectedValueOnce(new Error());
+
+    render(
+      <TestingComponent
+        showModal={true}
+        handleModalClose={handleModalClose}
+        addMapLayer={addMapLayer}
+        layerInfo={layerInfo}
+        dynamicMapLayers={[
+          {
+            label: "Dynamic Map Layers",
+            options: [
+              {
+                source: "custom_layer_test",
+                value: "Stream Gauges (Dynamic)",
+                label: "Stream Gauges (Dynamic)",
+                args: {},
+                type: "map_layer",
+                tags: ["hydrology", "gauges", "live"],
+                attribution: "",
+                description:
+                  "Live stream gauge locations, color-coded by current flow.",
+                loading_icon: true,
+                restricted: false,
+                dynamic_map_layer: true,
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    const fetchPluginDefaultsButton = await screen.findByLabelText(
+      "Fetch plugin defaults",
+    );
+    fireEvent.click(fetchPluginDefaultsButton);
+
+    expect(await screen.findByText(/Fetching/)).toBeInTheDocument();
+
+    expect(
+      await screen.findByText(/Failed to fetch plugin defaults./),
+    ).toBeInTheDocument();
+
+    spy.mockRestore();
+  });
+
+  test("fetchPluginDefaults; API call fails with message", async () => {
+    const handleModalClose = jest.fn();
+    const addMapLayer = jest.fn();
+    const layerInfo = {
+      layerProps: { name: "Plugin Layer" },
+      sourceProps: {
+        type: "Stream Gauges (Dynamic)",
+        source: "custom_layer_test",
+        args: {},
+        props: {},
+      },
+    };
+
+    const spy = jest
+      .spyOn(appAPI, "getVisualizationData")
+      .mockRejectedValueOnce(new Error("Some error occurred"));
+
+    render(
+      <TestingComponent
+        showModal={true}
+        handleModalClose={handleModalClose}
+        addMapLayer={addMapLayer}
+        layerInfo={layerInfo}
+        dynamicMapLayers={[
+          {
+            label: "Dynamic Map Layers",
+            options: [
+              {
+                source: "custom_layer_test",
+                value: "Stream Gauges (Dynamic)",
+                label: "Stream Gauges (Dynamic)",
+                args: {},
+                type: "map_layer",
+                tags: ["hydrology", "gauges", "live"],
+                attribution: "",
+                description:
+                  "Live stream gauge locations, color-coded by current flow.",
+                loading_icon: true,
+                restricted: false,
+                dynamic_map_layer: true,
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    const fetchPluginDefaultsButton = await screen.findByLabelText(
+      "Fetch plugin defaults",
+    );
+    fireEvent.click(fetchPluginDefaultsButton);
+
+    expect(await screen.findByText(/Fetching/)).toBeInTheDocument();
+
+    expect(await screen.findByText(/Some error occurred/)).toBeInTheDocument();
+
+    spy.mockRestore();
+  });
+
+  test("fetchPluginDefaults filters source and pluginSource keys from scaffold layerProps", async () => {
+    // Covers MapLayer.js line 495 — the filter callback inside
+    // fetchPluginDefaults that strips `source` and `pluginSource` from the
+    // scaffold's configuration.props before they become layerProps. Other
+    // keys (opacity, name) pass through.
+    const handleModalClose = jest.fn();
+    const addMapLayer = jest.fn();
+    const layerInfo = {
+      layerProps: { name: "Plugin Layer" },
+      sourceProps: {
+        type: "Stream Gauges (Dynamic)",
+        source: "custom_layer_test",
+        args: {},
+        props: {},
+      },
+    };
+
+    server.use(
+      rest.get(
+        "http://api.test/apps/tethysdash/visualizations/get/",
+        (req, res, ctx) => {
+          return res(
+            ctx.status(200),
+            ctx.json({
+              success: true,
+              data: {
+                configuration: {
+                  props: {
+                    name: "Scaffold Name",
+                    opacity: 0.7,
+                    source: { type: "GeoJSON", props: {} },
+                    pluginSource: {
+                      source: "custom_layer_test",
+                      args: {},
+                    },
+                  },
+                },
+              },
+            }),
+            ctx.set("Content-Type", "application/json"),
+          );
+        },
+      ),
+    );
+
+    render(
+      <TestingComponent
+        showModal={true}
+        handleModalClose={handleModalClose}
+        addMapLayer={addMapLayer}
+        layerInfo={layerInfo}
+        dynamicMapLayers={[
+          {
+            label: "Dynamic Map Layers",
+            options: [
+              {
+                source: "custom_layer_test",
+                value: "Stream Gauges (Dynamic)",
+                label: "Stream Gauges (Dynamic)",
+                args: {},
+                type: "map_layer",
+                tags: ["hydrology", "gauges", "live"],
+                attribution: "",
+                description:
+                  "Live stream gauge locations, color-coded by current flow.",
+                loading_icon: true,
+                restricted: false,
+                dynamic_map_layer: true,
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(await screen.findByLabelText("Fetch plugin defaults"));
+
+    // Wait for the scaffold to be applied: opacity 0.7 propagates into
+    // layerProps and renders in the Layer pane's property table. This proves
+    // the filter at line 495 has run and setLayerProps has flushed before we
+    // click Save.
+    fireEvent.click(screen.getByText("Layer"));
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("0.7")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByLabelText("Create Layer Button"));
+
+    await waitFor(() => {
+      expect(addMapLayer).toHaveBeenCalledTimes(1);
+    });
+
+    const saved = addMapLayer.mock.calls[0][0];
+    // Non-source/non-pluginSource scaffold prop survived the filter.
+    expect(saved.configuration.props.opacity).toBe(0.7);
+    // User-set name is preserved over the scaffold's "Scaffold Name".
+    expect(saved.configuration.props.name).toBe("Plugin Layer");
+    // saveLayer's runtime branch overwrites source with the placeholder
+    // GeoJSON FC — proving the scaffold's source object never bled into
+    // layerProps and then back out via the spread.
+    expect(saved.configuration.props.source.type).toBe("GeoJSON");
+    expect(saved.configuration.props.source.geojson.features).toEqual([]);
+    // pluginSource is rebuilt from sourceProps, not the scaffold's value.
+    expect(saved.configuration.props.pluginSource).toEqual({
+      source: "custom_layer_test",
+      args: {},
+    });
+  });
+});
+
+describe("rekeyAttributeMapToLayer", () => {
+  test("rekeys attribute map keys to match layer name", () => {
+    const attributeMap = {
+      "Old Layer Name": { attributes: ["attr1", "attr2"] },
+    };
+    const layerName = "New Layer Name";
+    const rekeyedMap = rekeyAttributeMapToLayer(attributeMap, layerName);
+    expect(rekeyedMap).toEqual({
+      "New Layer Name": { attributes: ["attr1", "attr2"] },
+    });
+  });
+
+  test("returns empty object if original map is empty", () => {
+    const attributeMap = {};
+    const layerName = "Any Layer Name";
+    const rekeyedMap = rekeyAttributeMapToLayer(attributeMap, layerName);
+    expect(rekeyedMap).toEqual({});
+  });
+
+  test("returns original map if no map is provided", () => {
+    const layerName = "Nonexistent Layer Name";
+    const rekeyedMap = rekeyAttributeMapToLayer(null, layerName);
+    expect(rekeyedMap).toEqual(null);
+  });
+
+  test("returns original map if map is string instead of object", () => {
+    const attributeMap = "This is not an object";
+    const layerName = "Any Layer Name";
+    const rekeyedMap = rekeyAttributeMapToLayer(attributeMap, layerName);
+    expect(rekeyedMap).toEqual("This is not an object");
+  });
+
+  test("returns original map if target layer name is not provided", () => {
+    const attributeMap = {
+      "Old Layer Name": { attributes: ["attr1", "attr2"] },
+    };
+    const rekeyedMap = rekeyAttributeMapToLayer(attributeMap, null);
+    expect(rekeyedMap).toEqual({
+      "Old Layer Name": { attributes: ["attr1", "attr2"] },
+    });
+  });
+});
+
+describe("renameLayerInAttributeProps", () => {
+  test("renames layer key in attributeProps", () => {
+    const attributeProps = {
+      variables: {
+        "Old Layer Name": {
+          gauge_id: "Selected Gauge",
+        },
+      },
+      omitted: {
+        "Old Layer Name": ["_internal_id"],
+      },
+      aliases: {
+        "Old Layer Name": {
+          flow_cfs: "Flow (cfs)",
+        },
+      },
+      queryable: true,
+    };
+    const oldName = "Old Layer Name";
+    const newName = "New Layer Name";
+    const renamedProps = renameLayerInAttributeProps(
+      attributeProps,
+      oldName,
+      newName,
+    );
+    expect(renamedProps).toEqual({
+      variables: {
+        "New Layer Name": {
+          gauge_id: "Selected Gauge",
+        },
+      },
+      omitted: {
+        "New Layer Name": ["_internal_id"],
+      },
+      aliases: {
+        "New Layer Name": {
+          flow_cfs: "Flow (cfs)",
+        },
+      },
+      queryable: true,
+    });
+  });
+
+  test("returns original props if old layer name is not found", () => {
+    const attributeProps = {
+      variables: {
+        "Old Layer Name": {
+          gauge_id: "Selected Gauge",
+        },
+      },
+      omitted: {
+        "Old Layer Name": ["_internal_id"],
+      },
+      aliases: {
+        "Old Layer Name": {
+          flow_cfs: "Flow (cfs)",
+        },
+      },
+      queryable: true,
+    };
+    const oldName = "Nonexistent Layer Name";
+    const newName = "New Layer Name";
+    const renamedProps = renameLayerInAttributeProps(
+      attributeProps,
+      oldName,
+      newName,
+    );
+    expect(renamedProps).toEqual(attributeProps);
+  });
+
+  test("returns original props if oldName or newName is not provided", () => {
+    const attributeProps = {
+      variables: {
+        "Old Layer Name": {
+          gauge_id: "Selected Gauge",
+        },
+      },
+      omitted: {
+        "Old Layer Name": ["_internal_id"],
+      },
+      aliases: {
+        "Old Layer Name": {
+          flow_cfs: "Flow (cfs)",
+        },
+      },
+      queryable: true,
+    };
+    const renamedProps1 = renameLayerInAttributeProps(
+      attributeProps,
+      null,
+      "New Layer Name",
+    );
+    const renamedProps2 = renameLayerInAttributeProps(
+      attributeProps,
+      "Old Layer Name",
+      null,
+    );
+    expect(renamedProps1).toEqual(attributeProps);
+    expect(renamedProps2).toEqual(attributeProps);
+  });
+
+  test("returns original props if the new name is the same as the old name", () => {
+    const attributeProps = {
+      variables: {
+        "Layer Name": {
+          gauge_id: "Selected Gauge",
+        },
+      },
+      omitted: {
+        "Layer Name": ["_internal_id"],
+      },
+      aliases: {
+        "Layer Name": {
+          flow_cfs: "Flow (cfs)",
+        },
+      },
+      queryable: true,
+    };
+    const renamedProps = renameLayerInAttributeProps(
+      attributeProps,
+      "Layer Name",
+      "Layer Name",
+    );
+    expect(renamedProps).toEqual(attributeProps);
+  });
+});
+
+describe("normalizeAttributePropsForLayer", () => {
+  test("returns normalized attributeProps for a given layer", () => {
+    const attributeProps = {
+      variables: {
+        "Layer Name": {
+          gauge_id: "Selected Gauge",
+        },
+      },
+      omitted: {
+        "Layer Name": ["_internal_id"],
+      },
+      aliases: {
+        "Layer Name": {
+          flow_cfs: "Flow (cfs)",
+        },
+      },
+      queryable: true,
+    };
+    const layerName = "New Layer Name";
+    const normalizedProps = normalizeAttributePropsForLayer(
+      attributeProps,
+      layerName,
+    );
+    expect(normalizedProps).toEqual({
+      variables: {
+        "New Layer Name": {
+          gauge_id: "Selected Gauge",
+        },
+      },
+      omitted: {
+        "New Layer Name": ["_internal_id"],
+      },
+      aliases: {
+        "New Layer Name": {
+          flow_cfs: "Flow (cfs)",
+        },
+      },
+      queryable: true,
+    });
+  });
+
+  test("returns original props if the target layer name is not provided", () => {
+    const attributeProps = {
+      variables: {
+        "Layer Name": {
+          gauge_id: "Selected Gauge",
+        },
+      },
+      omitted: {
+        "Layer Name": ["_internal_id"],
+      },
+      aliases: {
+        "Layer Name": {
+          flow_cfs: "Flow (cfs)",
+        },
+      },
+      queryable: true,
+    };
+    const normalizedProps = normalizeAttributePropsForLayer(
+      attributeProps,
+      null,
+    );
+    expect(normalizedProps).toEqual(attributeProps);
+  });
+});
 
 describe("getLayerType", () => {
   test("GeoTIFF short-circuits to WebGLTile before substring checks", () => {
@@ -2621,3 +3537,13 @@ describe("getLayerType", () => {
     expect(getLayerType("KML")).toBe("VectorLayer");
   });
 });
+
+TestingComponent.propTypes = {
+  showModal: PropTypes.bool,
+  handleModalClose: PropTypes.func,
+  addMapLayer: PropTypes.func,
+  layerInfo: PropTypes.object,
+  mapLayers: PropTypes.array,
+  existingLayerOriginalName: PropTypes.object,
+  dynamicMapLayers: PropTypes.array,
+};
