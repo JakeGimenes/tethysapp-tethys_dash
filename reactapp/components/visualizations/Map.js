@@ -17,6 +17,7 @@ import {
   configurationPropType,
   mapDrawingPropType,
   loadLayerJSONs,
+  resolveTablePopupType,
 } from "components/map/utilities";
 import PropTypes from "prop-types";
 import { COLOR_RAMPS } from "components/map/colorRamps";
@@ -239,6 +240,16 @@ const MapVisualization = ({
   const mapOmittedPopupAttributesRef = useRef({});
   const mapAttributeAliasesRef = useRef({});
   const mapContainerRef = useRef(null);
+  // Debounces pointermove-driven hover queries. The handler restarts a 250ms
+  // timer on every move so the actual query only fires once the cursor
+  // settles. Avoids hammering ESRI/WMS `identify` endpoints (1 request per
+  // pause vs. ~8/sec under a 120ms throttle) and prevents popup flicker from
+  // out-of-order in-flight responses.
+  const hoverDebounceRef = useRef(null);
+  // Tracks whether the currently visible overlay popup was opened by the
+  // hover handler. Only hover-opened popups should close-on-empty; a popup
+  // the user opened by clicking must survive cursor movement off-feature.
+  const hoverActiveRef = useRef(false);
   const {
     variableInputValues,
     variableInputDateFormats,
@@ -376,10 +387,23 @@ const MapVisualization = ({
         </OverlayContentWrapper>,
       );
 
-      // Highlight the first feature when the popup is created
+      // When the popup is created, run two side effects with different scopes:
+      //   - Highlight overlay: click-only. The highlight layer is created
+      //     lazily by onMapClick, so it may not exist on a hover-opened popup,
+      //     and re-highlighting as the cursor sweeps would be too aggressive.
+      //   - Variable input updates: fire for both click AND hover popups so
+      //     dashboards built around hover (e.g., "hover a gauge to drive
+      //     the chart below") can wire other widgets to the hovered feature.
+      //     The hover query is already debounced to ~1 update per cursor
+      //     pause, so downstream re-fetches are bounded.
       if (popupContent && popupContent.length > 0) {
         const selectedFeature = popupContent[0];
-        addHighlightFeatures(highlightLayer.current, selectedFeature.geometry);
+        if (!hoverActiveRef.current && highlightLayer.current) {
+          addHighlightFeatures(
+            highlightLayer.current,
+            selectedFeature.geometry,
+          );
+        }
         updateVariableInputsForFeature(selectedFeature);
       }
     }
@@ -475,11 +499,24 @@ const MapVisualization = ({
   }, [layers, baseMap]);
 
   const onSwipe = (swiper) => {
-    const selectedFeature = popupContent[swiper.activeIndex];
+    const selectedFeature = popupContent?.[swiper.activeIndex];
+    // istanbul ignore next — defensive guard against a popupContent /
+    // Swiper desync. Unreachable in practice: when popupContent goes to
+    // null the Popup unmounts (taking Swiper with it), and Swiper enforces
+    // that activeIndex stays in bounds of the rendered slides. Same
+    // istanbul-ignore convention is used on the catch block below.
+    if (!selectedFeature) return;
 
-    // Update highlights to only show the currently visible feature
-    highlightLayer.current.getSource().clear();
-    addHighlightFeatures(highlightLayer.current, selectedFeature.geometry);
+    // Highlight overlay is click-only: hover-opened popups never created
+    // the highlight layer, so guard the highlight ops separately from the
+    // variable update. (Without the guard, navigating the swiper inside a
+    // hover popup crashes on the undefined highlight layer.)
+    if (!hoverActiveRef.current && highlightLayer.current) {
+      highlightLayer.current.getSource().clear();
+      addHighlightFeatures(highlightLayer.current, selectedFeature.geometry);
+    }
+    // Variable inputs follow the popup regardless of how it opened — keeps
+    // swipe behavior consistent for hover-driven dashboards.
     updateVariableInputsForFeature(selectedFeature);
   };
 
@@ -532,6 +569,40 @@ const MapVisualization = ({
   const onMapClick = async (map, evt) => {
     // istanbul ignore next
     if (drawing.current || isProcessing) return;
+
+    // Compute the queryable layer set FIRST, before any side effects. If
+    // nothing is click-eligible (e.g., the map has only hover-tagged
+    // layers), bail entirely — no marker, no spinner, no popup state
+    // change. An open hover popup must survive a click that has no
+    // semantic meaning in a hover-driven configuration.
+    //
+    // Skip layers the user has hidden via the layer control. The OL layer
+    // is the source of truth for visibility because LayersControl mutates
+    // `olLayer.setVisible(...)` directly; the config-side `layers` array
+    // is not re-synced on toggle. If a config layer has no matching OL
+    // layer (e.g., not yet mounted) keep it queryable as a safe default.
+    const olLayerVisibility = new Map();
+    map
+      .getLayers()
+      .getArray()
+      .forEach((olLayer) => {
+        const name = olLayer.get("name");
+        if (name) olLayerVisibility.set(name, olLayer.getVisible());
+      });
+    // Include a layer for click queries when its modal popup is configured
+    // (the modal is always click-driven) OR its table popup is click-driven.
+    // Hover-triggered table layers are queried only by onMapHover, and a
+    // table-popup-type of "none" with no modal turns the layer off entirely.
+    const queryableLayers = layers.filter((item) => {
+      const tablePopupType = resolveTablePopupType(item);
+      const modalEnabled = item.popupConfig?.mode === "modal";
+      if (!modalEnabled && tablePopupType !== "click") return false;
+      const name = item.configuration?.props?.name;
+      if (!name || !olLayerVisibility.has(name)) return true;
+      return olLayerVisibility.get(name) === true;
+    });
+    if (queryableLayers.length === 0) return;
+
     setIsProcessing(true);
 
     const coordinate = evt.coordinate;
@@ -554,26 +625,6 @@ const MapVisualization = ({
     }
     markerLayer.current = newMarkerLayer;
     map.addLayer(newMarkerLayer);
-
-    // Skip layers the user has hidden via the layer control. The OL layer
-    // is the source of truth for visibility because LayersControl mutates
-    // `olLayer.setVisible(...)` directly; the config-side `layers` array
-    // is not re-synced on toggle. If a config layer has no matching OL
-    // layer (e.g., not yet mounted) keep it queryable as a safe default.
-    const olLayerVisibility = new Map();
-    map
-      .getLayers()
-      .getArray()
-      .forEach((olLayer) => {
-        const name = olLayer.get("name");
-        if (name) olLayerVisibility.set(name, olLayer.getVisible());
-      });
-    const queryableLayers = layers.filter((item) => {
-      if (item.queryable === false) return false;
-      const name = item.configuration?.props?.name;
-      if (!name || !olLayerVisibility.has(name)) return true;
-      return olLayerVisibility.get(name) === true;
-    });
 
     // reduce the layer attributes variables values into a simplified object of layer names and then values
     const mapAttributeAliases = queryableLayers.reduce((combined, current) => {
@@ -672,8 +723,7 @@ const MapVisualization = ({
         .flat();
 
       const modalModeFeatures = nonEmptyLayers.filter(
-        (feature) =>
-          feature?.__wrapperLayer?.popupConfig?.mode === "modal",
+        (feature) => feature?.__wrapperLayer?.popupConfig?.mode === "modal",
       );
 
       if (modalModeFeatures.length > 0 && !extentDrawMode) {
@@ -681,7 +731,15 @@ const MapVisualization = ({
         setModalOpen(true);
       }
 
-      const nonEmptyLayerAttributes = nonEmptyLayers.filter((item) => {
+      // The click-handler queries layers whose modal is configured even when
+      // their table popup type is "none". Those modal-only features must NOT
+      // populate the table overlay — restrict overlay content to features
+      // whose layer is click-driven for its table popup.
+      const tableOverlayFeatures = nonEmptyLayers.filter(
+        (feature) => resolveTablePopupType(feature?.__wrapperLayer) === "click",
+      );
+
+      const nonEmptyLayerAttributes = tableOverlayFeatures.filter((item) => {
         if (!item.attributes || Object.keys(item.attributes).length === 0) {
           return false;
         }
@@ -693,18 +751,165 @@ const MapVisualization = ({
         );
       });
 
-      newPopupContent = nonEmptyLayers;
-      // no features found at the location, show "No Attributes Found" in the popup
-      if (nonEmptyLayers.length === 0) {
+      newPopupContent = tableOverlayFeatures;
+      if (tableOverlayFeatures.length === 0 && nonEmptyLayers.length === 0) {
+        // No click-eligible features at this location. If a hover popup is
+        // currently open, the user is mid-interaction with it — replacing
+        // it with an empty "No Attributes Found" overlay would be hostile.
+        // Bail without touching popup state or hoverActiveRef; the marker
+        // already added is the click-registered feedback.
+        if (hoverActiveRef.current) return;
+        // Otherwise anchor the empty popup at the cursor so the user still
+        // sees "No Attributes Found".
         popupCoordinate = coordinate;
         newPopupContent = null;
-        // if any valid attributes, show them in popup and set the coordinate to the first feature with attributes
+      } else if (tableOverlayFeatures.length === 0) {
+        // Features exist but only for modal-only layers (table popup type
+        // "none"). Suppress the table overlay so the modal opens alone.
+        newPopupContent = null;
       } else if (nonEmptyLayerAttributes.length > 0) {
+        // At least one click-driven layer has visible attributes — anchor
+        // the overlay at the cursor.
         popupCoordinate = coordinate;
       }
     }
+    // The click handler is now the authoritative owner of the popup; if the
+    // hover handler later fires over empty space, it must not close this
+    // click-opened popup.
+    hoverActiveRef.current = false;
+
     setPopupContent(newPopupContent);
     popupOverlayRef.current?.setPosition(popupCoordinate);
+  };
+
+  const HOVER_DEBOUNCE_MS = 250;
+
+  const runHoverQuery = async (map, coordinate, pixel) => {
+    const olLayerVisibility = new Map();
+    map
+      .getLayers()
+      .getArray()
+      .forEach((olLayer) => {
+        const name = olLayer.get("name");
+        if (name) olLayerVisibility.set(name, olLayer.getVisible());
+      });
+
+    // Hover only handles layers whose table popup type is "hover", regardless
+    // of whether their modal is configured. Modal popups never open on hover.
+    const hoverLayers = layers.filter((item) => {
+      if (resolveTablePopupType(item) !== "hover") return false;
+      const name = item.configuration?.props?.name;
+      if (!name || !olLayerVisibility.has(name)) return true;
+      return olLayerVisibility.get(name) === true;
+    });
+    if (hoverLayers.length === 0) return;
+
+    // Refresh the alias / variable / omitted-attribute refs from the
+    // hover-eligible layer set so popup formatting honors per-layer overrides.
+    mapAttributeAliasesRef.current = hoverLayers.reduce((combined, current) => {
+      if (
+        current.attributeAliases &&
+        typeof current.attributeAliases === "object"
+      ) {
+        Object.assign(combined, current.attributeAliases);
+      }
+      return combined;
+    }, {});
+    mapAttributeVariablesRef.current = hoverLayers.reduce(
+      (combined, current) => {
+        if (
+          current.attributeVariables &&
+          typeof current.attributeVariables === "object"
+        ) {
+          Object.assign(combined, current.attributeVariables);
+        }
+        return combined;
+      },
+      {},
+    );
+    mapOmittedPopupAttributesRef.current = hoverLayers.reduce(
+      (combined, current) => {
+        if (
+          current.omittedPopupAttributes &&
+          typeof current.omittedPopupAttributes === "object"
+        ) {
+          Object.assign(combined, current.omittedPopupAttributes);
+        }
+        return combined;
+      },
+      {},
+    );
+
+    const queryCalls = hoverLayers.map(async (layer) => {
+      try {
+        const features = await queryLayerFeatures(
+          layer,
+          map,
+          coordinate,
+          pixel,
+        );
+        if (!Array.isArray(features)) return features;
+        return features.map((feature) =>
+          feature && typeof feature === "object"
+            ? { ...feature, __wrapperLayer: layer }
+            : feature,
+        );
+      } catch (error) {
+        // istanbul ignore next
+        return [];
+      }
+    });
+    const results = await Promise.all(queryCalls);
+
+    const nonEmpty = results
+      .filter((arr) => Array.isArray(arr) && arr.length > 0)
+      .flat();
+
+    if (nonEmpty.length > 0) {
+      setPopupContent(nonEmpty);
+      popupOverlayRef.current?.setPosition(coordinate);
+      hoverActiveRef.current = true;
+    } else if (hoverActiveRef.current) {
+      // Only close popups the hover handler itself opened. Click-opened
+      // popups stay put until the user clicks again.
+      setPopupContent(null);
+      popupOverlayRef.current?.setPosition(undefined);
+      hoverActiveRef.current = false;
+    }
+  };
+
+  const onMapHover = (map, evt) => {
+    // istanbul ignore next
+    if (drawing.current) return;
+
+    // If the cursor is over the popup itself, ignore the event entirely.
+    // pointermove still fires from OL when the cursor sits on the overlay's
+    // DOM element, but the map coordinate underneath is whatever empty map
+    // is BEHIND the popup — debouncing it would trigger a close-on-empty
+    // and dismiss the popup the moment the user tries to interact with it.
+    // Also cancel any pending debounce so it doesn't fire mid-interaction.
+    const popupEl = popupContainerRef.current;
+    const target = evt.originalEvent?.target;
+    if (popupEl && target && popupEl.contains(target)) {
+      if (hoverDebounceRef.current) {
+        clearTimeout(hoverDebounceRef.current);
+        hoverDebounceRef.current = null;
+      }
+      return;
+    }
+
+    // Debounce: restart the timer on every move so the query only fires once
+    // the cursor settles for HOVER_DEBOUNCE_MS. Capture coordinate/pixel by
+    // value so the deferred call uses the LAST cursor position, not stale.
+    if (hoverDebounceRef.current) {
+      clearTimeout(hoverDebounceRef.current);
+    }
+    const coordinate = evt.coordinate;
+    const pixel = evt.pixel;
+    hoverDebounceRef.current = setTimeout(() => {
+      hoverDebounceRef.current = null;
+      runHoverQuery(map, coordinate, pixel);
+    }, HOVER_DEBOUNCE_MS);
   };
 
   useEffect(() => {
@@ -733,9 +938,7 @@ const MapVisualization = ({
     if (!captured) return null;
     const name = captured.configuration?.props?.name;
     if (name && Array.isArray(layers)) {
-      const fresh = layers.find(
-        (l) => l?.configuration?.props?.name === name,
-      );
+      const fresh = layers.find((l) => l?.configuration?.props?.name === name);
       if (fresh) return fresh;
     }
     return captured;
@@ -778,6 +981,7 @@ const MapVisualization = ({
         mapDrawing={mapDrawing}
         drawing={drawing}
         onMapClick={inDataViewerMode ? () => {} : onMapClick}
+        onMapHover={inDataViewerMode ? () => {} : onMapHover}
         visualizationRef={visualizationRef}
         data-testid="backlayer-map"
         dataviewerViz={dataviewerViz}
