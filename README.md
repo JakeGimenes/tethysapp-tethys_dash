@@ -105,6 +105,16 @@ Webpack is configured to bundle and build the React app into the `tethysapp/<app
 npm run build
 ```
 
+### Serving the built frontend in development
+
+The production build emits content-hashed filenames (e.g. `main.<hash>.js`) and a `manifest.json` mapping logical names to the hashed files. When `DEBUG=True`, the Tethys server normally references the unhashed `main.js` served from memory by the webpack dev server. If you want to serve the *built* bundle directly from the Tethys server (e.g. at `localhost:8000`) without running the webpack dev server or disabling `DEBUG`, set the `TETHYSDASH_SERVE_BUILT_FRONTEND` environment variable when starting the server:
+
+```
+TETHYSDASH_SERVE_BUILT_FRONTEND=true tethys manage start
+```
+
+The variable must be set in the shell that launches the server so the `runserver` child process inherits it. With it set, the page loads the hashed bundle from `manifest.json`; without it, behavior is unchanged.
+
 ## Frontend Test
 
 Use the following commands to lint and test the React portion of the app.

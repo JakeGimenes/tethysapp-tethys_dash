@@ -2507,3 +2507,11 @@ def test_get_main_bundle_path_manifest_not_found():
 def test_get_main_bundle_path_manifest_invalid_json():
     with patch("builtins.open", mock_open(read_data="not json")):
         assert _get_main_bundle_path() == "frontend/main.js"
+
+
+@override_settings(DEBUG=True)
+def test_get_main_bundle_path_debug_serve_built_override():
+    manifest = json.dumps({"main.js": "main.abc123.js"})
+    with patch.dict(os.environ, {"TETHYSDASH_SERVE_BUILT_FRONTEND": "true"}):
+        with patch("builtins.open", mock_open(read_data=manifest)):
+            assert _get_main_bundle_path() == "frontend/main.abc123.js"

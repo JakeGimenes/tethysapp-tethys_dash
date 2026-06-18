@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tethysdash"
-version = "0.19.14"
+version = "0.19.15"
 description = "A Tethys App for no code/low code web application development app"
 authors = [{ name = "Corey Krewson", email = "ckrewson@aquaveo.com" }]
 license-files = ["LICENSE"]
@@ -73,6 +73,10 @@ local_scheme = "no-local-version"
     "*.geojson",
     "*.svg",
 ]
+
+[tool.setuptools.exclude-package-data]
+# Local runtime data under public/data is not part of the distribution.
+"*" = ["public/data/*", "public/data/**/*"]
 
 # Optional: for compatibility with pytest if you run tests with `pytest`
 [tool.pytest.ini_options]

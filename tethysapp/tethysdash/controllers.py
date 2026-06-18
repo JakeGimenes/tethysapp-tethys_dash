@@ -71,14 +71,23 @@ def _get_main_bundle_path():
     The production webpack build emits ``main.<contenthash>.js`` and a
     ``manifest.json`` mapping logical names to hashed filenames. In dev
     (``DEBUG=True``) webpack-dev-server serves an unhashed ``main.js`` from
-    memory, so we always reference that name and ignore any stale manifest
+    memory, so we normally reference that name and ignore any stale manifest
     left over from a prior production build.
+
+    Set the ``TETHYSDASH_SERVE_BUILT_FRONTEND`` env var (``1``/``true``/``yes``)
+    to serve the on-disk hashed bundle from ``manifest.json`` even when
+    ``DEBUG=True``. This lets the built frontend be served straight from Django
+    (e.g. at ``localhost:8000``) without running webpack-dev-server or disabling
+    DEBUG.
 
     Returns:
         str: Relative path like ``"frontend/main.abc123.js"`` for use with
         Tethys' ``public`` template filter.
     """
-    if settings.DEBUG:
+    serve_built = os.environ.get(
+        "TETHYSDASH_SERVE_BUILT_FRONTEND", ""
+    ).lower() in ("1", "true", "yes")
+    if settings.DEBUG and not serve_built:
         return "frontend/main.js"
     try:
         with open(_MANIFEST_PATH) as f:
