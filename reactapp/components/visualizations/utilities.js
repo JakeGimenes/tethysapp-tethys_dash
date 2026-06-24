@@ -7,6 +7,47 @@ import {
 } from "components/inputs/dateUtils";
 import { format } from "date-fns";
 
+// In-memory cache of resolved image-visualization results, keyed by the
+// request (source + resolved args). Image plugins are deterministic for a
+// given args set, so a slider scrubbing back over already-fetched values — or
+// a play-loop wrapping around — can reuse the prior result instead of
+// re-hitting the backend, mirroring how a browser caches by request URL.
+// Only `image`-type responses are stored; every other viz type still fetches
+// fresh. Values are short URL strings, so a generous entry cap is cheap.
+export const IMAGE_VIZ_CACHE_LIMIT = 2000;
+const imageVizCache = new Map();
+
+// Exported for unit tests of the null-coalescing branches; production code
+// reaches the cache only through getVisualization.
+export function buildImageVizCacheKey({ source, args }) {
+  return JSON.stringify({ s: source ?? null, a: args ?? null });
+}
+
+// Exported for unit tests of the LRU read/evict logic; not part of the runtime
+// API (production code reaches the cache only through getVisualization).
+export function getCachedImageViz(key) {
+  if (!imageVizCache.has(key)) return undefined;
+  // Refresh recency so the LRU eviction below keeps hot frames.
+  const value = imageVizCache.get(key);
+  imageVizCache.delete(key);
+  imageVizCache.set(key, value);
+  return value;
+}
+
+export function setCachedImageViz(key, value) {
+  if (imageVizCache.has(key)) imageVizCache.delete(key);
+  imageVizCache.set(key, value);
+  if (imageVizCache.size > IMAGE_VIZ_CACHE_LIMIT) {
+    const oldest = imageVizCache.keys().next().value;
+    imageVizCache.delete(oldest);
+  }
+}
+
+/** Clears the image-visualization cache (used for test isolation). */
+export function clearImageVizCache() {
+  imageVizCache.clear();
+}
+
 /**
  * Returns an array of warning messages when any variable inputs referenced by a
  * visualization's args have no value, or null if all inputs are populated.
@@ -108,6 +149,7 @@ export async function getVisualization({
   vizLoadingIcon = true,
   variableInputDateFormats = {},
   variableInputSliderMeta = {},
+  refresh = false,
 }) {
   const metadata = JSON.parse(metadataString);
   const emptyVariableWarnings = checkForEmptyVariableInputs({
@@ -192,10 +234,6 @@ export async function getVisualization({
     return;
   }
 
-  if (vizLoadingIcon && sourceType !== "map") {
-    setVizType("loader");
-  }
-
   itemData.args = updateObjectWithVariableInputs({
     args: JSON.parse(argsString),
     variableInputs: variableInputValues,
@@ -203,6 +241,28 @@ export async function getVisualization({
     sourceArgs,
     returnDatesAsLocalISO: true,
   });
+
+  // Serve a previously-resolved image straight from cache (skipping both the
+  // backend round-trip and the loader flash). Only image responses are ever
+  // stored, so a hit is guaranteed to be an image. `refresh` (manual
+  // refresh/retry) bypasses the cache and repopulates it below.
+  const imageCacheKey = buildImageVizCacheKey(itemData);
+  if (!refresh) {
+    const cachedImage = getCachedImageViz(imageCacheKey);
+    if (cachedImage !== undefined) {
+      setVizType("image");
+      setVizData({
+        source: cachedImage,
+        alt: itemData.source,
+        imageError: metadata.customMessaging?.error,
+      });
+      return;
+    }
+  }
+
+  if (vizLoadingIcon && sourceType !== "map") {
+    setVizType("loader");
+  }
 
   const apiResponse = await appAPI.getVisualizationData(itemData);
   if (apiResponse.success === true) {
@@ -253,6 +313,7 @@ export async function getVisualization({
         alt: itemData.source,
         imageError: metadata.customMessaging?.error,
       });
+      setCachedImageViz(imageCacheKey, responseData);
     } else if (apiResponse.viz_type === "imageCollection") {
       setVizType("imageCollection");
       setVizData({
