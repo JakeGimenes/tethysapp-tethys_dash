@@ -4,6 +4,7 @@ import {
   parseDateMath,
   parseDate,
   convertDatesToLocalISO,
+  isPreset,
 } from "components/inputs/dateUtils";
 import { format } from "date-fns";
 
@@ -21,6 +22,31 @@ const imageVizCache = new Map();
 // reaches the cache only through getVisualization.
 export function buildImageVizCacheKey({ source, args }) {
   return JSON.stringify({ s: source ?? null, a: args ?? null });
+}
+
+// Preset sentinels ('latest') must re-resolve to the newest available resource
+// on every load. A viz whose resolved args contain one bypasses the image
+// cache entirely — otherwise the stable sentinel arg yields a stable cache key
+// and a stale image is served instead of re-fetching.
+function valueContainsPreset(value) {
+  if (isPreset(value)) return true;
+  if (Array.isArray(value)) return value.some(valueContainsPreset);
+  if (value && typeof value === "object") {
+    return Object.values(value).some(valueContainsPreset);
+  }
+  return false;
+}
+
+export function argsContainPreset(args, sourceArgs = {}) {
+  if (!args || typeof args !== "object") return false;
+  // Only date-typed args can legitimately hold a preset sentinel. Scoping to
+  // them avoids disabling the cache when an unrelated arg's value happens to
+  // equal "latest". date-range endpoints are nested, so recurse into values.
+  return Object.entries(args).some(([key, value]) => {
+    const argType = sourceArgs[key];
+    if (typeof argType !== "string" || !argType.includes("date")) return false;
+    return valueContainsPreset(value);
+  });
 }
 
 // Exported for unit tests of the LRU read/evict logic; not part of the runtime
@@ -247,7 +273,8 @@ export async function getVisualization({
   // stored, so a hit is guaranteed to be an image. `refresh` (manual
   // refresh/retry) bypasses the cache and repopulates it below.
   const imageCacheKey = buildImageVizCacheKey(itemData);
-  if (!refresh) {
+  const skipImageCache = argsContainPreset(itemData.args, sourceArgs);
+  if (!refresh && !skipImageCache) {
     const cachedImage = getCachedImageViz(imageCacheKey);
     if (cachedImage !== undefined) {
       setVizType("image");
@@ -313,7 +340,9 @@ export async function getVisualization({
         alt: itemData.source,
         imageError: metadata.customMessaging?.error,
       });
-      setCachedImageViz(imageCacheKey, responseData);
+      if (!skipImageCache) {
+        setCachedImageViz(imageCacheKey, responseData);
+      }
     } else if (apiResponse.viz_type === "imageCollection") {
       setVizType("imageCollection");
       setVizData({
@@ -415,6 +444,12 @@ export function updateObjectWithVariableInputs({
     )) {
       const dateFormat = variableInputDateFormats[variableInputKey];
       if (dateFormat) {
+        // Preset sentinels ('latest') are not dates — pass through verbatim so
+        // the literal string survives substitution to the plugin's run().
+        if (isPreset(variableInputValue)) {
+          variableInputsCopy[variableInputKey] = variableInputValue;
+          continue;
+        }
         const updatedValue = parseDateMath({
           value: variableInputValue,
           dateFormat: dateFormat,

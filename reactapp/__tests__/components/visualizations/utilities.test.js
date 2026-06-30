@@ -17,6 +17,7 @@ import {
   getCachedImageViz,
   setCachedImageViz,
   buildImageVizCacheKey,
+  argsContainPreset,
   IMAGE_VIZ_CACHE_LIMIT,
 } from "components/visualizations/utilities";
 import { server } from "__tests__/utilities/server";
@@ -354,6 +355,52 @@ test("getVisualization image caches result, skips repeat request, refresh bypass
   expect(type4.mock.calls[0][0]).toBe("loader");
 });
 
+test("getVisualization does not cache an image whose date arg is the 'latest' preset", async () => {
+  let requestCount = 0;
+  server.use(
+    rest.get(
+      "http://api.test/apps/tethysdash/visualizations/get/",
+      (req, res, ctx) => {
+        requestCount += 1;
+        return res(
+          ctx.status(200),
+          ctx.json({
+            success: true,
+            viz_type: "image",
+            data: "latest_path",
+          }),
+          ctx.set("Content-Type", "application/json"),
+        );
+      },
+    ),
+  );
+
+  const baseParams = (setVizType, setVizData) => ({
+    setVizType,
+    setVizData,
+    sourceType: "image",
+    sourceArgs: { DATETIME: "date" },
+    itemData: { source: "img_source" },
+    metadataString: "{}",
+    argsString: JSON.stringify({ DATETIME: "latest" }),
+    variableInputValues: {},
+  });
+
+  // First call hits the backend.
+  const type1 = jest.fn();
+  const data1 = jest.fn();
+  await getVisualization(baseParams(type1, data1));
+  expect(requestCount).toBe(1);
+
+  // Second identical call must NOT be served from cache — "latest" re-resolves,
+  // so the cache is neither read nor written for a sentinel-bearing date arg.
+  const type2 = jest.fn();
+  const data2 = jest.fn();
+  await getVisualization(baseParams(type2, data2));
+  expect(requestCount).toBe(2);
+  expect(type2.mock.calls.map((c) => c[0])).toEqual(["loader", "image"]);
+});
+
 test("buildImageVizCacheKey falls back to null for missing source/args", () => {
   // Both ?? null branches: nullish source and nullish args.
   expect(buildImageVizCacheKey({})).toBe(JSON.stringify({ s: null, a: null }));
@@ -361,6 +408,36 @@ test("buildImageVizCacheKey falls back to null for missing source/args", () => {
   expect(buildImageVizCacheKey({ source: "img", args: { hour: "05" } })).toBe(
     JSON.stringify({ s: "img", a: { hour: "05" } }),
   );
+});
+
+test("argsContainPreset detects a preset only in date-typed args", () => {
+  // Sentinel in a date-typed arg -> true.
+  expect(argsContainPreset({ DATETIME: "latest" }, { DATETIME: "date" })).toBe(
+    true,
+  );
+  // Sentinel in a NON-date arg -> false (no spurious cache-disable collision).
+  expect(argsContainPreset({ region: "latest" }, { region: "text" })).toBe(
+    false,
+  );
+  // Concrete date -> false.
+  expect(
+    argsContainPreset(
+      { DATETIME: "2026-06-29T00:00:00" },
+      { DATETIME: "date" },
+    ),
+  ).toBe(false);
+  // Nested date-range endpoint sentinel -> true; array values handled too.
+  expect(
+    argsContainPreset(
+      { range: { "Start Date": "latest", "End Date": "x" } },
+      { range: "date-range" },
+    ),
+  ).toBe(true);
+  expect(argsContainPreset({ d: ["latest"] }, { d: "date" })).toBe(true);
+  // Without sourceArgs nothing is known to be date-typed -> false.
+  expect(argsContainPreset({ DATETIME: "latest" })).toBe(false);
+  expect(argsContainPreset({})).toBe(false);
+  expect(argsContainPreset(null)).toBe(false);
 });
 
 test("image cache evicts the least-recently-used entry past the limit", () => {
@@ -1111,6 +1188,44 @@ describe("updateObjectWithVariableInputs date arg resolution", () => {
     });
     expect(result.d).toBe(convertDatesToLocalISO(parseDate("now-1D")));
     expect(result.d).not.toBe("now-1D");
+  });
+
+  it("passes a 'latest' preset sentinel through a date arg verbatim", () => {
+    const result = updateObjectWithVariableInputs({
+      args: { d: "latest" },
+      variableInputs: {},
+      variableInputDateFormats: {},
+      sourceArgs: { d: "date" },
+      returnDatesAsLocalISO: true,
+    });
+    expect(result.d).toBe("latest");
+  });
+
+  it("passes a 'latest' preset through a shared date variable input", () => {
+    // AE3: a date-typed variable input set to 'latest' substitutes the literal
+    // string into the connected arg rather than formatting it to null.
+    const result = updateObjectWithVariableInputs({
+      args: { d: "${Forecast Date}" },
+      variableInputs: { "Forecast Date": "latest" },
+      variableInputDateFormats: { "Forecast Date": "MM/dd/yyyy h:mm aa" },
+      sourceArgs: { d: "date" },
+      returnDatesAsLocalISO: true,
+    });
+    expect(result.d).toBe("latest");
+  });
+
+  it("passes a 'latest' sentinel through a date-range endpoint verbatim", () => {
+    const result = updateObjectWithVariableInputs({
+      args: { range: { "Start Date": "latest", "End Date": "now" } },
+      variableInputs: {},
+      variableInputDateFormats: {},
+      sourceArgs: { range: "date-range" },
+      returnDatesAsLocalISO: true,
+    });
+    expect(result.range["Start Date"]).toBe("latest");
+    expect(result.range["End Date"]).toBe(
+      convertDatesToLocalISO(parseDate("now")),
+    );
   });
 
   it("resolves both endpoints of a 'date-range' arg with relative values", () => {

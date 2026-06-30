@@ -390,3 +390,51 @@ test("DatePicker relative date in dataviewer mode", async () => {
     jest.useRealTimers();
   }
 });
+
+test("DatePicker keeps a sentinel value across a parent re-render", async () => {
+  const mockOnChange = jest.fn();
+
+  const { rerender } = render(
+    <DataViewerModeContext.Provider value={{ inDataViewerMode: false }}>
+      <DatePicker
+        label="Test DatePicker"
+        value="latest"
+        onChange={mockOnChange}
+      />
+    </DataViewerModeContext.Provider>,
+  );
+
+  expect(screen.getByRole("textbox").value).toBe("latest");
+
+  // A parent re-render must not let the value->rawInputValue effect clobber the
+  // sentinel back into a formatted/blank date.
+  rerender(
+    <DataViewerModeContext.Provider value={{ inDataViewerMode: false }}>
+      <DatePicker
+        label="Test DatePicker"
+        value="latest"
+        onChange={mockOnChange}
+      />
+    </DataViewerModeContext.Provider>,
+  );
+
+  expect(screen.getByRole("textbox").value).toBe("latest");
+});
+
+test("DatePicker passes a typed preset sentinel through verbatim", async () => {
+  const mockOnChange = jest.fn();
+
+  render(
+    <DataViewerModeContext.Provider value={{ inDataViewerMode: false }}>
+      <DatePicker label="Test DatePicker" value="" onChange={mockOnChange} />
+    </DataViewerModeContext.Provider>,
+  );
+
+  const input = screen.getByRole("textbox");
+  // Typing the sentinel (not via the chip) must hit the onRawChange preset
+  // branch and emit the literal string, not attempt to parse it as a date.
+  fireEvent.change(input, { target: { value: "latest" } });
+
+  expect(mockOnChange).toHaveBeenLastCalledWith("latest");
+  expect(input.value).toBe("latest");
+});
