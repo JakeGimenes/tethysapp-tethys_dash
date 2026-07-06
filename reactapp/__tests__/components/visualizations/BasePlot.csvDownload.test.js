@@ -1,0 +1,136 @@
+import {
+  buildCsvFromGraphDiv,
+  downloadCsvFromGraphDiv,
+} from "components/visualizations/BasePlot";
+
+jest.mock("plotly.js-strict-dist-min", () => ({
+  relayout: jest.fn(),
+  purge: jest.fn(),
+}));
+
+describe("buildCsvFromGraphDiv", () => {
+  it("serializes cartesian traces to a wide CSV keyed by x", () => {
+    const gd = {
+      data: [
+        { x: [1, 2], y: [10, 20], name: "A", type: "scatter" },
+        { x: [1, 2], y: [30, 40], name: "B", type: "scatter" },
+      ],
+    };
+    expect(buildCsvFromGraphDiv(gd)).toBe("x,A,B\n1,10,30\n2,20,40");
+  });
+
+  it("skips legend-hidden and non-visible traces", () => {
+    const gd = {
+      data: [
+        { x: [1], y: [10], name: "A", type: "scatter" },
+        { x: [1], y: [99], name: "B", type: "scatter", visible: "legendonly" },
+        { x: [1], y: [88], name: "C", type: "scatter", visible: false },
+      ],
+    };
+    expect(buildCsvFromGraphDiv(gd)).toBe("x,A\n1,10");
+  });
+
+  it("falls back to series_<i> when a trace has no name", () => {
+    const gd = { data: [{ x: [1], y: [5], type: "scatter" }] };
+    expect(buildCsvFromGraphDiv(gd)).toBe("x,series_0\n1,5");
+  });
+
+  it("serializes a plotly table trace from header/cells", () => {
+    const gd = {
+      data: [
+        {
+          type: "table",
+          header: { values: ["col1", "col2"] },
+          cells: {
+            values: [
+              ["a", "b"],
+              ["1", "2"],
+            ],
+          },
+        },
+      ],
+    };
+    expect(buildCsvFromGraphDiv(gd)).toBe("col1,col2\na,1\nb,2");
+  });
+
+  it("quotes values containing commas or quotes", () => {
+    const gd = {
+      data: [{ x: ["a,b", 'c"d'], y: [1, 2], name: "n", type: "scatter" }],
+    };
+    expect(buildCsvFromGraphDiv(gd)).toBe('x,n\n"a,b",1\n"c""d",2');
+  });
+
+  it("decodes plotly base64 typed-array (bdata) numeric columns", () => {
+    const b64 = (arr) => Buffer.from(arr.buffer).toString("base64");
+    const gd = {
+      data: [
+        {
+          x: ["2000-01-01", "2000-01-02"],
+          y: { dtype: "f8", bdata: b64(Float64Array.from([10, 20])) },
+          name: "A",
+          type: "scatter",
+        },
+        {
+          x: ["2000-01-01", "2000-01-02"],
+          y: { dtype: "f8", bdata: b64(Float64Array.from([30, 40])) },
+          name: "B",
+          type: "scatter",
+        },
+      ],
+    };
+    expect(buildCsvFromGraphDiv(gd)).toBe(
+      "x,A,B\n2000-01-01,10,30\n2000-01-02,20,40",
+    );
+  });
+
+  it("reads already-decoded TypedArray x/y", () => {
+    const gd = {
+      data: [
+        { x: [1, 2], y: Float64Array.from([5, 6]), name: "A", type: "scatter" },
+      ],
+    };
+    expect(buildCsvFromGraphDiv(gd)).toBe("x,A\n1,5\n2,6");
+  });
+
+  it("returns an empty string when there are no visible traces", () => {
+    expect(buildCsvFromGraphDiv({ data: [] })).toBe("");
+    expect(buildCsvFromGraphDiv({})).toBe("");
+    expect(buildCsvFromGraphDiv(undefined)).toBe("");
+  });
+});
+
+describe("downloadCsvFromGraphDiv", () => {
+  let clickSpy;
+
+  beforeEach(() => {
+    clickSpy = jest.fn();
+    global.URL.createObjectURL = jest.fn(() => "blob:url");
+    global.URL.revokeObjectURL = jest.fn();
+    const realCreate = document.createElement.bind(document);
+    jest.spyOn(document, "createElement").mockImplementation((tag) => {
+      const el = realCreate(tag);
+      if (tag === "a") el.click = clickSpy;
+      return el;
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("triggers a CSV download for the visible data", () => {
+    downloadCsvFromGraphDiv({
+      data: [{ x: [1], y: [2], name: "A", type: "scatter" }],
+      layout: { title: { text: "My Plot" } },
+    });
+    expect(global.URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    expect(global.URL.revokeObjectURL).toHaveBeenCalledWith("blob:url");
+  });
+
+  it("does nothing when there is no visible data", () => {
+    downloadCsvFromGraphDiv({ data: [] });
+    expect(global.URL.createObjectURL).not.toHaveBeenCalled();
+    expect(clickSpy).not.toHaveBeenCalled();
+  });
+});

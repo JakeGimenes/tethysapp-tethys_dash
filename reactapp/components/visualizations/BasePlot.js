@@ -33,6 +33,119 @@ const Plot = createPlotlyComponent(Plotly);
 
 const EMPTY_VERTICAL_LINE = Object.freeze({});
 
+// --- CSV download modebar button ---------------------------------------------
+// Serialize the currently-visible traces of a plotly figure to CSV. Only traces
+// the user can actually see are included (legend-hidden traces are skipped),
+// matching the "download the data visible to the user" intent.
+const csvEscape = (v) => {
+  if (v === undefined || v === null) return "";
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
+// Plotly.py encodes numeric arrays as base64 typed-arrays ({ dtype, bdata });
+// plotly.js keeps that raw object on gd.data. Decode it (and handle real
+// TypedArrays) so numeric x/y values are not lost in the exported CSV.
+const DTYPE_TO_TYPED_ARRAY = {
+  f8: Float64Array,
+  f4: Float32Array,
+  i1: Int8Array,
+  i2: Int16Array,
+  i4: Int32Array,
+  u1: Uint8Array,
+  u2: Uint16Array,
+  u4: Uint32Array,
+};
+
+const decodeTypedArray = (spec) => {
+  const Ctor = DTYPE_TO_TYPED_ARRAY[spec.dtype];
+  if (!Ctor || typeof spec.bdata !== "string") return [];
+  const binary = atob(spec.bdata);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return Array.from(new Ctor(bytes.buffer));
+};
+
+const toArray = (v) => {
+  if (Array.isArray(v)) return v;
+  if (ArrayBuffer.isView(v)) return Array.from(v);
+  if (v && typeof v === "object" && typeof v.bdata === "string" && v.dtype) {
+    return decodeTypedArray(v);
+  }
+  return [];
+};
+
+export const buildCsvFromGraphDiv = (gd) => {
+  const traces = (gd?.data || []).filter(
+    (t) => t && t.visible !== false && t.visible !== "legendonly",
+  );
+  if (!traces.length) return "";
+
+  // Table traces (e.g. the exceedance table) carry header/cells, not x/y.
+  const tableTraces = traces.filter((t) => t.type === "table");
+  if (tableTraces.length) {
+    const lines = [];
+    tableTraces.forEach((t) => {
+      const headers = (t.header?.values || []).map((h) =>
+        Array.isArray(h) ? h.join(" ") : h,
+      );
+      const columns = (t.cells?.values || []).map(toArray);
+      const rowCount = columns.reduce((m, c) => Math.max(m, c.length), 0);
+      lines.push(headers.map(csvEscape).join(","));
+      for (let r = 0; r < rowCount; r++) {
+        lines.push(columns.map((c) => csvEscape(c[r])).join(","));
+      }
+    });
+    return lines.join("\n");
+  }
+
+  // Cartesian traces: wide table keyed by x, one column per trace.
+  const header = ["x", ...traces.map((t, i) => t.name || `series_${i}`)];
+  const rowsByX = new Map();
+  traces.forEach((t, i) => {
+    const xs = toArray(t.x);
+    const ys = toArray(t.y);
+    xs.forEach((xv, j) => {
+      const key = String(xv);
+      if (!rowsByX.has(key)) rowsByX.set(key, { x: xv });
+      rowsByX.get(key)[i] = ys[j];
+    });
+  });
+  const lines = [header.map(csvEscape).join(",")];
+  for (const row of rowsByX.values()) {
+    lines.push(
+      [csvEscape(row.x), ...traces.map((_, i) => csvEscape(row[i]))].join(","),
+    );
+  }
+  return lines.join("\n");
+};
+
+export const downloadCsvFromGraphDiv = (gd) => {
+  const csv = buildCsvFromGraphDiv(gd);
+  if (!csv) return;
+  const rawTitle = gd?.layout?.title?.text || gd?.layout?.title || "plot_data";
+  const filename =
+    String(rawTitle)
+      .replace(/[^\w.-]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "plot_data";
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${filename}.csv`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+};
+
+export const csvDownloadButton = {
+  name: "downloadCsv",
+  title: "Download data as CSV",
+  icon: Plotly.Icons?.disk,
+  click: (gd) => downloadCsvFromGraphDiv(gd),
+};
+
 const StyledPlot = styled(Plot)`
   width: 100%;
   height: 100%;
@@ -428,6 +541,19 @@ const BasePlot = ({
     return merged;
   }, [toggledLayout, width, height, verticalLineShapes]);
 
+  // Merge the always-on "Download data as CSV" modebar button into the plugin's
+  // config (plugins may send no config at all, e.g. geoglows plots).
+  const plotConfig = useMemo(() => {
+    const base = config || {};
+    const existing = Array.isArray(base.modeBarButtonsToAdd)
+      ? base.modeBarButtonsToAdd
+      : [];
+    if (existing.some((b) => b && b.name === csvDownloadButton.name)) {
+      return base;
+    }
+    return { ...base, modeBarButtonsToAdd: [...existing, csvDownloadButton] };
+  }, [config]);
+
   // Ref to track the original vertical line shape
   const verticalLineOriginalRef = useRef(null);
 
@@ -551,7 +677,7 @@ const BasePlot = ({
         ref={visualizationRef}
         data={plotData}
         layout={plotLayout}
-        config={config}
+        config={plotConfig}
         onRelayout={handleRelayout}
       />
       {subplotToggleEnabled && (
