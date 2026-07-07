@@ -571,6 +571,7 @@ export async function queryLayerFeatures(layerInfo, map, coordinate, pixel) {
         sourceParams,
         map,
         coordinate,
+        layerInfo.configuration.props.clickTolerance ?? 10,
       );
     } else if (sourceType === "WMS") {
       features = await getImageWMSLayerFeatures(
@@ -693,7 +694,13 @@ function getVectorTileLayerFeatures(map, pixel) {
   return features;
 }
 
-async function getESRILayerFeatures(sourceUrl, sourceParams, map, coordinate) {
+async function getESRILayerFeatures(
+  sourceUrl,
+  sourceParams,
+  map,
+  coordinate,
+  tolerance = 10,
+) {
   // setup fetch request with params
   const featureQueryUrl = sourceUrl + "/identify";
   const view = map.getView();
@@ -705,7 +712,7 @@ async function getESRILayerFeatures(sourceUrl, sourceParams, map, coordinate) {
       : { extent: rawExtent, point: coordinate };
   const params = new URLSearchParams({
     f: "json",
-    tolerance: 10, // Pixel tolerance
+    tolerance, // Pixel tolerance (per-layer via clickTolerance prop, default 10)
     returnGeometry: true,
     geometryType: "esriGeometryPoint",
     sr: projectionCode.split(":")[1],
