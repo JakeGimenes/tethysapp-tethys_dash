@@ -893,8 +893,8 @@ export function addSnapPreview(snapLayer, feature, coordinate) {
 export function shouldSnapSelect(layer, clickSnap) {
   return Boolean(
     clickSnap?.feature &&
-      layer?.configuration?.props?.snapToFeatures &&
-      layer.configuration.props.name === clickSnap.layerName,
+    layer?.configuration?.props?.snapToFeatures &&
+    layer.configuration.props.name === clickSnap.layerName,
   );
 }
 

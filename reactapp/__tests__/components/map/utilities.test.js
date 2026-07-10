@@ -29,7 +29,13 @@ import {
 } from "components/map/utilities";
 import Feature from "ol/Feature";
 import VectorSource from "ol/source/Vector.js";
-import { LineString, MultiLineString, Point, MultiPolygon, Polygon } from "ol/geom";
+import {
+  LineString,
+  MultiLineString,
+  Point,
+  MultiPolygon,
+  Polygon,
+} from "ol/geom";
 import VectorLayer from "ol/layer/Vector.js";
 import {
   layerConfigGeoJSON,
@@ -3859,7 +3865,13 @@ describe("fetchLayerVectorFeatures", () => {
       {
         type: "Feature",
         properties: { comid: 123, rivercountry: "Peru" },
-        geometry: { type: "LineString", coordinates: [[0, 0], [0, 1]] },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 0],
+            [0, 1],
+          ],
+        },
       },
     ],
   };
@@ -3976,7 +3988,12 @@ describe("findSnapFeature", () => {
   const sourceWithVerticalLine = () => {
     const source = new VectorSource({});
     source.addFeature(
-      new Feature({ geometry: new LineString([[0, 0], [0, 100]]) }),
+      new Feature({
+        geometry: new LineString([
+          [0, 0],
+          [0, 100],
+        ]),
+      }),
     );
     return source;
   };
@@ -3998,9 +4015,13 @@ describe("findSnapFeature", () => {
   });
 
   test("returns null when the source is empty or missing", () => {
-    expect(findSnapFeature(new VectorSource({}), [5, 50], identityMap)).toBeNull();
+    expect(
+      findSnapFeature(new VectorSource({}), [5, 50], identityMap),
+    ).toBeNull();
     expect(findSnapFeature(null, [5, 50], identityMap)).toBeNull();
-    expect(findSnapFeature(sourceWithVerticalLine(), null, identityMap)).toBeNull();
+    expect(
+      findSnapFeature(sourceWithVerticalLine(), null, identityMap),
+    ).toBeNull();
   });
 
   test("returns null when a coordinate cannot be projected to a pixel", () => {
@@ -4015,7 +4036,12 @@ describe("findBestSnap", () => {
   const makeCache = (layerName, x) => {
     const source = new VectorSource({});
     source.addFeature(
-      new Feature({ geometry: new LineString([[x, 0], [x, 100]]) }),
+      new Feature({
+        geometry: new LineString([
+          [x, 0],
+          [x, 100],
+        ]),
+      }),
     );
     return { layerName, source };
   };
@@ -4057,7 +4083,9 @@ describe("createSnapLayer", () => {
 
 describe("shouldSnapSelect", () => {
   const snapLayer = {
-    configuration: { props: { name: "Geoglows Streamflow", snapToFeatures: true } },
+    configuration: {
+      props: { name: "Geoglows Streamflow", snapToFeatures: true },
+    },
   };
   const clickSnap = { feature: {}, layerName: "Geoglows Streamflow" };
 
@@ -4067,9 +4095,9 @@ describe("shouldSnapSelect", () => {
 
   test("false when there is no active snap", () => {
     expect(shouldSnapSelect(snapLayer, null)).toBe(false);
-    expect(shouldSnapSelect(snapLayer, { layerName: "Geoglows Streamflow" })).toBe(
-      false,
-    );
+    expect(
+      shouldSnapSelect(snapLayer, { layerName: "Geoglows Streamflow" }),
+    ).toBe(false);
   });
 
   test("false when the layer is not snap-enabled", () => {
@@ -4093,7 +4121,10 @@ describe("buildSnapFeatureResult", () => {
 
   test("maps layerName from the attributeVariables key and strips geometry from attributes", () => {
     const feature = new Feature({
-      geometry: new LineString([[0, 0], [0, 10]]),
+      geometry: new LineString([
+        [0, 0],
+        [0, 10],
+      ]),
       comid: 12345,
       rivercountry: "Peru",
     });
@@ -4103,13 +4134,19 @@ describe("buildSnapFeatureResult", () => {
     expect(result.attributes.geometry).toBeUndefined();
     expect(result.geometry).toEqual({
       type: "LineString",
-      coordinates: [[0, 0], [0, 10]],
+      coordinates: [
+        [0, 0],
+        [0, 10],
+      ],
     });
   });
 
   test("falls back to the configured layer name when no attributeVariables", () => {
     const feature = new Feature({
-      geometry: new LineString([[0, 0], [1, 1]]),
+      geometry: new LineString([
+        [0, 0],
+        [1, 1],
+      ]),
       comid: 7,
     });
     const result = buildSnapFeatureResult(feature, {
@@ -4121,7 +4158,16 @@ describe("buildSnapFeatureResult", () => {
 
   test("preserves MultiLineString geometry type", () => {
     const feature = new Feature({
-      geometry: new MultiLineString([[[0, 0], [0, 1]], [[2, 2], [2, 3]]]),
+      geometry: new MultiLineString([
+        [
+          [0, 0],
+          [0, 1],
+        ],
+        [
+          [2, 2],
+          [2, 3],
+        ],
+      ]),
       comid: 9,
     });
     const result = buildSnapFeatureResult(feature, geoglowsLayer);
@@ -4132,7 +4178,12 @@ describe("buildSnapFeatureResult", () => {
 
 describe("addSnapPreview", () => {
   const lineFeature = () =>
-    new Feature({ geometry: new LineString([[0, 0], [0, 10]]) });
+    new Feature({
+      geometry: new LineString([
+        [0, 0],
+        [0, 10],
+      ]),
+    });
 
   test("draws the feature outline and a dot at the snapped point", () => {
     const layer = createSnapLayer();

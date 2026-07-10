@@ -1141,7 +1141,9 @@ const MapVisualization = ({
         drawing={drawing}
         onMapClick={inDataViewerMode ? () => {} : onMapClick}
         onMapHover={inDataViewerMode ? () => {} : onMapHover}
-        onMapMoveEnd={inDataViewerMode ? () => {} : (map) => refreshSnapCaches(map)}
+        onMapMoveEnd={
+          inDataViewerMode ? () => {} : (map) => refreshSnapCaches(map)
+        }
         visualizationRef={visualizationRef}
         data-testid="backlayer-map"
         dataviewerViz={dataviewerViz}
