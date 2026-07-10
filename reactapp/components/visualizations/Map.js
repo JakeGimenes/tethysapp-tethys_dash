@@ -636,8 +636,12 @@ const MapVisualization = ({
     return snapLayer.current;
   };
 
-  const clearSnap = () => {
+  // Clears the snap preview and resets the pointer-cursor affordance — the one
+  // place snap visual state is torn down, so no clear path can leak the cursor.
+  const clearSnap = (map) => {
     snapLayer.current?.getSource().clear();
+    const targetEl = map?.getTargetElement?.();
+    if (targetEl) targetEl.style.cursor = "";
   };
 
   // moveend handler: rebuild the vector cache for visible snap-enabled layers
@@ -667,10 +671,7 @@ const MapVisualization = ({
     });
     if (snapLayers.length === 0) {
       snapCachesRef.current = [];
-      clearSnap();
-      // Snapping is off here; drop any lingering pointer-cursor affordance.
-      const targetEl = map.getTargetElement?.();
-      if (targetEl) targetEl.style.cursor = "";
+      clearSnap(map);
       return;
     }
     const caches = await Promise.all(
@@ -696,13 +697,13 @@ const MapVisualization = ({
       caches && caches.length
         ? findBestSnap(caches, coordinate, map, SNAP_PIXELS)
         : null;
-    // Affordance: pointer cursor when a click would select a snapped river.
-    const targetEl = map.getTargetElement?.();
-    if (targetEl) targetEl.style.cursor = best ? "pointer" : "";
     if (!best) {
-      clearSnap();
+      clearSnap(map);
       return;
     }
+    // Affordance: pointer cursor when a click would select a snapped river.
+    const targetEl = map.getTargetElement?.();
+    if (targetEl) targetEl.style.cursor = "pointer";
     addSnapPreview(ensureSnapLayer(map), best.feature, best.coordinate);
   };
 
