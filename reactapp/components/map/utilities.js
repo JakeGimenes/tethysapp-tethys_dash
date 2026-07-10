@@ -887,6 +887,17 @@ export function addSnapPreview(snapLayer, feature, coordinate) {
   }
 }
 
+// Whether a click should select `layer` from the local snapped feature (vs an
+// ESRI /identify). True only when there's an active snap whose source layer is
+// this snap-enabled layer.
+export function shouldSnapSelect(layer, clickSnap) {
+  return Boolean(
+    clickSnap?.feature &&
+      layer?.configuration?.props?.snapToFeatures &&
+      layer.configuration.props.name === clickSnap.layerName,
+  );
+}
+
 // Build an ESRI-identify-shaped result ({ layerName, attributes, geometry })
 // from a locally-snapped vector feature, so a snapped click can select the
 // river WITHOUT an ESRI /identify round-trip (which is slow on a cache miss and

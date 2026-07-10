@@ -17,6 +17,7 @@ import {
   createSnapLayer,
   addSnapPreview,
   buildSnapFeatureResult,
+  shouldSnapSelect,
   fetchLayerVectorFeatures,
   findBestSnap,
   configurationPropType,
@@ -242,6 +243,7 @@ const MapVisualization = ({
   const highlightLayer = useRef();
   const snapLayer = useRef(null);
   const snapCachesRef = useRef([]);
+  const snapRefreshId = useRef(0);
   const currentLayers = useRef([]);
   const currentBaseMap = useRef();
   const mapAttributeVariablesRef = useRef({});
@@ -619,11 +621,11 @@ const MapVisualization = ({
     }
   };
 
-  // --- Feature snapping (Approach A, hybrid) -----------------------------
+  // --- Feature snapping (Approach A) -------------------------------------
   // Maintain a hidden vector cache of snap-enabled layers' features for the
-  // current view, snap the cursor to the nearest one on hover, and on click run
-  // the normal /identify at the snapped on-line point so a small tolerance
-  // resolves the river regardless of zoom.
+  // current view, snap the cursor to the nearest one on hover, and on a snapped
+  // click select the river directly from that local feature (no ESRI /identify,
+  // which is slow on a cache miss and sometimes returns empty on-geometry).
   const SNAP_PIXELS = 15;
 
   const ensureSnapLayer = (map) => {
@@ -642,6 +644,9 @@ const MapVisualization = ({
   // that are zoomed to their query level. Below that zoom snapping is off and
   // the first click still auto-zooms via queryLayerFeatures.
   const refreshSnapCaches = async (map) => {
+    // Generation token: a slower fetch from an earlier view must not overwrite
+    // a newer one (moveend can fire again before the async /query resolves).
+    const refreshId = (snapRefreshId.current += 1);
     const olVisibility = new Map();
     map
       .getLayers()
@@ -663,15 +668,22 @@ const MapVisualization = ({
     if (snapLayers.length === 0) {
       snapCachesRef.current = [];
       clearSnap();
+      // Snapping is off here; drop any lingering pointer-cursor affordance.
+      const targetEl = map.getTargetElement?.();
+      if (targetEl) targetEl.style.cursor = "";
       return;
     }
-    snapCachesRef.current = await Promise.all(
+    const caches = await Promise.all(
       snapLayers.map(async (layer) => {
         const source = new VectorSource();
         source.addFeatures(await fetchLayerVectorFeatures(layer, map));
         return { layerName: layer.configuration.props.name, source };
       }),
     );
+    // Discard if a newer refresh started while this one was in flight.
+    if (refreshId === snapRefreshId.current) {
+      snapCachesRef.current = caches;
+    }
   };
 
   // pointermove handler (synchronous, immediate so the highlight tracks the
@@ -828,13 +840,11 @@ const MapVisualization = ({
         // the already-loaded vector feature instead of an ESRI /identify. This
         // is instant and reliable — /identify is slow on a cache miss and
         // sometimes returns empty even for an exactly-on-geometry point.
-        const snapped =
-          clickSnap?.feature &&
-          layer.configuration?.props?.snapToFeatures &&
-          layer.configuration?.props?.name === clickSnap.layerName;
-        const features = snapped
+        // Other layers query at the TRUE click coordinate (evt.coordinate), not
+        // the snapped point, so the snap can't shift their identify results.
+        const features = shouldSnapSelect(layer, clickSnap)
           ? [buildSnapFeatureResult(clickSnap.feature, layer)]
-          : await queryLayerFeatures(layer, map, coordinate, pixel);
+          : await queryLayerFeatures(layer, map, evt.coordinate, pixel);
         if (!Array.isArray(features)) return features;
         return features.map((feature) =>
           feature && typeof feature === "object"

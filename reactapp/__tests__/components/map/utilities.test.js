@@ -25,6 +25,7 @@ import {
   createSnapLayer,
   addSnapPreview,
   buildSnapFeatureResult,
+  shouldSnapSelect,
 } from "components/map/utilities";
 import Feature from "ol/Feature";
 import VectorSource from "ol/source/Vector.js";
@@ -4051,6 +4052,36 @@ describe("createSnapLayer", () => {
     expect(layer).toBeInstanceOf(VectorLayer);
     expect(layer.get("name")).toBe("Snap Preview");
     expect(layer.getSource().getFeatures()).toHaveLength(0);
+  });
+});
+
+describe("shouldSnapSelect", () => {
+  const snapLayer = {
+    configuration: { props: { name: "Geoglows Streamflow", snapToFeatures: true } },
+  };
+  const clickSnap = { feature: {}, layerName: "Geoglows Streamflow" };
+
+  test("true when snap active and layer is the snap source", () => {
+    expect(shouldSnapSelect(snapLayer, clickSnap)).toBe(true);
+  });
+
+  test("false when there is no active snap", () => {
+    expect(shouldSnapSelect(snapLayer, null)).toBe(false);
+    expect(shouldSnapSelect(snapLayer, { layerName: "Geoglows Streamflow" })).toBe(
+      false,
+    );
+  });
+
+  test("false when the layer is not snap-enabled", () => {
+    const plain = { configuration: { props: { name: "Geoglows Streamflow" } } };
+    expect(shouldSnapSelect(plain, clickSnap)).toBe(false);
+  });
+
+  test("false when the layer name does not match the snap source", () => {
+    const other = {
+      configuration: { props: { name: "Other Layer", snapToFeatures: true } },
+    };
+    expect(shouldSnapSelect(other, clickSnap)).toBe(false);
   });
 });
 
