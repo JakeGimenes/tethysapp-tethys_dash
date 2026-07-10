@@ -14,6 +14,11 @@ import {
   createHighlightLayer,
   addHighlightFeatures,
   createMarkerLayer,
+  createSnapLayer,
+  addSnapPreview,
+  buildSnapFeatureResult,
+  fetchLayerVectorFeatures,
+  findBestSnap,
   configurationPropType,
   mapDrawingPropType,
   loadLayerJSONs,
@@ -44,6 +49,7 @@ import "swiper/css/pagination";
 import "swiper/css/navigation";
 import { Pagination, Navigation } from "swiper/modules";
 import Overlay from "ol/Overlay";
+import VectorSource from "ol/source/Vector";
 import { FaTimes } from "react-icons/fa";
 
 const FixedTable = styled(Table)`
@@ -234,6 +240,8 @@ const MapVisualization = ({
   const [activeFeatureIndex, setActiveFeatureIndex] = useState(0);
   const markerLayer = useRef();
   const highlightLayer = useRef();
+  const snapLayer = useRef(null);
+  const snapCachesRef = useRef([]);
   const currentLayers = useRef([]);
   const currentBaseMap = useRef();
   const mapAttributeVariablesRef = useRef({});
@@ -611,6 +619,81 @@ const MapVisualization = ({
     }
   };
 
+  // --- Feature snapping (Approach A, hybrid) -----------------------------
+  // Maintain a hidden vector cache of snap-enabled layers' features for the
+  // current view, snap the cursor to the nearest one on hover, and on click run
+  // the normal /identify at the snapped on-line point so a small tolerance
+  // resolves the river regardless of zoom.
+  const SNAP_PIXELS = 15;
+
+  const ensureSnapLayer = (map) => {
+    if (!snapLayer.current) {
+      snapLayer.current = createSnapLayer();
+      map.addLayer(snapLayer.current);
+    }
+    return snapLayer.current;
+  };
+
+  const clearSnap = () => {
+    snapLayer.current?.getSource().clear();
+  };
+
+  // moveend handler: rebuild the vector cache for visible snap-enabled layers
+  // that are zoomed to their query level. Below that zoom snapping is off and
+  // the first click still auto-zooms via queryLayerFeatures.
+  const refreshSnapCaches = async (map) => {
+    const olVisibility = new Map();
+    map
+      .getLayers()
+      .getArray()
+      .forEach((olLayer) => {
+        const name = olLayer.get("name");
+        if (name) olVisibility.set(name, olLayer.getVisible());
+      });
+    const zoom = map.getView().getZoom();
+    const snapLayers = layers.filter((item) => {
+      if (!item.configuration?.props?.snapToFeatures) return false;
+      const name = item.configuration?.props?.name;
+      if (name && olVisibility.has(name) && olVisibility.get(name) !== true) {
+        return false;
+      }
+      const minZoom = parseFloat(item.configuration.props.minZoomQuery ?? 0);
+      return zoom >= minZoom;
+    });
+    if (snapLayers.length === 0) {
+      snapCachesRef.current = [];
+      clearSnap();
+      return;
+    }
+    snapCachesRef.current = await Promise.all(
+      snapLayers.map(async (layer) => {
+        const source = new VectorSource();
+        source.addFeatures(await fetchLayerVectorFeatures(layer, map));
+        return { layerName: layer.configuration.props.name, source };
+      }),
+    );
+  };
+
+  // pointermove handler (synchronous, immediate so the highlight tracks the
+  // cursor): draw the snap preview + pointer cursor for the nearest feature.
+  // The click recomputes its own snap from the click coordinate, so this only
+  // drives the hover visual — it deliberately keeps no state the click reads.
+  const updateSnap = (map, coordinate) => {
+    const caches = snapCachesRef.current;
+    const best =
+      caches && caches.length
+        ? findBestSnap(caches, coordinate, map, SNAP_PIXELS)
+        : null;
+    // Affordance: pointer cursor when a click would select a snapped river.
+    const targetEl = map.getTargetElement?.();
+    if (targetEl) targetEl.style.cursor = best ? "pointer" : "";
+    if (!best) {
+      clearSnap();
+      return;
+    }
+    addSnapPreview(ensureSnapLayer(map), best.feature, best.coordinate);
+  };
+
   const onMapClick = async (map, evt) => {
     // istanbul ignore next
     if (drawing.current || isProcessing) return;
@@ -650,8 +733,19 @@ const MapVisualization = ({
 
     setIsProcessing(true);
 
-    const coordinate = evt.coordinate;
+    // Recompute the snap from the ACTUAL click coordinate rather than trusting
+    // the pointermove-maintained hover state: OL fires `singleclick` ~250ms
+    // after the click, and a stray pointermove in that window (e.g. the user
+    // moving off right after clicking) would otherwise clear the snap and force
+    // a slow, sometimes-empty /identify. Recomputing here is race-free.
+    const clickSnap =
+      snapCachesRef.current && snapCachesRef.current.length
+        ? findBestSnap(snapCachesRef.current, evt.coordinate, map, SNAP_PIXELS)
+        : null;
+    const coordinate = clickSnap?.coordinate ?? evt.coordinate;
     const pixel = evt.pixel;
+    // The click owns the selection highlight from here; drop the hover preview.
+    snapLayer.current?.getSource().clear();
 
     // istanbul ignore next
     if (spinnerOverlayRef.current) {
@@ -730,12 +824,17 @@ const MapVisualization = ({
     // variables / omitted-attrs on that sub-layer.
     const queryCalls = queryableLayers.map(async (layer) => {
       try {
-        const features = await queryLayerFeatures(
-          layer,
-          map,
-          coordinate,
-          pixel,
-        );
+        // For a snap-enabled layer with an active snap, select the river from
+        // the already-loaded vector feature instead of an ESRI /identify. This
+        // is instant and reliable — /identify is slow on a cache miss and
+        // sometimes returns empty even for an exactly-on-geometry point.
+        const snapped =
+          clickSnap?.feature &&
+          layer.configuration?.props?.snapToFeatures &&
+          layer.configuration?.props?.name === clickSnap.layerName;
+        const features = snapped
+          ? [buildSnapFeatureResult(clickSnap.feature, layer)]
+          : await queryLayerFeatures(layer, map, coordinate, pixel);
         if (!Array.isArray(features)) return features;
         return features.map((feature) =>
           feature && typeof feature === "object"
@@ -943,6 +1042,10 @@ const MapVisualization = ({
       return;
     }
 
+    // Snap the preview to the nearest snap-enabled feature immediately (not
+    // debounced) so the highlight tracks the cursor responsively.
+    updateSnap(map, evt.coordinate);
+
     // Debounce: restart the timer on every move so the query only fires once
     // the cursor settles for HOVER_DEBOUNCE_MS. Capture coordinate/pixel by
     // value so the deferred call uses the LAST cursor position, not stale.
@@ -1027,6 +1130,7 @@ const MapVisualization = ({
         drawing={drawing}
         onMapClick={inDataViewerMode ? () => {} : onMapClick}
         onMapHover={inDataViewerMode ? () => {} : onMapHover}
+        onMapMoveEnd={inDataViewerMode ? () => {} : (map) => refreshSnapCaches(map)}
         visualizationRef={visualizationRef}
         data-testid="backlayer-map"
         dataviewerViz={dataviewerViz}

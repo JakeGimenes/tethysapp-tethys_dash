@@ -5,7 +5,7 @@ import Feature from "ol/Feature";
 import VectorLayer from "ol/layer/Vector";
 import VectorSource from "ol/source/Vector";
 import { LineString, MultiPolygon, Polygon, Point } from "ol/geom";
-import { Stroke, Style, Circle } from "ol/style";
+import { Stroke, Style, Circle, Fill } from "ol/style";
 import Icon from "ol/style/Icon";
 import { toGeometry } from "ol/render/Feature";
 import GeoJSONFormat from "ol/format/GeoJSON";
@@ -735,6 +735,182 @@ async function getESRILayerFeatures(
   }
 
   return featureQueryJson.results;
+}
+
+// --- Feature snapping (Approach A) ---------------------------------------
+//
+// For ESRI Map/Image-service layers flagged `snapToFeatures`, we pull the
+// underlying polylines for the current view from the MapServer sublayer
+// `/query` endpoint and snap the cursor to the nearest one. This replaces the
+// fixed pixel `clickTolerance` used by `/identify`, which behaves poorly across
+// zoom levels (too tight when zoomed out, too loose when zoomed in).
+
+// Parse an ArcGIS LAYERDEFS value ("<layerId>: <whereClause>", optionally
+// ";"-separated) into just the SQL WHERE clause for the given sublayer.
+// Returns "1=1" when no matching filter is set so the query is unfiltered.
+export function layerDefsToWhere(layerDefs, sublayer = 0) {
+  if (!layerDefs || typeof layerDefs !== "string") return "1=1";
+  for (const entry of layerDefs.split(";")) {
+    const idx = entry.indexOf(":");
+    if (idx === -1) continue;
+    const id = entry.slice(0, idx).trim();
+    const clause = entry.slice(idx + 1).trim();
+    if (id === String(sublayer) && clause) return clause;
+  }
+  return "1=1";
+}
+
+// Query the MapServer sublayer for features intersecting the current map extent
+// and return them as OpenLayers Features in the map projection. Returns [] on
+// any failure so callers can degrade gracefully (e.g., fall back to /identify).
+export async function fetchLayerVectorFeatures(layerInfo, map) {
+  const props = layerInfo?.configuration?.props ?? {};
+  const sourceUrl = props.source?.props?.url ?? "";
+  if (!sourceUrl) return [];
+  const sublayer = props.querySublayer ?? 0;
+  const where = layerDefsToWhere(
+    props.source?.props?.params?.LAYERDEFS,
+    sublayer,
+  );
+
+  const view = map.getView();
+  const projectionCode = view.getProjection().getCode();
+  const inSR = projectionCode.split(":")[1];
+  const rawExtent = view.calculateExtent();
+  // Mirror /identify's antimeridian handling so a view panned past the
+  // antimeridian still queries the correct world-copy.
+  const extent =
+    projectionCode === "EPSG:3857"
+      ? shiftEPSG3857ExtentAndPoint(rawExtent, [
+          (rawExtent[0] + rawExtent[2]) / 2,
+          (rawExtent[1] + rawExtent[3]) / 2,
+        ]).extent
+      : rawExtent;
+
+  const params = new URLSearchParams({
+    f: "geojson",
+    where,
+    geometry: extent.join(","),
+    geometryType: "esriGeometryEnvelope",
+    spatialRel: "esriSpatialRelIntersects",
+    inSR,
+    outSR: "4326", // f=geojson coordinates come back as EPSG:4326
+    outFields: "*",
+    returnGeometry: "true",
+  });
+
+  let geojson;
+  try {
+    const resp = await fetch(`${sourceUrl}/${sublayer}/query?${params}`);
+    geojson = await resp.json();
+  } catch (error) {
+    console.error("Vector feature query failed:", error);
+    return [];
+  }
+  if (!geojson || !Array.isArray(geojson.features)) return [];
+
+  try {
+    return new GeoJSONFormat().readFeatures(geojson, {
+      dataProjection: "EPSG:4326",
+      featureProjection: projectionCode,
+    });
+  } catch (error) {
+    console.error("Failed to parse vector features:", error);
+    return [];
+  }
+}
+
+// Find the vector feature nearest to `coordinate` whose closest point is within
+// `snapPx` screen pixels. Returns { feature, coordinate: <snapped>,
+// pixelDistance } or null when nothing qualifies. Pixel-space (not map-space)
+// distance keeps the snap radius consistent regardless of zoom level.
+export function findSnapFeature(vectorSource, coordinate, map, snapPx = 15) {
+  if (!vectorSource || !coordinate) return null;
+  const feature = vectorSource.getClosestFeatureToCoordinate(coordinate);
+  const geometry = feature?.getGeometry?.();
+  if (!geometry) return null;
+  const snappedCoord = geometry.getClosestPoint(coordinate);
+  const cursorPixel = map.getPixelFromCoordinate(coordinate);
+  const snappedPixel = map.getPixelFromCoordinate(snappedCoord);
+  if (!cursorPixel || !snappedPixel) return null;
+  const dx = cursorPixel[0] - snappedPixel[0];
+  const dy = cursorPixel[1] - snappedPixel[1];
+  const pixelDistance = Math.sqrt(dx * dx + dy * dy);
+  if (pixelDistance > snapPx) return null;
+  return { feature, coordinate: snappedCoord, pixelDistance };
+}
+
+// Snap across multiple cached vector sources, returning the closest qualifying
+// feature. `caches` is an array of { layerName, source }. Returns
+// { layerName, feature, coordinate, pixelDistance } or null when nothing snaps.
+export function findBestSnap(caches, coordinate, map, snapPx = 15) {
+  let best = null;
+  for (const cache of caches ?? []) {
+    const hit = findSnapFeature(cache?.source, coordinate, map, snapPx);
+    if (hit && (!best || hit.pixelDistance < best.pixelDistance)) {
+      best = { ...hit, layerName: cache.layerName };
+    }
+  }
+  return best;
+}
+
+// Dedicated layer for the hover snap preview — visually distinct (cyan) from
+// the dark-blue click/selection highlight so the two never clobber each other.
+// The line traces the snapped feature; the filled dot marks the exact point the
+// cursor clipped to.
+export function createSnapLayer() {
+  const color = "#00c2d1";
+  return new VectorLayer({
+    source: new VectorSource({}),
+    style: new Style({
+      stroke: new Stroke({ color, width: 4 }),
+      image: new Circle({
+        radius: 6,
+        fill: new Fill({ color }),
+        stroke: new Stroke({ color: "#ffffff", width: 2 }),
+      }),
+    }),
+    zIndex: 101,
+    name: "Snap Preview",
+  });
+}
+
+// Render the snap preview into `snapLayer`: the snapped feature outline plus a
+// dot marking the exact on-geometry point the cursor clipped to. Clears any
+// previous preview first. Safe to call with a null feature and/or coordinate.
+export function addSnapPreview(snapLayer, feature, coordinate) {
+  const source = snapLayer.getSource();
+  source.clear();
+  if (feature) source.addFeature(feature.clone());
+  if (coordinate) {
+    source.addFeature(new Feature({ geometry: new Point(coordinate) }));
+  }
+}
+
+// Build an ESRI-identify-shaped result ({ layerName, attributes, geometry })
+// from a locally-snapped vector feature, so a snapped click can select the
+// river WITHOUT an ESRI /identify round-trip (which is slow on a cache miss and
+// intermittently returns empty even for an on-geometry point). `layerName` must
+// equal the layer's attributeVariables key (which is the identify sub-layer
+// name) so the downstream variable-input mapping fires; it falls back to the
+// configured layer name when no attributeVariables are set.
+export function buildSnapFeatureResult(feature, layer) {
+  const attrVars =
+    layer?.attributeVariables && typeof layer.attributeVariables === "object"
+      ? layer.attributeVariables
+      : {};
+  const layerName =
+    Object.keys(attrVars)[0] ?? layer?.configuration?.props?.name ?? "";
+  const attributes = { ...feature.getProperties() };
+  delete attributes.geometry;
+  const geom = feature.getGeometry();
+  return {
+    layerName,
+    attributes,
+    geometry: geom
+      ? { type: geom.getType(), coordinates: geom.getCoordinates() }
+      : null,
+  };
 }
 
 async function getImageWMSLayerFeatures(sourceUrl, sourceParams, map, pixel) {
