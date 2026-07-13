@@ -22,6 +22,7 @@ import {
   fetchLayerVectorFeatures,
   findSnapFeature,
   findBestSnap,
+  findSnapFeatures,
   createSnapLayer,
   addSnapPreview,
   buildSnapFeatureResult,
@@ -4069,6 +4070,57 @@ describe("findBestSnap", () => {
     expect(findBestSnap([], [4, 50], identityMap)).toBeNull();
     expect(findBestSnap(null, [4, 50], identityMap)).toBeNull();
     expect(findBestSnap(undefined, [4, 50], identityMap)).toBeNull();
+  });
+});
+
+describe("findSnapFeatures", () => {
+  // Identity pixels + unit resolution → pixel distance == map distance.
+  const gatherMap = {
+    getPixelFromCoordinate: (c) => (c ? [...c] : null),
+    getView: () => ({ getResolution: () => 1 }),
+  };
+  const cacheWithLine = (layerName, x) => {
+    const source = new VectorSource({});
+    source.addFeature(
+      new Feature({
+        geometry: new LineString([
+          [x, 0],
+          [x, 100],
+        ]),
+      }),
+    );
+    return { layerName, source };
+  };
+
+  test("returns every feature within the radius, nearest first", () => {
+    const caches = [cacheWithLine("A", 0), cacheWithLine("B", 20)];
+    const hits = findSnapFeatures(caches, [5, 50], gatherMap, 35);
+    expect(hits).toHaveLength(2);
+    expect(hits.map((h) => h.layerName)).toEqual(["A", "B"]);
+    expect(hits[0].pixelDistance).toBeCloseTo(5);
+    expect(hits[1].pixelDistance).toBeCloseTo(15);
+  });
+
+  test("excludes features beyond the gather radius", () => {
+    const caches = [cacheWithLine("A", 0), cacheWithLine("B", 20)];
+    const hits = findSnapFeatures(caches, [5, 50], gatherMap, 10);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].layerName).toBe("A");
+  });
+
+  test("returns [] for empty caches or an unprojectable coordinate", () => {
+    expect(findSnapFeatures([], [5, 50], gatherMap, 35)).toEqual([]);
+    expect(findSnapFeatures(null, [5, 50], gatherMap, 35)).toEqual([]);
+    expect(
+      findSnapFeatures([cacheWithLine("A", 0)], null, gatherMap, 35),
+    ).toEqual([]);
+    const nullPixelMap = {
+      getPixelFromCoordinate: () => null,
+      getView: () => ({ getResolution: () => 1 }),
+    };
+    expect(
+      findSnapFeatures([cacheWithLine("A", 0)], [5, 50], nullPixelMap, 35),
+    ).toEqual([]);
   });
 });
 

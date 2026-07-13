@@ -20,6 +20,7 @@ import {
   shouldSnapSelect,
   fetchLayerVectorFeatures,
   findBestSnap,
+  findSnapFeatures,
   configurationPropType,
   mapDrawingPropType,
   loadLayerJSONs,
@@ -627,6 +628,9 @@ const MapVisualization = ({
   // click select the river directly from that local feature (no ESRI /identify,
   // which is slow on a cache miss and sometimes returns empty on-geometry).
   const SNAP_PIXELS = 15;
+  // Wider radius (mirrors the old /identify tolerance) for gathering the
+  // connected reaches at a confluence into the click popup's swiper.
+  const GATHER_PIXELS = 35;
 
   const ensureSnapLayer = (map) => {
     if (!snapLayer.current) {
@@ -755,6 +759,17 @@ const MapVisualization = ({
       snapCachesRef.current && snapCachesRef.current.length
         ? findBestSnap(snapCachesRef.current, evt.coordinate, map, SNAP_PIXELS)
         : null;
+    // When a snap is active, gather the connected reaches within the wider
+    // radius (nearest-first) so a confluence click yields multiple popup
+    // entries the user can page between — restoring the pre-snap behavior.
+    const snapSiblings = clickSnap
+      ? findSnapFeatures(
+          snapCachesRef.current,
+          evt.coordinate,
+          map,
+          GATHER_PIXELS,
+        )
+      : [];
     const coordinate = clickSnap?.coordinate ?? evt.coordinate;
     const pixel = evt.pixel;
     // The click owns the selection highlight from here; drop the hover preview.
@@ -844,7 +859,9 @@ const MapVisualization = ({
         // Other layers query at the TRUE click coordinate (evt.coordinate), not
         // the snapped point, so the snap can't shift their identify results.
         const features = shouldSnapSelect(layer, clickSnap)
-          ? [buildSnapFeatureResult(clickSnap.feature, layer)]
+          ? snapSiblings
+              .filter((g) => g.layerName === layer.configuration.props.name)
+              .map((g) => buildSnapFeatureResult(g.feature, layer))
           : await queryLayerFeatures(layer, map, evt.coordinate, pixel);
         if (!Array.isArray(features)) return features;
         return features.map((feature) =>

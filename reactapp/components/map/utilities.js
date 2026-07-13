@@ -854,6 +854,50 @@ export function findBestSnap(caches, coordinate, map, snapPx = 15) {
   return best;
 }
 
+// Gather ALL cached features whose closest point is within `gatherPx` screen
+// pixels of `coordinate`, sorted nearest-first. Used on click to surface the
+// connected reaches at a confluence (the nearest snapped river plus the ones it
+// merges into/from) as separate popup entries — the wider gather radius mirrors
+// the old /identify pixel tolerance, while the hover snap stays tight.
+export function findSnapFeatures(caches, coordinate, map, gatherPx = 35) {
+  if (!coordinate) return [];
+  const cursorPixel = map.getPixelFromCoordinate(coordinate);
+  const resolution = map.getView().getResolution();
+  if (!cursorPixel || !resolution) return [];
+  const r = gatherPx * resolution;
+  const extent = [
+    coordinate[0] - r,
+    coordinate[1] - r,
+    coordinate[0] + r,
+    coordinate[1] + r,
+  ];
+  const results = [];
+  for (const cache of caches ?? []) {
+    const source = cache?.source;
+    if (!source?.forEachFeatureInExtent) continue;
+    source.forEachFeatureInExtent(extent, (feature) => {
+      const geometry = feature.getGeometry?.();
+      if (!geometry) return;
+      const snapped = geometry.getClosestPoint(coordinate);
+      const px = map.getPixelFromCoordinate(snapped);
+      if (!px) return;
+      const dx = cursorPixel[0] - px[0];
+      const dy = cursorPixel[1] - px[1];
+      const pixelDistance = Math.sqrt(dx * dx + dy * dy);
+      if (pixelDistance <= gatherPx) {
+        results.push({
+          feature,
+          coordinate: snapped,
+          pixelDistance,
+          layerName: cache.layerName,
+        });
+      }
+    });
+  }
+  results.sort((a, b) => a.pixelDistance - b.pixelDistance);
+  return results;
+}
+
 // Dedicated layer for the hover snap preview — visually distinct (cyan) from
 // the dark-blue click/selection highlight so the two never clobber each other.
 // The line traces the snapped feature; the filled dot marks the exact point the
