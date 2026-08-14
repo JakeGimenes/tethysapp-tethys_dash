@@ -2354,12 +2354,14 @@ describe("MapLayerModal GeoTIFF ramp-style save path (Unit 7)", () => {
     expect(savedStyle.color[3]).toBe(0);
     // Last stop pair ends at rampMax.
     expect(savedStyle.color[savedStyle.color.length - 2]).toBe(100);
+    // Explicit range = raw band values, so the source is not normalized.
+    expect(savedConfig.configuration.props.source.props.normalize).toBe(false);
 
     // Most important regression guard: the backend upload was NOT called.
     expect(uploadSpy).not.toHaveBeenCalled();
   });
 
-  test("GeoTIFF without a ramp name saves with no style key", async () => {
+  test("GeoTIFF with no explicit range gets a normalized style (turbo default)", async () => {
     const uploadSpy = jest
       .spyOn(appAPI, "uploadJSON")
       .mockResolvedValue({ success: true, filename: "x.json" });
@@ -2395,11 +2397,65 @@ describe("MapLayerModal GeoTIFF ramp-style save path (Unit 7)", () => {
     });
 
     const savedConfig = addMapLayer.mock.calls[0][0];
-    expect(savedConfig.configuration.style).toBeUndefined();
+    const savedStyle = savedConfig.configuration.style;
+    // Turbo default + normalized [0,1] interpolate; no persisted range.
+    expect(Array.isArray(savedStyle.color)).toBe(true);
+    expect(savedStyle.color[0]).toBe("interpolate");
+    expect(savedStyle.color[savedStyle.color.length - 2]).toBe(1);
+    expect(savedConfig.configuration.props.source.rampName).toBe("turbo");
+    expect(savedConfig.configuration.props.source.rampMin).toBeUndefined();
+    expect(savedConfig.configuration.props.source.props.normalize).toBe(true);
     expect(uploadSpy).not.toHaveBeenCalled();
   });
 
-  test("GeoTIFF with rampName but empty rampMin/rampMax does not generate a style", async () => {
+  test("Zarr source saves as a WebGLTile layer with a normalized turbo ramp", async () => {
+    const handleModalClose = jest.fn();
+    const addMapLayer = jest.fn();
+    const layerInfo = {
+      layerProps: { name: "Flood Depth" },
+      sourceProps: {
+        type: "Zarr",
+        props: {
+          url: "https://x/store.zarr",
+          variable: "depth",
+          index: "5",
+        },
+      },
+    };
+
+    render(
+      <TestingComponent
+        showModal={true}
+        handleModalClose={handleModalClose}
+        addMapLayer={addMapLayer}
+        layerInfo={layerInfo}
+      />,
+    );
+
+    fireEvent.click(await screen.findByLabelText("Create Layer Button"));
+    await waitFor(() => {
+      expect(addMapLayer).toHaveBeenCalledTimes(1);
+    });
+
+    const savedConfig = addMapLayer.mock.calls[0][0];
+    // WebGLTile layer with the Zarr source and its fields preserved for editing.
+    expect(savedConfig.configuration.type).toBe("WebGLTile");
+    const source = savedConfig.configuration.props.source;
+    expect(source.type).toBe("Zarr");
+    expect(source.props.url).toBe("https://x/store.zarr");
+    expect(source.props.variable).toBe("depth");
+    expect(source.props.index).toBe("5");
+    // Turbo default + per-slice auto-scaling (normalized ramp). Zarr COGs always
+    // carry a -9999 nodata sentinel, so the ramp is wrapped in a transparency
+    // `case` expression (a GeoTIFF with no nodata set would be bare interpolate).
+    const color = savedConfig.configuration.style.color;
+    expect(color[0]).toBe("case");
+    expect(JSON.stringify(color)).toContain("interpolate");
+    expect(source.rampName).toBe("turbo");
+    expect(source.props.normalize).toBe(true);
+  });
+
+  test("GeoTIFF with rampName and empty range gets a normalized style", async () => {
     const uploadSpy = jest
       .spyOn(appAPI, "uploadJSON")
       .mockResolvedValue({ success: true, filename: "x.json" });
@@ -2407,7 +2463,7 @@ describe("MapLayerModal GeoTIFF ramp-style save path (Unit 7)", () => {
     const handleModalClose = jest.fn();
     const addMapLayer = jest.fn();
     const layerInfo = {
-      layerProps: { name: "Incomplete Ramp GeoTIFF" },
+      layerProps: { name: "Auto Ramp GeoTIFF" },
       sourceProps: {
         type: "GeoTIFF",
         rampName: "viridis",
@@ -2438,7 +2494,12 @@ describe("MapLayerModal GeoTIFF ramp-style save path (Unit 7)", () => {
     });
 
     const savedConfig = addMapLayer.mock.calls[0][0];
-    expect(savedConfig.configuration.style).toBeUndefined();
+    const savedStyle = savedConfig.configuration.style;
+    expect(Array.isArray(savedStyle.color)).toBe(true);
+    expect(savedStyle.color[0]).toBe("interpolate");
+    expect(savedStyle.color[savedStyle.color.length - 2]).toBe(1);
+    expect(savedConfig.configuration.props.source.rampMin).toBeUndefined();
+    expect(savedConfig.configuration.props.source.props.normalize).toBe(true);
     expect(uploadSpy).not.toHaveBeenCalled();
   });
 
@@ -3778,6 +3839,14 @@ describe("normalizeAttributePropsForLayer", () => {
 describe("getLayerType", () => {
   test("GeoTIFF short-circuits to WebGLTile before substring checks", () => {
     expect(getLayerType("GeoTIFF")).toBe("WebGLTile");
+  });
+
+  test("Zarr maps to WebGLTile (renders as a COG)", () => {
+    expect(getLayerType("Zarr")).toBe("WebGLTile");
+  });
+
+  test("GeoParquet falls through to VectorLayer", () => {
+    expect(getLayerType("GeoParquet")).toBe("VectorLayer");
   });
 
   test("Vector source types map to VectorTileLayer", () => {

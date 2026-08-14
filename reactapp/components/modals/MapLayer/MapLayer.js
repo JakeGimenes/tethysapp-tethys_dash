@@ -128,7 +128,7 @@ export function renameLayerInAttributeProps(attributeProps, oldName, newName) {
 }
 
 export const getLayerType = (sourceType) => {
-  if (sourceType === "GeoTIFF") return "WebGLTile";
+  if (sourceType === "GeoTIFF" || sourceType === "Zarr") return "WebGLTile";
   if (sourceType.includes("Vector")) return "VectorTileLayer";
   if (sourceType.includes("Raster")) return "WebGLTile";
   if (sourceType.includes("Tile")) return "TileLayer";
@@ -398,21 +398,26 @@ const MapLayerModal = ({
       }
     }
 
-    if (sourceProps.type === "GeoTIFF") {
+    if (sourceProps.type === "GeoTIFF" || sourceProps.type === "Zarr") {
       const { rampName, rampMin, rampMax } = sourceProps;
-      const hasRamp =
-        typeof rampName === "string" &&
-        rampName.trim() !== "" &&
+      const hasRampName =
+        typeof rampName === "string" && rampName.trim() !== "";
+      const hasRange =
         typeof rampMin === "string" &&
         rampMin.trim() !== "" &&
         typeof rampMax === "string" &&
         rampMax.trim() !== "" &&
         Number.isFinite(Number(rampMin)) &&
         Number.isFinite(Number(rampMax));
-      if (hasRamp) {
-        const hasNodata = validSourceProps.sources.some(
-          (s) => s?.nodata !== undefined && s.nodata !== "",
-        );
+      if (hasRampName) {
+        // Zarr COGs always carry a -9999 nodata sentinel; GeoTIFF depends on
+        // whether the author set one on any source.
+        const hasNodata =
+          sourceProps.type === "Zarr"
+            ? true
+            : validSourceProps.sources.some(
+                (s) => s?.nodata !== undefined && s.nodata !== "",
+              );
         const color = buildGeoTIFFStyleColor({
           rampName,
           rampMin,
@@ -421,8 +426,13 @@ const MapLayerModal = ({
         });
         mapConfiguration.configuration.style = { color };
         mapConfiguration.configuration.props.source.rampName = rampName;
-        mapConfiguration.configuration.props.source.rampMin = rampMin;
-        mapConfiguration.configuration.props.source.rampMax = rampMax;
+        // Raw range styles raw band values; auto mode normalizes band 1 from stats.
+        mapConfiguration.configuration.props.source.props.normalize = !hasRange;
+        // Persist an explicit range only when set; empty = per-storm auto.
+        if (hasRange) {
+          mapConfiguration.configuration.props.source.rampMin = rampMin;
+          mapConfiguration.configuration.props.source.rampMax = rampMax;
+        }
       }
     } else if (style && style !== "{}") {
       const apiResponse = await saveLayerJSON({

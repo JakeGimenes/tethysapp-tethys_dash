@@ -8,9 +8,17 @@ import NormalInput from "components/inputs/NormalInput";
 import RuleStyleEditor from "components/inputs/RuleStyleEditor";
 import RampPicker from "components/modals/MapLayer/RampPicker";
 import Button from "react-bootstrap/Button";
-import { LayoutContext, AppContext } from "components/contexts/Contexts";
+import {
+  LayoutContext,
+  AppContext,
+  VariableInputsContext,
+} from "components/contexts/Contexts";
 import { getStyleFields } from "components/map/utilities";
-import { findSelectOptionByValue } from "components/visualizations/utilities";
+import {
+  findSelectOptionByValue,
+  updateObjectWithVariableInputs,
+} from "components/visualizations/utilities";
+import { fromUrl } from "geotiff";
 
 const EditorModeRow = styled.div`
   display: flex;
@@ -72,6 +80,11 @@ const StylePane = ({
   const { uuid } = useContext(LayoutContext);
   const [availableFields, setAvailableFields] = useState([]);
   const { dynamicMapLayers } = useContext(AppContext);
+  const variableInputValues = useContext(
+    VariableInputsContext,
+  )?.variableInputValues;
+  const geotiffUrl = sourceProps?.props?.sources?.[0]?.url;
+  const prefilledUrlRef = useRef(null);
 
   useEffect(() => {
     const isDynamic = !!findSelectOptionByValue(
@@ -93,6 +106,65 @@ const StylePane = ({
     };
     fetchAvailableFields();
   }, [sourceProps, layerProps, uuid, dynamicMapLayers]);
+
+  useEffect(() => {
+    if (
+      (sourceProps.type === "GeoTIFF" || sourceProps.type === "Zarr") &&
+      !sourceProps.rampName &&
+      setSourceProps
+    ) {
+      setSourceProps((prev) => ({ ...prev, rampName: "turbo" }));
+    }
+  }, [sourceProps.type, sourceProps.rampName, setSourceProps]);
+
+  useEffect(() => {
+    if (sourceProps.type !== "GeoTIFF" || !setSourceProps || !geotiffUrl)
+      return;
+    // Auto-fill at most once per source URL, so clearing the fields sticks.
+    if (prefilledUrlRef.current === geotiffUrl) return;
+    const hasRange =
+      (sourceProps.rampMin ?? "") !== "" && (sourceProps.rampMax ?? "") !== "";
+    if (hasRange) {
+      prefilledUrlRef.current = geotiffUrl;
+      return;
+    }
+    const url = updateObjectWithVariableInputs({
+      args: { url: geotiffUrl },
+      variableInputs: variableInputValues ?? {},
+    }).url;
+    // Only fetch http(s) URLs; reject file:/blob:/javascript:/data:/protocol-relative.
+    if (!url || !/^https?:\/\//i.test(url)) return;
+    prefilledUrlRef.current = geotiffUrl;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const image = await (await fromUrl(url)).getImage();
+        const meta = image.getGDALMetadata(0);
+        const min = meta?.STATISTICS_MINIMUM;
+        const max = meta?.STATISTICS_MAXIMUM;
+        if (cancelled || min == null || max == null) return;
+        // Pre-fill the ramp range from the source's embedded statistics.
+        setSourceProps((prev) => ({
+          ...prev,
+          rampMin: String(Math.floor(Number(min))),
+          rampMax: String(Math.ceil(Number(max))),
+        }));
+      } catch {
+        // Leave blank (per-storm auto) if the file has no stats or can't load.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    sourceProps.type,
+    sourceProps.rampMin,
+    sourceProps.rampMax,
+    geotiffUrl,
+    variableInputValues,
+    setSourceProps,
+  ]);
 
   useEffect(() => {
     const fetchJSON = async () => {
@@ -183,7 +255,7 @@ const StylePane = ({
     }
   }
 
-  if (sourceProps.type === "GeoTIFF") {
+  if (sourceProps.type === "GeoTIFF" || sourceProps.type === "Zarr") {
     const selectedRamp = sourceProps.rampName ?? null;
     const rampMin = sourceProps.rampMin ?? "";
     const rampMax = sourceProps.rampMax ?? "";
@@ -233,7 +305,12 @@ const StylePane = ({
     );
   }
 
-  const supportedTypes = ["GeoJSON", "ESRI Feature Service", "PMTiles Vector"];
+  const supportedTypes = [
+    "GeoJSON",
+    "ESRI Feature Service",
+    "PMTiles Vector",
+    "GeoParquet",
+  ];
   const isDynamicMapLayer = findSelectOptionByValue(
     dynamicMapLayers,
     sourceProps.type,
@@ -337,6 +414,9 @@ StylePane.propTypes = {
     rampMin: PropTypes.string,
     rampMax: PropTypes.string,
     geojson: PropTypes.oneOfType([PropTypes.string, PropTypes.object]),
+    props: PropTypes.shape({
+      sources: PropTypes.arrayOf(PropTypes.shape({ url: PropTypes.string })),
+    }),
   }),
   setSourceProps: PropTypes.func,
   layerProps: PropTypes.shape({

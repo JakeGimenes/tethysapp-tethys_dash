@@ -11,6 +11,8 @@ import moduleLoader, {
   loadESRIJSON,
   buildPolygonFill,
   withAntimeridianFix,
+  zarrSourceToGeoTIFF,
+  geoParquetToGeoJSON,
 } from "components/map/ModuleLoader";
 import WebGLTile from "ol/layer/WebGLTile.js";
 import ImageLayer from "ol/layer/Image.js";
@@ -1957,5 +1959,51 @@ describe("withAntimeridianFix", () => {
     expect(rewritten.searchParams.get("IMAGESR")).toBe(
       rewritten.searchParams.get("BBOXSR"),
     );
+  });
+});
+
+describe("zarrSourceToGeoTIFF", () => {
+  test("assembles the zarr/cog endpoint URL from the source fields", () => {
+    const out = zarrSourceToGeoTIFF({
+      type: "Zarr",
+      props: { url: "https://x/store.zarr", variable: "depth", index: "150" },
+    });
+    expect(out.type).toBe("GeoTIFF");
+    expect(out.props.normalize).toBe(true);
+    const url = out.props.sources[0].url;
+    expect(url).toContain("/apps/tethysdash/zarr/cog/?");
+    expect(url).toContain("src=https%3A%2F%2Fx%2Fstore.zarr");
+    expect(url).toContain("variable=depth");
+    expect(url).toContain("index=150");
+    expect(url).not.toContain("mask_below");
+  });
+
+  test("defaults index to 0 and includes mask_below when provided", () => {
+    const out = zarrSourceToGeoTIFF({
+      type: "Zarr",
+      props: { url: "https://x", variable: "t", mask_below: "0.5" },
+    });
+    const url = out.props.sources[0].url;
+    expect(url).toContain("index=0");
+    expect(url).toContain("mask_below=0.5");
+  });
+});
+
+describe("geoParquetToGeoJSON", () => {
+  test("assembles the geoparquet/geojson endpoint URL from the source url", () => {
+    const out = geoParquetToGeoJSON({
+      type: "GeoParquet",
+      props: { url: "https://x/data.parquet" },
+    });
+    expect(out.type).toBe("GeoJSON");
+    expect(out.props).toEqual({});
+    expect(out.geojson).toContain("/apps/tethysdash/geoparquet/geojson/?");
+    expect(out.geojson).toContain("src=https%3A%2F%2Fx%2Fdata.parquet");
+  });
+
+  test("handles a missing url without throwing", () => {
+    const out = geoParquetToGeoJSON({ type: "GeoParquet", props: {} });
+    expect(out.type).toBe("GeoJSON");
+    expect(out.geojson).toContain("geoparquet/geojson/?src=");
   });
 });

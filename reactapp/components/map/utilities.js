@@ -18,7 +18,11 @@ import Protobuf from "pbf";
 
 // Source types whose features live in a client-side OL VectorSource (vs
 // server-rendered services queried remotely).
-export const CLIENT_VECTOR_SOURCE_TYPES = ["GeoJSON", "ESRI Feature Service"];
+export const CLIENT_VECTOR_SOURCE_TYPES = [
+  "GeoJSON",
+  "ESRI Feature Service",
+  "GeoParquet",
+];
 
 // Coerce an optional numeric layer prop: GUI inputs emit strings, so accept
 // any numeric value but treat null/undefined/blank/non-numeric as unset.
@@ -124,6 +128,23 @@ export const sourcePropertiesOptions = {
   },
   GeoTIFF: {
     required: {},
+    optional: {},
+  },
+  Zarr: {
+    required: {
+      url: { placeholder: "Zarr store URL (https or s3 bucket)" },
+      variable: { placeholder: "Variable / array name (e.g. depth)" },
+    },
+    optional: {
+      // eslint-disable-next-line no-template-curly-in-string
+      index: { placeholder: "Slice index or a variable, e.g. ${Storm}" },
+      mask_below: { placeholder: "Mask values at or below this" },
+    },
+  },
+  GeoParquet: {
+    required: {
+      url: { placeholder: "GeoParquet file URL (https or s3)" },
+    },
     optional: {},
   },
   "Vector Tile": {
@@ -624,7 +645,7 @@ export async function queryLayerFeatures(layerInfo, map, coordinate, pixel) {
       features = getVectorTileLayerFeatures(map, pixel);
     } else if (sourceType === "KML") {
       features = getKMLLayerFeatures(map, pixel, coordinate, LayerName);
-    } else if (sourceType === "GeoTIFF") {
+    } else if (sourceType === "GeoTIFF" || sourceType === "Zarr") {
       features = getGeoTIFFPixelValues(
         map,
         pixel,

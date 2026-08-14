@@ -47,7 +47,53 @@ export function withAntimeridianFix(type, props) {
   };
 }
 
+const APP_ROOT_URL = process.env.TETHYS_APP_ROOT_URL ?? "/apps/tethysdash/";
+
+// A "Zarr" source is sugar over the zarr/cog endpoint: the author supplies a
+// store URL + variable (+ optional index/mask_below) and we assemble the COG
+// URL, then render it as an ordinary GeoTIFF source. Variable inputs in the
+// fields (e.g. index="${Storm}") are already substituted before this runs.
+export function zarrSourceToGeoTIFF(config) {
+  const { url, variable, index, mask_below, normalize } = config.props ?? {};
+  const params = new URLSearchParams({
+    src: url ?? "",
+    variable: variable ?? "",
+    index: index ?? "0",
+  });
+  if (mask_below !== undefined && mask_below !== "") {
+    params.set("mask_below", mask_below);
+  }
+  return {
+    ...config,
+    type: "GeoTIFF",
+    props: {
+      sources: [{ url: `${APP_ROOT_URL}zarr/cog/?${params.toString()}` }],
+      normalize: normalize ?? true,
+    },
+  };
+}
+
+// A "GeoParquet" source is sugar over the geoparquet/geojson endpoint: the
+// author supplies a file URL and we render the returned GeoJSON (EPSG:4326) as
+// an ordinary vector source.
+export function geoParquetToGeoJSON(config) {
+  const { url } = config.props ?? {};
+  const params = new URLSearchParams({ src: url ?? "" });
+  return {
+    ...config,
+    type: "GeoJSON",
+    geojson: `${APP_ROOT_URL}geoparquet/geojson/?${params.toString()}`,
+    props: {},
+  };
+}
+
 const moduleLoader = async (config, mapProjection) => {
+  if (config.type === "Zarr") {
+    config = zarrSourceToGeoTIFF(config);
+  }
+  if (config.type === "GeoParquet") {
+    config = geoParquetToGeoJSON(config);
+  }
   if (
     config.type === "Static Image" &&
     typeof config.props?.imageExtent === "string"
@@ -187,7 +233,12 @@ const resolveProps = async (props, mapProjection) => {
     }
   }
 
-  if (props.sources && Array.isArray(props.sources)) {
+  if (
+    props.sources &&
+    Array.isArray(props.sources) &&
+    props.normalize === undefined
+  ) {
+    // Default raw band values unless the layer explicitly asked to normalize.
     resolvedProps.normalize = false;
   }
 
