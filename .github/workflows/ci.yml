@@ -4,6 +4,8 @@ name: CI
 # Mark this workflow's checks as required in the branch protection rules
 # for `main` so failures block merge.
 on:
+  # Allow running the suite manually from the Actions tab or `gh workflow run`.
+  workflow_dispatch:
   pull_request:
     branches: [main]
   # Also run on direct pushes to main as a safety net (e.g. hotfixes).
