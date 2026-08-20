@@ -22,6 +22,7 @@ export const CLIENT_VECTOR_SOURCE_TYPES = [
   "GeoJSON",
   "ESRI Feature Service",
   "GeoParquet",
+  "GeoPackage",
 ];
 
 // Coerce an optional numeric layer prop: GUI inputs emit strings, so accept
@@ -144,6 +145,13 @@ export const sourcePropertiesOptions = {
   GeoParquet: {
     required: {
       url: { placeholder: "GeoParquet file URL (https or s3)" },
+    },
+    optional: {},
+  },
+  GeoPackage: {
+    required: {
+      url: { placeholder: "GeoPackage file URL (https or s3)" },
+      layer: { placeholder: "Table (layer) name" },
     },
     optional: {},
   },
