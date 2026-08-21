@@ -330,9 +330,9 @@ export function s3UrlToHttps(url, defaultRegion = "us-east-1") {
   return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
 }
 
-// Register proj4 + all WGS84 UTM zones so ol can reproject projected GeoPackages.
+// Register proj4 + all WGS84 UTM zones so ol can reproject projected sources.
 let projectionsRegistered = false;
-export function registerGeoPackageProjections() {
+export function registerUTMProjections() {
   if (projectionsRegistered) return;
   for (let zone = 1; zone <= 60; zone++) {
     proj4.defs(
@@ -374,7 +374,7 @@ export async function loadGeoPackage(config, mapProjection) {
   }
 
   const url = s3UrlToHttps(rawUrl);
-  registerGeoPackageProjections();
+  registerUTMProjections();
   const { loadGpkg } = await getGeoPackageLib();
 
   const cacheKey = `${url}::${mapProjection}`;
@@ -399,9 +399,100 @@ export async function loadGeoPackage(config, mapProjection) {
   return source;
 }
 
+export class GeoParquetError extends Error {}
+
+// Map a GeoParquet column CRS (PROJJSON) to an OL projection code. A null/absent
+// CRS means OGC:CRS84 (lon/lat WGS84) per the GeoParquet spec.
+export function geoParquetCRSToProjection(crs) {
+  if (crs === null || crs === undefined) return "EPSG:4326";
+  const id = crs.id ?? crs.ids?.[0];
+  return id ? `${id.authority}:${id.code}` : "EPSG:4326";
+}
+
+// Read the GeoParquet "geo" file metadata: primary geometry column + its CRS.
+export function readGeoParquetGeoMetadata(metadata) {
+  const geoValue = metadata?.key_value_metadata?.find(
+    (kv) => kv.key === "geo",
+  )?.value;
+  if (!geoValue) {
+    return { geometryColumn: "geometry", dataProjection: "EPSG:4326" };
+  }
+  const geo = JSON.parse(geoValue);
+  const geometryColumn = geo.primary_column || "geometry";
+  const dataProjection = geoParquetCRSToProjection(
+    geo.columns?.[geometryColumn]?.crs,
+  );
+  return { geometryColumn, dataProjection };
+}
+
+// Lazy-load hyparquet + its codec pack; only needed when a GeoParquet renders.
+let hyparquetLib = null;
+async function getHyparquet() {
+  if (!hyparquetLib) {
+    const [hp, comp] = await Promise.all([
+      import("hyparquet"),
+      import("hyparquet-compressors"),
+    ]);
+    hyparquetLib = { ...hp, compressors: comp.compressors };
+  }
+  return hyparquetLib;
+}
+
+// Read a GeoParquet file in-browser as a reprojected OL vector source. hyparquet
+// decodes the WKB geometry column to GeoJSON (geoparquet:true); features are then
+// reprojected from the file's declared CRS to the map projection.
+export async function loadGeoParquet(config, mapProjection) {
+  const rawUrl = config.props?.url;
+  if (!rawUrl) {
+    throw new GeoParquetError("GeoParquet source requires a file URL");
+  }
+  const url = s3UrlToHttps(rawUrl);
+  registerUTMProjections();
+
+  const {
+    asyncBufferFromUrl,
+    parquetMetadataAsync,
+    parquetReadObjects,
+    compressors,
+  } = await getHyparquet();
+
+  const file = await asyncBufferFromUrl({ url });
+  const metadata = await parquetMetadataAsync(file);
+  const { geometryColumn, dataProjection } =
+    readGeoParquetGeoMetadata(metadata);
+
+  const rows = await parquetReadObjects({
+    file,
+    compressors,
+    geoparquet: true,
+  });
+  const features = rows
+    .map((row) => {
+      const { [geometryColumn]: geometry, ...rest } = row;
+      // Parquet INT64 columns arrive as BigInt, which breaks JSON serialization
+      // in the popup/click path, so coerce them to Number.
+      const properties = {};
+      for (const [key, value] of Object.entries(rest)) {
+        properties[key] = typeof value === "bigint" ? Number(value) : value;
+      }
+      return { type: "Feature", geometry: geometry ?? null, properties };
+    })
+    .filter((feature) => feature.geometry != null);
+
+  return new VectorSource({
+    features: new GeoJSON().readFeatures(
+      { type: "FeatureCollection", features },
+      { dataProjection, featureProjection: mapProjection },
+    ),
+  });
+}
+
 const moduleLoader = async (config, mapProjection) => {
   if (config.type === "GeoPackage") {
     return loadGeoPackage(config, mapProjection);
+  }
+  if (config.type === "GeoParquet") {
+    return loadGeoParquet(config, mapProjection);
   }
   if (config.type === "Zarr") {
     // Already yields OL's `sources` shape, so it skips the GeoTIFF branch below.
